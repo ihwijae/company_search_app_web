@@ -286,11 +286,15 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Prete
 .search-web-results .pagination-summary,
 .search-web-results .pagination-count,
 .search-web-results .pagination-btn,
-.search-web-results .company-name,
 .search-web-results .summary-status-badge,
 .search-web-results .badge-person,
 .search-web-results .file-type-badge-small {
   font-size: 12px;
+}
+.search-web-results .company-name {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 .search-web-results .company-list-item {
   padding: 12px 14px;
@@ -333,11 +337,15 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Prete
   .search-web-results .pagination-summary,
   .search-web-results .pagination-count,
   .search-web-results .pagination-btn,
-  .search-web-results .company-name,
   .search-web-results .summary-status-badge,
   .search-web-results .badge-person,
   .search-web-results .file-type-badge-small {
     font-size: 13px;
+  }
+
+  .search-web-results .company-name {
+    font-size: 17px;
+    font-weight: 800;
   }
 
   .search-web-results .company-list-item {
