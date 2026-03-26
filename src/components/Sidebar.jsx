@@ -10,7 +10,6 @@ import { openTempCompaniesWindow } from '../utils/tempCompaniesWindow.js';
 
 export default function Sidebar({ active, onSelect, fileStatuses, collapsed = true }) {
   const anyLoaded = !!(fileStatuses?.eung || fileStatuses?.tongsin || fileStatuses?.sobang);
-  const isCollapsed = collapsed;
   const handleSelect = (key) => {
     if (key === 'agreements' && typeof window !== 'undefined') {
       const opener = window.__openAgreementBoard;
@@ -128,7 +127,7 @@ export default function Sidebar({ active, onSelect, fileStatuses, collapsed = tr
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSelect(key); }}
     >
       <span style={{ width: 28, fontSize: 22 }}>{icon}</span>
-      {!isCollapsed && <span>{label}</span>}
+      <span className="nav-label">{label}</span>
       {key === 'upload' && (
         <span className={`dot ${anyLoaded ? 'on' : ''}`} />
       )}
@@ -136,13 +135,13 @@ export default function Sidebar({ active, onSelect, fileStatuses, collapsed = tr
   );
 
   return (
-    <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
-      <div className="title-drag" />
-      <div className="brand">{isCollapsed ? '' : 'Company Search'}</div>
-      <nav className="nav">
-        {navItems.map(({ key, label, icon }) => item(key, label, icon))}
-      </nav>
-      {!isCollapsed && <div className="sidebar-footer">v1.0.0</div>}
-    </aside>
+    <>
+      <div className="nav-reveal-zone" aria-hidden="true" />
+      <aside className={`sidebar top-nav ${collapsed ? 'collapsed' : 'expanded'}`}>
+        <nav className="nav">
+          {navItems.map(({ key, label, icon }) => item(key, label, icon))}
+        </nav>
+      </aside>
+    </>
   );
 }
