@@ -17,17 +17,22 @@ async function streamToBuffer(stream) {
 async function readJsonBlob(pathname) {
   const token = resolveToken();
   if (!token) return null;
-  const result = await get(pathname, { access: 'private', token, useCache: false });
-  if (!result || result.statusCode !== 200) return null;
-  const buffer = await streamToBuffer(result.stream);
-  return JSON.parse(buffer.toString('utf8'));
+  try {
+    const result = await get(pathname, { access: 'public', token, useCache: false });
+    if (!result || result.statusCode !== 200) return null;
+    const buffer = await streamToBuffer(result.stream);
+    return JSON.parse(buffer.toString('utf8'));
+  } catch (error) {
+    console.warn('[blob-store] readJsonBlob failed:', pathname, error && error.message ? error.message : error);
+    return null;
+  }
 }
 
 async function writeJsonBlob(pathname, value) {
   const token = resolveToken();
   if (!token) throw new Error('BLOB_READ_WRITE_TOKEN is not configured');
   return put(pathname, Buffer.from(JSON.stringify(value), 'utf8'), {
-    access: 'private',
+    access: 'public',
     contentType: 'application/json; charset=utf-8',
     allowOverwrite: true,
     addRandomSuffix: false,
@@ -61,7 +66,7 @@ async function uploadDataset({ fileType, fileName, buffer, contentType }) {
   const extension = fileName && fileName.includes('.') ? fileName.split('.').pop() : 'xlsx';
   const pathname = `company-search/datasets/${fileType}.${extension || 'xlsx'}`;
   const uploaded = await put(pathname, buffer, {
-    access: 'private',
+    access: 'public',
     contentType: contentType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     allowOverwrite: true,
     addRandomSuffix: false,
@@ -108,12 +113,17 @@ async function parseSharedDataset(fileType) {
   const cached = cache.get(fileType);
   if (cached && cached.etag === blobMeta.etag) return cached.dataset;
 
-  const result = await get(meta.pathname, { access: 'private', token, useCache: false });
-  if (!result || result.statusCode !== 200) return null;
-  const buffer = await streamToBuffer(result.stream);
-  const parsed = await parseDatasetBuffer(buffer, fileType, meta.fileName || meta.pathname);
-  cache.set(fileType, { etag: blobMeta.etag, dataset: parsed });
-  return parsed;
+  try {
+    const result = await get(meta.pathname, { access: 'public', token, useCache: false });
+    if (!result || result.statusCode !== 200) return null;
+    const buffer = await streamToBuffer(result.stream);
+    const parsed = await parseDatasetBuffer(buffer, fileType, meta.fileName || meta.pathname);
+    cache.set(fileType, { etag: blobMeta.etag, dataset: parsed });
+    return parsed;
+  } catch (error) {
+    console.error('[blob-store] parseSharedDataset failed:', fileType, error);
+    return null;
+  }
 }
 
 module.exports = {
