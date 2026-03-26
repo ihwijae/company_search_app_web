@@ -18,7 +18,7 @@ async function readJsonBlob(pathname) {
   const token = resolveToken();
   if (!token) return null;
   try {
-    const result = await get(pathname, { access: 'public', token, useCache: false });
+    const result = await get(pathname, { access: 'private', token, useCache: false });
     if (!result || result.statusCode !== 200) return null;
     const buffer = await streamToBuffer(result.stream);
     return JSON.parse(buffer.toString('utf8'));
@@ -32,7 +32,7 @@ async function writeJsonBlob(pathname, value) {
   const token = resolveToken();
   if (!token) throw new Error('BLOB_READ_WRITE_TOKEN is not configured');
   return put(pathname, Buffer.from(JSON.stringify(value), 'utf8'), {
-    access: 'public',
+    access: 'private',
     contentType: 'application/json; charset=utf-8',
     allowOverwrite: true,
     addRandomSuffix: false,
@@ -66,7 +66,7 @@ async function uploadDataset({ fileType, fileName, buffer, contentType }) {
   const extension = fileName && fileName.includes('.') ? fileName.split('.').pop() : 'xlsx';
   const pathname = `company-search/datasets/${fileType}.${extension || 'xlsx'}`;
   const uploaded = await put(pathname, buffer, {
-    access: 'public',
+    access: 'private',
     contentType: contentType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     allowOverwrite: true,
     addRandomSuffix: false,
@@ -114,7 +114,7 @@ async function parseSharedDataset(fileType) {
   if (cached && cached.etag === blobMeta.etag) return cached.dataset;
 
   try {
-    const result = await get(meta.pathname, { access: 'public', token, useCache: false });
+    const result = await get(meta.pathname, { access: 'private', token, useCache: false });
     if (!result || result.statusCode !== 200) return null;
     const buffer = await streamToBuffer(result.stream);
     const parsed = await parseDatasetBuffer(buffer, fileType, meta.fileName || meta.pathname);
