@@ -38,12 +38,12 @@ function buildAgreementBoardPath(meta = {}) {
   return `company-search/agreement-board/${owner}-${range}-${noticeNo}-${title}-${stamp}.json`;
 }
 
-async function saveAgreementBoard(snapshot = {}) {
+async function saveAgreementBoard(snapshot = {}, options = {}) {
   const token = ensureToken();
   const meta = snapshot && typeof snapshot.meta === 'object' ? snapshot.meta : {};
   const payload = snapshot && typeof snapshot.payload === 'object' ? snapshot.payload : {};
-  const pathname = buildAgreementBoardPath(meta);
-  const savedAt = new Date().toISOString();
+  const pathname = options.pathname || buildAgreementBoardPath(meta);
+  const savedAt = meta.savedAt || new Date().toISOString();
   const document = {
     meta: {
       ...meta,

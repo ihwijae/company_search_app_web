@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "start": "npm run build && electron .",
     "start:dev": "concurrently \"vite\" \"electron .\"",
+    "migrate:agreement-boards": "node scripts/migrate-agreement-boards.js",
     "dist:win": "npm run build && electron-builder --win nsis",
     "dist:portable": "npm run build && electron-builder --win portable",
     "clean": "powershell -NoProfile -Command \"Remove-Item -Recurse -Force dist,release -ErrorAction SilentlyContinue\""

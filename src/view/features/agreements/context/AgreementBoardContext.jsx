@@ -1,6 +1,5 @@
 import React from 'react';
 import { loadPersisted, savePersisted } from '../../../../shared/persistence.js';
-import AgreementBoardWindow from '../components/AgreementBoardWindow.jsx';
 
 const DEFAULT_GROUP_SIZE = 5;
 const DEFAULT_OWNER_ID = 'LH';
@@ -250,6 +249,17 @@ export function AgreementBoardProvider({ children }) {
   const persistTimerRef = React.useRef(null);
   const persistReadyRef = React.useRef(false);
 
+  const openBoardTab = React.useCallback(() => {
+    if (typeof window === 'undefined') return false;
+    const targetUrl = `${window.location.pathname}${window.location.search}#/agreement-board`;
+    const opened = window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    if (opened) {
+      opened.focus?.();
+      return true;
+    }
+    return false;
+  }, []);
+
   const fetchAlwaysInclude = React.useCallback(async (
     ownerId = DEFAULT_OWNER_ID,
     rangeId = null,
@@ -338,18 +348,26 @@ export function AgreementBoardProvider({ children }) {
     const owner = String(payload.ownerId || boardState.ownerId || DEFAULT_OWNER_ID).toUpperCase();
     const fileType = payload.fileType || boardState.fileType || DEFAULT_FILE_TYPE;
     const range = payload.rangeId || boardState.rangeId || null;
-    setBoardState((prev) => ({
-      ...prev,
+    const nextState = {
+      ...boardState,
       ...payload,
       candidates: sanitizeCandidatesList(payload.candidates || []),
       ownerId: owner,
       fileType,
       rangeId: range,
       alwaysInclude: [],
-      open: true,
+      open: Boolean(payload.inlineMode),
       inlineMode: Boolean(payload.inlineMode),
+    };
+    setBoardState((prev) => ({
+      ...prev,
+      ...nextState,
     }));
-  }, [boardState.ownerId, boardState.fileType, boardState.rangeId]);
+    savePersisted(AGREEMENT_BOARD_DRAFT_KEY, buildPersistedBoardState(nextState));
+    if (!payload.inlineMode) {
+      openBoardTab();
+    }
+  }, [boardState, openBoardTab]);
 
 const updateBoard = React.useCallback((payload = {}) => {
     setBoardState((prev) => {
@@ -387,20 +405,12 @@ const updateBoard = React.useCallback((payload = {}) => {
   }, []);
 
   const openBoardWindow = React.useCallback((payload = {}) => {
-    if (typeof window !== 'undefined' && !payload?.inlineMode) {
-      const targetUrl = `${window.location.pathname}${window.location.search}#/agreement-board`;
-      const opened = window.open(targetUrl, '_blank', 'noopener,noreferrer');
-      if (opened) {
-        opened.focus?.();
-        return;
-      }
-    }
     if (payload && Object.keys(payload).length > 0) {
       openBoard({ ...payload, inlineMode: false });
       return;
     }
-    updateBoard({ open: true, inlineMode: false });
-  }, [openBoard, updateBoard]);
+    openBoard({ inlineMode: false });
+  }, [openBoard]);
 
   React.useEffect(() => {
     try {
@@ -565,55 +575,6 @@ const appendCandidates = React.useCallback((entries = []) => {
   return (
     <AgreementBoardContext.Provider value={value}>
       {children}
-      {!boardState.inlineMode && (
-        <AgreementBoardWindow
-          open={boardState.open}
-          onClose={closeBoard}
-          candidates={boardState.candidates || []}
-          pinned={boardState.pinned || []}
-          excluded={boardState.excluded || []}
-          groupAssignments={boardState.groupAssignments || []}
-          groupShares={boardState.groupShares || []}
-          groupShareRawInputs={boardState.groupShareRawInputs || []}
-          groupCredibility={boardState.groupCredibility || []}
-          groupTechnicianScores={boardState.groupTechnicianScores || []}
-          groupApprovals={boardState.groupApprovals || []}
-          groupManagementBonus={boardState.groupManagementBonus || []}
-          groupQualityScores={boardState.groupQualityScores || []}
-          technicianEntriesByTarget={boardState.technicianEntriesByTarget || {}}
-          dutyRegions={boardState.dutyRegions || []}
-          groupSize={boardState.groupSize || DEFAULT_GROUP_SIZE}
-          title={boardState.title || '협정보드'}
-          alwaysInclude={boardState.alwaysInclude || []}
-          fileType={boardState.fileType || DEFAULT_FILE_TYPE}
-          ownerId={boardState.ownerId || DEFAULT_OWNER_ID}
-          rangeId={boardState.rangeId || null}
-          onAddRepresentatives={appendCandidatesFromSearch}
-          onRemoveRepresentative={removeCandidate}
-          onUpdateBoard={updateBoard}
-          noticeNo={boardState.noticeNo || ''}
-          noticeTitle={boardState.noticeTitle || ''}
-          noticeDate={boardState.noticeDate || ''}
-          industryLabel={boardState.industryLabel || ''}
-          entryAmount={boardState.entryAmount || ''}
-          entryMode={boardState.entryMode || 'ratio'}
-          baseAmount={boardState.baseAmount || ''}
-          estimatedAmount={boardState.estimatedAmount || ''}
-          bidAmount={boardState.bidAmount || ''}
-          ratioBaseAmount={boardState.ratioBaseAmount || ''}
-          bidRate={boardState.bidRate || ''}
-          adjustmentRate={boardState.adjustmentRate || ''}
-          netCostBonusOverride={boardState.netCostBonusOverride || ''}
-          performanceCoefficient={boardState.performanceCoefficient || ''}
-          regionAdjustmentCoefficient={boardState.regionAdjustmentCoefficient || ''}
-          bidDeadline={boardState.bidDeadline || ''}
-          regionDutyRate={boardState.regionDutyRate || ''}
-          participantLimit={boardState.participantLimit || DEFAULT_GROUP_SIZE}
-          netCostAmount={boardState.netCostAmount || ''}
-          aValue={boardState.aValue || ''}
-          memoHtml={boardState.memoHtml || ''}
-        />
-      )}
     </AgreementBoardContext.Provider>
   );
 }
