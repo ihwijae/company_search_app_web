@@ -1,3 +1,5 @@
+import webSearchStore from './webSearchStore.js';
+
 const getElectronApi = () => {
   if (typeof window === 'undefined') return null;
   return window.electronAPI || null;
@@ -25,18 +27,26 @@ export const searchClient = {
     return invokeElectron('selectFile', fileType);
   },
 
+  async uploadFile(fileType, file) {
+    const api = getElectronApi();
+    if (api && typeof api.selectFile === 'function') {
+      throw new Error('Electron 환경에서는 기존 파일 선택 흐름을 사용하세요.');
+    }
+    return webSearchStore.uploadFile(fileType, file);
+  },
+
   async searchCompanies(criteria, fileType, options) {
-    return invokeElectron('searchCompanies', criteria, fileType, options);
+    const api = getElectronApi();
+    if (api && typeof api.searchCompanies === 'function') {
+      return api.searchCompanies(criteria, fileType, options);
+    }
+    return webSearchStore.searchCompanies(criteria, fileType, options);
   },
 
   async checkFiles() {
     const api = getElectronApi();
     if (!api || typeof api.checkFiles !== 'function') {
-      return {
-        eung: false,
-        tongsin: false,
-        sobang: false,
-      };
+      return webSearchStore.checkFiles();
     }
     return api.checkFiles();
   },
@@ -44,7 +54,7 @@ export const searchClient = {
   async getRegions(fileType) {
     const api = getElectronApi();
     if (!api || typeof api.getRegions !== 'function') {
-      return { success: true, data: ['전체'] };
+      return webSearchStore.getRegions(fileType);
     }
     return api.getRegions(fileType);
   },
@@ -52,7 +62,7 @@ export const searchClient = {
   onDataUpdated(callback) {
     const api = getElectronApi();
     if (!api || typeof api.onDataUpdated !== 'function') {
-      return () => {};
+      return webSearchStore.onDataUpdated(callback);
     }
     return api.onDataUpdated(callback);
   },
@@ -72,6 +82,10 @@ export const searchClient = {
   supportsSmppLookup() {
     const api = getElectronApi();
     return Boolean(api && typeof api.smppCheckOne === 'function');
+  },
+
+  supportsBrowserUpload() {
+    return !getElectronApi() && webSearchStore.isAvailable();
   },
 };
 

@@ -234,7 +234,14 @@ function CopyDialog({ isOpen, message, onClose }) {
 
 function FileUploader({ type, label, isUploaded, onUploadSuccess }) {
   const [message, setMessage] = useState('');
+  const inputRef = useRef(null);
+  const browserUploadEnabled = searchClient.supportsBrowserUpload();
+
   const handleSelectFile = async () => {
+    if (browserUploadEnabled) {
+      inputRef.current?.click();
+      return;
+    }
     setMessage('파일 선택창을 여는 중...');
     try {
       const result = await searchClient.selectFile(type);
@@ -250,6 +257,25 @@ function FileUploader({ type, label, isUploaded, onUploadSuccess }) {
       setMessage(error?.message || '파일 선택 중 오류가 발생했습니다.');
     }
   };
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setMessage('엑셀 파일을 분석하는 중...');
+    try {
+      const result = await searchClient.uploadFile(type, file);
+      if (!result?.success) {
+        throw new Error(result?.message || '업로드 실패');
+      }
+      setMessage(`업로드 완료: ${file.name}`);
+      onUploadSuccess();
+    } catch (error) {
+      setMessage(error?.message || '업로드 중 오류가 발생했습니다.');
+    } finally {
+      if (event.target) event.target.value = '';
+    }
+  };
+
   return (
     <div className="file-uploader">
       <label>{label} 엑셀 파일</label>
@@ -258,7 +284,16 @@ function FileUploader({ type, label, isUploaded, onUploadSuccess }) {
         <p className="upload-message warning">⚠️ 파일 경로를 설정해주세요.</p>
       }
       <div className="uploader-controls">
-        <button onClick={handleSelectFile}>경로 설정</button>
+        {browserUploadEnabled && (
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleFileChange}
+            style={{ display: 'none' }}
+          />
+        )}
+        <button onClick={handleSelectFile}>{browserUploadEnabled ? '파일 업로드' : '경로 설정'}</button>
       </div>
       {message && <p className="upload-message info">{message}</p>}
     </div>
