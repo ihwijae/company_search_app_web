@@ -1236,20 +1236,6 @@ function App() {
         <div className="topbar" />
         <div className="stage search-web-stage">
           <div className="search-web-shell">
-            <section className="search-web-toolbar">
-              <div className="search-web-toolbar__title">
-                <h1>업체조회</h1>
-                <p>필터로 좁히고, 목록에서 고른 뒤, 우측에서 상세 정보를 바로 확인합니다.</p>
-              </div>
-              <div className="search-web-toolbar__meta">
-                <span className="search-web-meta-pill">{fileType === 'eung' ? '전기' : fileType === 'tongsin' ? '통신' : fileType === 'sobang' ? '소방' : '전체'}</span>
-                <span className="search-web-meta-text">{searchPerformed ? `총 ${totalCount}건` : '검색 전'}</span>
-                <button type="button" className="btn-soft" onClick={() => setUploadOpen(true)}>
-                  데이터 업로드 관리
-                </button>
-              </div>
-            </section>
-
             <div className="search-web-workspace">
               <section className="panel panel-filters search-web-filters">
                 <div className="search-web-section-heading">

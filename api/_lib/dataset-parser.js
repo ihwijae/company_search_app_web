@@ -1,5 +1,9 @@
 const ExcelJS = require('exceljs');
 const XLSX = require('xlsx');
+const os = require('os');
+const fs = require('fs');
+const path = require('path');
+const { sanitizeXlsx } = require('../../utils/sanitizeXlsx');
 
 const RELATIVE_OFFSETS = {
   대표자: 1,
@@ -293,8 +297,19 @@ function searchCompaniesInDataset(companies, criteria = {}, options = {}) {
 }
 
 async function extractCompaniesWithExcelJs(buffer, fileType, fileName) {
+  const extension = fileName && path.extname(fileName) ? path.extname(fileName) : '.xlsx';
+  const tempSourcePath = path.join(os.tmpdir(), `dataset-${fileType}-${Date.now()}${extension}`);
+  fs.writeFileSync(tempSourcePath, buffer);
+  const { sanitizedPath } = sanitizeXlsx(tempSourcePath);
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
+  try {
+    await workbook.xlsx.readFile(sanitizedPath);
+  } finally {
+    try { fs.unlinkSync(tempSourcePath); } catch {}
+    if (sanitizedPath && sanitizedPath !== tempSourcePath) {
+      try { fs.unlinkSync(sanitizedPath); } catch {}
+    }
+  }
   const companies = [];
   const sheetNames = [];
 
