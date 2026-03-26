@@ -375,28 +375,93 @@ button.primary:hover { background: var(--accent-2); }
     min-height: 100dvh;
   }
 
+  .search-web-main,
+  .search-web-stage,
+  .search-web-shell {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
   .search-web-app .sidebar {
     display: none;
   }
 
   .search-web-stage {
-    padding: 16px;
+    padding: 12px;
     overflow-y: auto;
   }
 
   .search-web-workspace {
     grid-template-columns: 1fr;
+    gap: 12px;
     height: auto;
+  }
+
+  .search-web-filters,
+  .search-web-results,
+  .search-web-details,
+  .panel.panel-results,
+  .panel.panel-filters {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
   }
 
   .search-web-filter-grid {
     grid-template-columns: 1fr;
   }
 
+  .search-web-section-heading {
+    padding: 0 0 6px;
+  }
+
+  .search-web-section-heading h2 {
+    font-size: 17px;
+  }
+
+  .search-web-section-heading p {
+    display: block;
+    font-size: 12px;
+  }
+
+  .search-web-filters {
+    padding: 12px;
+  }
+
   .search-web-results,
   .search-web-details {
     min-height: 0;
     height: auto;
+  }
+
+  .search-web-results .search-results-list,
+  .search-web-details .company-details,
+  .search-web-results .results-scroll,
+  .search-web-details .table-container {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .search-web-details .table-container {
+    overflow-x: auto;
+  }
+
+  .search-web-details .details-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .search-web-details .copy-button-group {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .search-web-results .results-toolbar,
+  .pagination-controls.fixed {
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 }
 
@@ -421,6 +486,16 @@ button.primary:hover { background: var(--accent-2); }
   .search-web-search-button,
   .search-web-reset-button {
     min-height: 34px;
+  }
+}
+
+@media (max-width: 900px) and (max-height: 900px) {
+  .search-web-workspace {
+    height: auto;
+  }
+
+  .search-web-section-heading p {
+    display: block;
   }
 }
 /* small button utility */
