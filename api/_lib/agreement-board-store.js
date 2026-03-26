@@ -19,6 +19,33 @@ function sanitizeSegment(value, fallback = 'agreement') {
   return normalized || fallback;
 }
 
+function normalizeIdentityValue(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '');
+}
+
+function isSameAgreementIdentity(metaA = {}, metaB = {}) {
+  const aOwner = normalizeIdentityValue(metaA.ownerId || metaA.ownerLabel);
+  const bOwner = normalizeIdentityValue(metaB.ownerId || metaB.ownerLabel);
+  if (aOwner && bOwner && aOwner !== bOwner) return false;
+
+  const aIndustry = normalizeIdentityValue(metaA.industryLabel);
+  const bIndustry = normalizeIdentityValue(metaB.industryLabel);
+  if (aIndustry && bIndustry && aIndustry !== bIndustry) return false;
+
+  const aNoticeNo = normalizeIdentityValue(metaA.noticeNo);
+  const bNoticeNo = normalizeIdentityValue(metaB.noticeNo);
+  if (aNoticeNo && bNoticeNo) return aNoticeNo === bNoticeNo;
+
+  const aTitle = normalizeIdentityValue(metaA.noticeTitle);
+  const bTitle = normalizeIdentityValue(metaB.noticeTitle);
+  if (aTitle && bTitle) return aTitle === bTitle;
+
+  return false;
+}
+
 function normalizeManifest(manifest) {
   const base = manifest && typeof manifest === 'object' ? manifest : { updatedAt: null, datasets: {} };
   const items = Array.isArray(base[AGREEMENT_BOARD_MANIFEST_KEY]) ? base[AGREEMENT_BOARD_MANIFEST_KEY] : [];
@@ -44,7 +71,10 @@ async function saveAgreementBoard(snapshot = {}, options = {}) {
   const token = ensureToken();
   const meta = snapshot && typeof snapshot.meta === 'object' ? snapshot.meta : {};
   const payload = snapshot && typeof snapshot.payload === 'object' ? snapshot.payload : {};
-  const pathname = options.pathname || buildAgreementBoardPath(meta);
+  const manifest = normalizeManifest(await readManifest());
+  const existingItem = getAgreementBoardItems(manifest)
+    .find((item) => item && item.meta && isSameAgreementIdentity(item.meta, meta));
+  const pathname = options.pathname || meta.path || existingItem?.path || buildAgreementBoardPath(meta);
   const savedAt = meta.savedAt || new Date().toISOString();
   const document = {
     meta: {
@@ -62,9 +92,9 @@ async function saveAgreementBoard(snapshot = {}, options = {}) {
     token,
   });
 
-  const manifest = normalizeManifest(await readManifest());
   const nextItems = getAgreementBoardItems(manifest)
-    .filter((item) => item && item.path !== pathname);
+    .filter((item) => item && item.path !== pathname)
+    .filter((item) => !(item && item.meta && isSameAgreementIdentity(item.meta, document.meta)));
   nextItems.unshift({
     path: pathname,
     meta: document.meta,
