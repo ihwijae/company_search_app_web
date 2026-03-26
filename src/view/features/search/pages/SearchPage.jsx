@@ -776,8 +776,8 @@ function App() {
         await refreshFileStatuses();
         // 지역 목록 갱신
         const r = await searchClient.getRegions(searchedFileType);
-        if (r.success && Array.isArray(r.data)) {
-          setRegions(r.data);
+        if (Array.isArray(r)) {
+          setRegions(r);
         }
         // 최근 검색이 있었다면 같은 조건으로 재검색 시도
         if (searchPerformed) {
@@ -832,8 +832,8 @@ function App() {
       if (statuses[fileType]) {
         const response = await searchClient.getRegions(fileType);
         console.log('[App.jsx LOG] 백엔드로부터 받은 지역 목록 응답:', response);
-        if (response.success && response.data.length > 1) { // '전체' 외에 다른 항목이 있는지 확인
-          setRegions(response.data);
+        if (Array.isArray(response) && response.length > 1) { // '전체' 외에 다른 항목이 있는지 확인
+          setRegions(response);
         } else {
           setRegions(['전체']);
         }

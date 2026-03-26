@@ -25,6 +25,12 @@ const fetchJson = async (url, init = {}) => {
   return payload;
 };
 
+const normalizeRegionsResponse = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (payload && Array.isArray(payload.data)) return payload.data;
+  return ['전체'];
+};
+
 const readFileAsBase64 = async (file) => {
   const arrayBuffer = await file.arrayBuffer();
   let binary = '';
@@ -105,13 +111,16 @@ export const searchClient = {
     if (!api || typeof api.getRegions !== 'function') {
       try {
         const query = new URLSearchParams({ fileType }).toString();
-        return await fetchJson(`/api/regions?${query}`);
+        const payload = await fetchJson(`/api/regions?${query}`);
+        return normalizeRegionsResponse(payload);
       } catch (error) {
         console.warn('[searchClient] shared regions failed, fallback to local store:', error);
-        return webSearchStore.getRegions(fileType);
+        const fallback = await webSearchStore.getRegions(fileType);
+        return normalizeRegionsResponse(fallback);
       }
     }
-    return api.getRegions(fileType);
+    const result = await api.getRegions(fileType);
+    return normalizeRegionsResponse(result);
   },
 
   onDataUpdated(callback) {
