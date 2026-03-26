@@ -40,8 +40,27 @@ function listJsonFiles(rootDir) {
 
 function loadAgreementSnapshot(filePath) {
   const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  const meta = raw && typeof raw.meta === 'object' ? raw.meta : {};
-  const payload = raw && typeof raw.payload === 'object' ? raw.payload : {};
+  const hasMeta = raw && typeof raw.meta === 'object';
+  const hasPayload = raw && typeof raw.payload === 'object';
+  const payload = hasPayload ? raw.payload : (raw && typeof raw === 'object' ? raw : {});
+  const metaBase = hasMeta ? raw.meta : {};
+  const meta = {
+    ownerId: payload.ownerId || metaBase.ownerId || '',
+    ownerLabel: payload.ownerLabel || metaBase.ownerLabel || '',
+    rangeId: payload.rangeId || payload.selectedRangeKey || metaBase.rangeId || '',
+    rangeLabel: payload.rangeLabel || metaBase.rangeLabel || '',
+    industryLabel: payload.industryLabel || payload.industry || metaBase.industryLabel || '',
+    dutyRegions: Array.isArray(payload.dutyRegions)
+      ? payload.dutyRegions
+      : (Array.isArray(metaBase.dutyRegions) ? metaBase.dutyRegions : []),
+    estimatedAmount: payload.estimatedAmount || payload.estimatedPrice || payload.baseAmount || metaBase.estimatedAmount || '',
+    estimatedAmountLabel: payload.estimatedAmount || payload.estimatedPrice || metaBase.estimatedAmountLabel || '',
+    noticeDate: payload.noticeDate || metaBase.noticeDate || '',
+    noticeNo: payload.noticeNo || metaBase.noticeNo || '',
+    noticeTitle: payload.noticeTitle || payload.title || metaBase.noticeTitle || '',
+    savedAt: metaBase.savedAt || '',
+    sourcePath: filePath,
+  };
   return { meta, payload };
 }
 

@@ -1,8 +1,9 @@
-const { put, del } = require('@vercel/blob');
+const { put, del, list, get } = require('@vercel/blob');
 const { readManifest, writeManifest, resolveToken } = require('./blob-store');
 
 const AGREEMENT_BOARD_MANIFEST_KEY = 'agreementBoardItems';
 const AGREEMENT_BOARD_ROOT_LABEL = 'Vercel Blob / agreement-board';
+const AGREEMENT_BOARD_PREFIX = 'company-search/agreement-board/';
 
 function ensureToken() {
   const token = resolveToken();
@@ -24,6 +25,41 @@ function normalizeIdentityValue(value) {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, '');
+}
+
+function parseNumberLike(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const normalized = String(value).replace(/[^0-9.-]/g, '');
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function deriveMetaFromPayload(payload = {}, fallback = {}) {
+  const candidate = payload && typeof payload === 'object' ? payload : {};
+  const estimatedAmount = parseNumberLike(
+    candidate.estimatedAmount
+    ?? candidate.estimatedPrice
+    ?? candidate.baseAmount
+    ?? fallback.estimatedAmount
+  );
+  return {
+    ownerId: candidate.ownerId || fallback.ownerId || '',
+    ownerLabel: candidate.ownerLabel || fallback.ownerLabel || '',
+    rangeId: candidate.rangeId || candidate.selectedRangeKey || fallback.rangeId || '',
+    rangeLabel: candidate.rangeLabel || fallback.rangeLabel || '',
+    industryLabel: candidate.industryLabel || candidate.industry || fallback.industryLabel || '',
+    dutyRegions: Array.isArray(candidate.dutyRegions)
+      ? candidate.dutyRegions
+      : (Array.isArray(fallback.dutyRegions) ? fallback.dutyRegions : []),
+    estimatedAmount,
+    estimatedAmountLabel: candidate.estimatedAmount || candidate.estimatedPrice || fallback.estimatedAmountLabel || '',
+    noticeDate: candidate.noticeDate || fallback.noticeDate || '',
+    noticeNo: candidate.noticeNo || fallback.noticeNo || '',
+    noticeTitle: candidate.noticeTitle || candidate.title || fallback.noticeTitle || '',
+    savedAt: candidate.savedAt || fallback.savedAt || '',
+  };
 }
 
 function isSameAgreementIdentity(metaA = {}, metaB = {}) {
@@ -69,8 +105,11 @@ function buildAgreementBoardPath(meta = {}) {
 
 async function saveAgreementBoard(snapshot = {}, options = {}) {
   const token = ensureToken();
-  const meta = snapshot && typeof snapshot.meta === 'object' ? snapshot.meta : {};
-  const payload = snapshot && typeof snapshot.payload === 'object' ? snapshot.payload : {};
+  const rawMeta = snapshot && typeof snapshot.meta === 'object' ? snapshot.meta : {};
+  const payload = snapshot && typeof snapshot.payload === 'object'
+    ? snapshot.payload
+    : (snapshot && typeof snapshot === 'object' ? snapshot : {});
+  const meta = deriveMetaFromPayload(payload, rawMeta);
   const manifest = normalizeManifest(await readManifest());
   const existingItem = getAgreementBoardItems(manifest)
     .find((item) => item && item.meta && isSameAgreementIdentity(item.meta, meta));
@@ -104,14 +143,105 @@ async function saveAgreementBoard(snapshot = {}, options = {}) {
   return { path: pathname, meta: document.meta };
 }
 
+async function listAllAgreementBoardBlobPaths(token) {
+  const pathnames = [];
+  let cursor;
+  do {
+    const result = await list({
+      prefix: AGREEMENT_BOARD_PREFIX,
+      limit: 1000,
+      cursor,
+      token,
+    });
+    (result?.blobs || []).forEach((blob) => {
+      if (blob?.pathname) pathnames.push(blob.pathname);
+    });
+    cursor = result?.cursor;
+    if (!result?.hasMore) break;
+  } while (cursor);
+  return pathnames;
+}
+
+async function readAgreementMetaFromBlob(pathname, token) {
+  const result = await get(pathname, { access: 'private', token, useCache: false });
+  if (!result || result.statusCode !== 200) return null;
+  const response = new Response(result.stream);
+  const arrayBuffer = await response.arrayBuffer();
+  const parsed = JSON.parse(Buffer.from(arrayBuffer).toString('utf8'));
+  const payload = parsed && typeof parsed === 'object'
+    ? (parsed.payload && typeof parsed.payload === 'object' ? parsed.payload : parsed)
+    : {};
+  const rawMeta = parsed && typeof parsed === 'object' && parsed.meta && typeof parsed.meta === 'object'
+    ? parsed.meta
+    : {};
+  return deriveMetaFromPayload(payload, rawMeta);
+}
+
 async function listAgreementBoards() {
+  const token = ensureToken();
   const manifest = normalizeManifest(await readManifest());
-  return getAgreementBoardItems(manifest);
+  const manifestItems = getAgreementBoardItems(manifest);
+  const byPath = new Map(
+    manifestItems
+      .filter((item) => item && item.path)
+      .map((item) => [item.path, item])
+  );
+
+  const blobPaths = await listAllAgreementBoardBlobPaths(token);
+  const blobPathSet = new Set(blobPaths);
+  let mutated = false;
+
+  for (const path of blobPaths) {
+    const current = byPath.get(path);
+    if (current && current.meta && (current.meta.noticeNo || current.meta.noticeTitle)) continue;
+    try {
+      const meta = await readAgreementMetaFromBlob(path, token);
+      byPath.set(path, { path, meta: meta || {} });
+      mutated = true;
+    } catch (error) {
+      console.warn('[agreement-board-store] failed to read meta:', path, error && error.message ? error.message : error);
+      if (!current) {
+        byPath.set(path, { path, meta: {} });
+        mutated = true;
+      }
+    }
+  }
+
+  const compactItems = Array.from(byPath.values())
+    .filter((item) => item && item.path && blobPathSet.has(item.path));
+  if (compactItems.length !== manifestItems.length) mutated = true;
+
+  const deduped = [];
+  for (const item of compactItems) {
+    const duplicateIndex = deduped.findIndex((existing) => isSameAgreementIdentity(existing?.meta || {}, item?.meta || {}));
+    if (duplicateIndex >= 0) {
+      const currentSavedAt = Date.parse(String(deduped[duplicateIndex]?.meta?.savedAt || '')) || 0;
+      const nextSavedAt = Date.parse(String(item?.meta?.savedAt || '')) || 0;
+      if (nextSavedAt >= currentSavedAt) {
+        deduped[duplicateIndex] = item;
+      }
+      mutated = true;
+      continue;
+    }
+    deduped.push(item);
+  }
+
+  deduped.sort((a, b) => {
+    const aTs = Date.parse(String(a?.meta?.savedAt || a?.meta?.noticeDate || '')) || 0;
+    const bTs = Date.parse(String(b?.meta?.savedAt || b?.meta?.noticeDate || '')) || 0;
+    return bTs - aTs;
+  });
+
+  if (mutated) {
+    manifest[AGREEMENT_BOARD_MANIFEST_KEY] = deduped;
+    await writeManifest(manifest);
+  }
+
+  return deduped;
 }
 
 async function loadAgreementBoard(pathname) {
   const token = ensureToken();
-  const { get } = require('@vercel/blob');
   const result = await get(pathname, { access: 'private', token, useCache: false });
   if (!result || result.statusCode !== 200) {
     throw new Error('협정을 불러오지 못했습니다.');
