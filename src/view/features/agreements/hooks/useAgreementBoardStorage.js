@@ -1,4 +1,5 @@
 import React from 'react';
+import agreementBoardClient from '../../../../shared/agreementBoardClient.js';
 
 const DEFAULT_FILTERS = {
   ownerId: '',
@@ -169,7 +170,7 @@ export default function useAgreementBoardStorage({
   const handleSaveAgreement = React.useCallback(async () => {
     const payload = buildAgreementSnapshot();
     try {
-      const result = await window.electronAPI?.agreementBoardSave?.(payload);
+      const result = await agreementBoardClient.save(payload);
       if (!result?.success) throw new Error(result?.message || '저장 실패');
       showHeaderAlert('협정 저장 완료');
     } catch (err) {
@@ -181,7 +182,7 @@ export default function useAgreementBoardStorage({
     setLoadBusy(true);
     setLoadError('');
     try {
-      const result = await window.electronAPI?.agreementBoardList?.();
+      const result = await agreementBoardClient.list();
       if (!result?.success) throw new Error(result?.message || '불러오기 목록 실패');
       setLoadItems(Array.isArray(result.data) ? result.data : []);
     } catch (err) {
@@ -194,7 +195,7 @@ export default function useAgreementBoardStorage({
 
   const refreshLoadRoot = React.useCallback(async () => {
     try {
-      const result = await window.electronAPI?.agreementBoardGetRoot?.();
+      const result = await agreementBoardClient.getRoot();
       if (result?.success && result?.path) {
         setLoadRootPath(result.path);
       }
@@ -277,7 +278,7 @@ export default function useAgreementBoardStorage({
     if (!path) return;
     setLoadBusy(true);
     try {
-      const result = await window.electronAPI?.agreementBoardLoad?.(path);
+      const result = await agreementBoardClient.load(path);
       if (!result?.success) throw new Error(result?.message || '불러오기 실패');
       applyAgreementSnapshot(result.data || {});
       showHeaderAlert('협정 불러오기 완료');
@@ -302,7 +303,7 @@ export default function useAgreementBoardStorage({
     setLoadBusy(true);
     setLoadError('');
     try {
-      const result = await window.electronAPI?.agreementBoardDelete?.(path);
+      const result = await agreementBoardClient.remove(path);
       if (!result?.success) throw new Error(result?.message || '삭제 실패');
       showHeaderAlert('협정 삭제 완료');
       await refreshLoadList();
@@ -317,7 +318,7 @@ export default function useAgreementBoardStorage({
     setLoadBusy(true);
     setLoadError('');
     try {
-      const result = await window.electronAPI?.agreementBoardPickRoot?.();
+      const result = await agreementBoardClient.pickRoot();
       if (!result?.success) {
         if (result?.canceled) return;
         throw new Error(result?.message || '폴더 선택 실패');

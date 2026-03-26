@@ -387,6 +387,14 @@ const updateBoard = React.useCallback((payload = {}) => {
   }, []);
 
   const openBoardWindow = React.useCallback((payload = {}) => {
+    if (typeof window !== 'undefined' && !payload?.inlineMode) {
+      const targetUrl = `${window.location.pathname}${window.location.search}#/agreement-board`;
+      const opened = window.open(targetUrl, '_blank', 'noopener,noreferrer');
+      if (opened) {
+        opened.focus?.();
+        return;
+      }
+    }
     if (payload && Object.keys(payload).length > 0) {
       openBoard({ ...payload, inlineMode: false });
       return;
