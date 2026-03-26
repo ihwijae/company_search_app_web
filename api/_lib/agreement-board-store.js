@@ -32,10 +32,12 @@ function getAgreementBoardItems(manifest) {
 function buildAgreementBoardPath(meta = {}) {
   const owner = sanitizeSegment(meta.ownerId || meta.ownerLabel, 'owner');
   const range = sanitizeSegment(meta.rangeId || meta.rangeLabel, 'range');
-  const noticeNo = sanitizeSegment(meta.noticeNo, 'notice');
-  const title = sanitizeSegment(meta.noticeTitle, 'board');
-  const stamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
-  return `company-search/agreement-board/${owner}-${range}-${noticeNo}-${title}-${stamp}.json`;
+  const noticeNo = sanitizeSegment(meta.noticeNo, '');
+  const title = sanitizeSegment(meta.noticeTitle, '');
+  const industry = sanitizeSegment(meta.industryLabel, '');
+  const identity = noticeNo || title || 'board';
+  const suffix = industry ? `-${industry}` : '';
+  return `company-search/agreement-board/${owner}-${range}-${identity}${suffix}.json`;
 }
 
 async function saveAgreementBoard(snapshot = {}, options = {}) {
@@ -55,7 +57,7 @@ async function saveAgreementBoard(snapshot = {}, options = {}) {
   await put(pathname, Buffer.from(JSON.stringify(document), 'utf8'), {
     access: 'private',
     contentType: 'application/json; charset=utf-8',
-    allowOverwrite: false,
+    allowOverwrite: true,
     addRandomSuffix: false,
     token,
   });

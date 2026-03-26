@@ -22,6 +22,7 @@ import { isWomenOwnedCompany, getQualityBadgeText, extractManagerNames } from '.
 import { generateMany } from '../../../../shared/agreements/generator.js';
 import { AGREEMENT_GROUPS } from '../../../../shared/navigation.js';
 import { sanitizeHtml } from '../../../../shared/sanitizeHtml.js';
+import searchClient from '../../../../shared/searchClient.js';
 import { AGREEMENT_BAN_CONFIG } from '../../../../shared/agreements/banConfig.js';
 import { buildAgreementExportPayload } from '../../../../shared/agreements/agreementExportPayload.js';
 import {
@@ -1521,11 +1522,10 @@ export default function AgreementBoardWindow({
   React.useEffect(() => {
     let canceled = false;
     const fetchRegions = async () => {
-      if (!window?.electronAPI?.getRegions) return;
       try {
-        const response = await window.electronAPI.getRegions(fileType || 'all');
-        if (!response?.success || !Array.isArray(response.data)) return;
-        const list = response.data
+        const data = await searchClient.getRegions(fileType || 'all');
+        if (!Array.isArray(data)) return;
+        const list = data
           .filter((name) => name && name !== '전체')
           .map((name) => String(name).trim())
           .filter(Boolean)
