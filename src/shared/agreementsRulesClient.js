@@ -9,21 +9,12 @@ async function fetchJson(url, init = {}) {
   return payload;
 }
 
-function getElectronApi() {
-  if (typeof window === 'undefined') return null;
-  return window.electronAPI || null;
-}
-
 const agreementsRulesClient = {
   async load() {
-    const api = getElectronApi();
-    if (api?.agreementsRulesLoad) return api.agreementsRulesLoad();
     return fetchJson('/api/agreements-rules?action=load');
   },
 
   async save(payload = {}) {
-    const api = getElectronApi();
-    if (api?.agreementsRulesSave) return api.agreementsRulesSave(payload);
     return fetchJson('/api/agreements-rules', {
       method: 'POST',
       headers: JSON_HEADERS,

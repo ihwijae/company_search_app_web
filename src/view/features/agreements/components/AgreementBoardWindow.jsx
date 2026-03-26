@@ -24,6 +24,7 @@ import { AGREEMENT_GROUPS } from '../../../../shared/navigation.js';
 import { sanitizeHtml } from '../../../../shared/sanitizeHtml.js';
 import searchClient from '../../../../shared/searchClient.js';
 import formulasClient from '../../../../shared/formulasClient.js';
+import agreementTemplateClient from '../../../../shared/agreementTemplateClient.js';
 import { AGREEMENT_BAN_CONFIG } from '../../../../shared/agreements/banConfig.js';
 import { buildAgreementExportPayload } from '../../../../shared/agreements/agreementExportPayload.js';
 import {
@@ -1160,6 +1161,9 @@ export default function AgreementBoardWindow({
   const [memoDraft, setMemoDraft] = React.useState('');
   const memoEditorRef = React.useRef(null);
   const [exportModalOpen, setExportModalOpen] = React.useState(false);
+  const [templateModalOpen, setTemplateModalOpen] = React.useState(false);
+  const [templateBusy, setTemplateBusy] = React.useState(false);
+  const [templateItems, setTemplateItems] = React.useState({});
   const {
     portalContainer: awardHistoryPortalContainer,
     closeWindow: closeAwardHistoryWindow,
@@ -1172,6 +1176,7 @@ export default function AgreementBoardWindow({
   const [exportTargetName, setExportTargetName] = React.useState('');
   const [exportSheetName, setExportSheetName] = React.useState('');
   const exportFileInputRef = React.useRef(null);
+  const templateFileInputRef = React.useRef(null);
   const regionSearchSessionRef = React.useRef(null);
   const [technicianModalOpen, setTechnicianModalOpen] = React.useState(false);
   const technicianWindowRef = React.useRef(null);
@@ -3614,6 +3619,14 @@ export default function AgreementBoardWindow({
     const rateNumber = parseNumeric(regionDutyRate);
     return buildDutySummary(dutyRegions, rateNumber, safeParticipantLimit);
   }, [regionDutyRate, dutyRegions, safeGroupSize]);
+  const currentTemplateKey = React.useMemo(
+    () => resolveTemplateKey(ownerId, rangeId, fileType),
+    [ownerId, rangeId, fileType],
+  );
+  const currentTemplateMeta = React.useMemo(() => {
+    if (!currentTemplateKey || !templateItems || typeof templateItems !== 'object') return null;
+    return templateItems[currentTemplateKey] || null;
+  }, [currentTemplateKey, templateItems]);
 
   const rangeBadgeLabel = selectedRangeOption?.label || '기본 구간';
 
@@ -5198,6 +5211,77 @@ export default function AgreementBoardWindow({
     setExportModalOpen(true);
   }, [noticeTitle, noticeNo, resolveSheetName]);
 
+  const refreshTemplateItems = React.useCallback(async () => {
+    setTemplateBusy(true);
+    try {
+      const response = await agreementTemplateClient.list();
+      if (!response?.success) throw new Error(response?.message || '템플릿 목록 조회 실패');
+      const data = response?.data && typeof response.data === 'object' ? response.data : {};
+      setTemplateItems(data);
+      return data;
+    } catch (error) {
+      showHeaderAlert(error?.message || '템플릿 목록 조회 실패');
+      return null;
+    } finally {
+      setTemplateBusy(false);
+    }
+  }, [showHeaderAlert]);
+
+  const handleOpenTemplateModal = React.useCallback(async () => {
+    setTemplateModalOpen(true);
+    await refreshTemplateItems();
+  }, [refreshTemplateItems]);
+
+  const handleTemplateFilePick = React.useCallback(async (event) => {
+    const file = event?.target?.files?.[0];
+    if (event?.target) event.target.value = '';
+    if (!file) return;
+    if (!currentTemplateKey) {
+      showHeaderAlert('현재 발주처/구간/공종 조합은 템플릿 키를 만들 수 없습니다.');
+      return;
+    }
+    setTemplateBusy(true);
+    try {
+      const response = await agreementTemplateClient.upload({
+        templateKey: currentTemplateKey,
+        file,
+      });
+      if (!response?.success) throw new Error(response?.message || '템플릿 업로드 실패');
+      await refreshTemplateItems();
+      showHeaderAlert('템플릿 업로드 완료');
+    } catch (error) {
+      showHeaderAlert(error?.message || '템플릿 업로드 실패');
+    } finally {
+      setTemplateBusy(false);
+    }
+  }, [currentTemplateKey, refreshTemplateItems, showHeaderAlert]);
+
+  const handleDeleteTemplate = React.useCallback(async () => {
+    if (!currentTemplateKey) {
+      showHeaderAlert('삭제할 템플릿 키가 없습니다.');
+      return;
+    }
+    const ok = await confirm({
+      title: '템플릿을 삭제하시겠습니까?',
+      message: `키: ${currentTemplateKey}`,
+      confirmText: '삭제',
+      cancelText: '취소',
+      tone: 'warning',
+    });
+    if (!ok) return;
+    setTemplateBusy(true);
+    try {
+      const response = await agreementTemplateClient.remove(currentTemplateKey);
+      if (!response?.success) throw new Error(response?.message || '템플릿 삭제 실패');
+      await refreshTemplateItems();
+      showHeaderAlert('템플릿 삭제 완료');
+    } catch (error) {
+      showHeaderAlert(error?.message || '템플릿 삭제 실패');
+    } finally {
+      setTemplateBusy(false);
+    }
+  }, [confirm, currentTemplateKey, refreshTemplateItems, showHeaderAlert]);
+
   const handleExportFilePick = React.useCallback((event) => {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
@@ -6017,6 +6101,12 @@ export default function AgreementBoardWindow({
                   className="excel-btn"
                   disabled={exporting}
                 >엑셀로 내보내기</button>
+                <button
+                  type="button"
+                  onClick={handleOpenTemplateModal}
+                  className="excel-btn"
+                  disabled={templateBusy}
+                >템플릿 관리</button>
                 <button type="button" className="excel-btn" onClick={handleGenerateText}>협정 문자 생성</button>
                 <button
                   type="button"
@@ -6512,6 +6602,75 @@ export default function AgreementBoardWindow({
             data-placeholder="메모를 입력하세요."
           />
           <div className="memo-editor-hint">저장하면 협정 저장 데이터에 포함됩니다.</div>
+        </div>
+      </Modal>
+      <Modal
+        open={templateModalOpen}
+        onClose={() => setTemplateModalOpen(false)}
+        title="템플릿 관리"
+        closeOnSave={false}
+        confirmLabel="새로고침"
+        cancelLabel="닫기"
+        onSave={refreshTemplateItems}
+        size="sm"
+        boxClassName="agreement-export-modal"
+      >
+        <div className="export-sheet-modal">
+          <div className="export-sheet-hero">
+            <div className="export-sheet-hero__badge">TEMPLATE</div>
+            <div>
+              <strong>현재 조합 템플릿을 업로드/교체합니다.</strong>
+              <p>같은 키로 업로드하면 기존 템플릿을 덮어씁니다.</p>
+            </div>
+          </div>
+          <div className="export-sheet-field">
+            <span className="export-sheet-label">현재 템플릿 키</span>
+            <div className="readonly-value">{currentTemplateKey || '지원되지 않는 조합'}</div>
+          </div>
+          <div className="export-sheet-field">
+            <span className="export-sheet-label">저장소 상태</span>
+            {currentTemplateMeta ? (
+              <div className="readonly-value">
+                {currentTemplateMeta.fileName || currentTemplateMeta.pathname || '등록됨'}
+                {currentTemplateMeta.uploadedAt ? ` / ${new Date(currentTemplateMeta.uploadedAt).toLocaleString('ko-KR')}` : ''}
+              </div>
+            ) : (
+              <div className="readonly-value">등록된 템플릿 없음</div>
+            )}
+          </div>
+          <div className="export-sheet-field">
+            <span className="export-sheet-label">템플릿 파일(.xlsx)</span>
+            <div className="export-sheet-file">
+              <button
+                type="button"
+                className="excel-btn"
+                onClick={() => templateFileInputRef.current?.click()}
+                disabled={!currentTemplateKey || templateBusy}
+              >
+                파일 선택
+              </button>
+              {currentTemplateMeta && (
+                <button
+                  type="button"
+                  className="excel-btn"
+                  onClick={handleDeleteTemplate}
+                  disabled={templateBusy}
+                >
+                  삭제
+                </button>
+              )}
+            </div>
+            <input
+              ref={templateFileInputRef}
+              type="file"
+              accept=".xlsx,.xlsm,.xls"
+              style={{ display: 'none' }}
+              onChange={handleTemplateFilePick}
+            />
+            <p className="export-sheet-hint">
+              템플릿 키: <strong>{currentTemplateKey || '-'}</strong>
+            </p>
+          </div>
         </div>
       </Modal>
       <Modal

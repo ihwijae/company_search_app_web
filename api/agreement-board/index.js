@@ -6,6 +6,12 @@ const {
   deleteAgreementBoard,
   AGREEMENT_BOARD_ROOT_LABEL,
 } = require('../_lib/agreement-board-store');
+const {
+  TEMPLATE_ROOT_LABEL,
+  listAgreementTemplates,
+  uploadAgreementTemplate,
+  deleteAgreementTemplate,
+} = require('../_lib/agreement-template-store');
 
 function getGetAction(req) {
   const url = new URL(req.url, 'http://localhost');
@@ -22,6 +28,15 @@ module.exports = async function handler(req, res) {
       } catch (error) {
         console.error('[api/agreement-board:index:list] failed:', error);
         return sendJson(res, 500, { success: false, message: error?.message || 'List failed' });
+      }
+    }
+    if (action === 'template-list') {
+      try {
+        const data = await listAgreementTemplates();
+        return sendJson(res, 200, { success: true, data, path: TEMPLATE_ROOT_LABEL });
+      } catch (error) {
+        console.error('[api/agreement-board:index:template-list] failed:', error);
+        return sendJson(res, 500, { success: false, message: error?.message || 'Template list failed' });
       }
     }
     if (action === 'root') {
@@ -60,6 +75,34 @@ module.exports = async function handler(req, res) {
         await deleteAgreementBoard(pathname);
         return sendJson(res, 200, { success: true });
       }
+      if (action === 'template-upload') {
+        const templateKey = body?.templateKey ? String(body.templateKey) : '';
+        const fileName = body?.fileName ? String(body.fileName) : '';
+        const contentType = body?.contentType ? String(body.contentType) : '';
+        const fileBase64 = body?.fileBase64 ? String(body.fileBase64) : '';
+        if (!templateKey) {
+          return sendJson(res, 400, { success: false, message: 'templateKey is required' });
+        }
+        if (!fileBase64) {
+          return sendJson(res, 400, { success: false, message: 'fileBase64 is required' });
+        }
+        const buffer = Buffer.from(fileBase64, 'base64');
+        const data = await uploadAgreementTemplate({
+          templateKey,
+          fileName,
+          contentType,
+          buffer,
+        });
+        return sendJson(res, 200, { success: true, data });
+      }
+      if (action === 'template-delete') {
+        const templateKey = body?.templateKey ? String(body.templateKey) : '';
+        if (!templateKey) {
+          return sendJson(res, 400, { success: false, message: 'templateKey is required' });
+        }
+        await deleteAgreementTemplate(templateKey);
+        return sendJson(res, 200, { success: true });
+      }
       if (action === 'root') {
         return sendJson(res, 200, {
           success: true,
@@ -77,4 +120,3 @@ module.exports = async function handler(req, res) {
   allowMethods(res, ['GET', 'POST']);
   return sendJson(res, 405, { success: false, message: 'Method not allowed' });
 };
-

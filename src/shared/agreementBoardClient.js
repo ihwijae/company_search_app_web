@@ -9,21 +9,8 @@ async function requestJson(url, options = {}) {
   return data;
 }
 
-function supportsElectronAgreementBoard() {
-  return typeof window !== 'undefined'
-    && !!window.electronAPI?.agreementBoardSave
-    && !!window.electronAPI?.agreementBoardList
-    && !!window.electronAPI?.agreementBoardLoad
-    && !!window.electronAPI?.agreementBoardDelete;
-}
-
 const agreementBoardClient = {
-  supportsElectronAgreementBoard,
-
   async save(payload) {
-    if (supportsElectronAgreementBoard()) {
-      return window.electronAPI.agreementBoardSave(payload);
-    }
     return requestJson('/api/agreement-board', {
       method: 'POST',
       headers: JSON_HEADERS,
@@ -32,16 +19,10 @@ const agreementBoardClient = {
   },
 
   async list() {
-    if (supportsElectronAgreementBoard()) {
-      return window.electronAPI.agreementBoardList();
-    }
     return requestJson('/api/agreement-board?action=list');
   },
 
   async load(path) {
-    if (supportsElectronAgreementBoard()) {
-      return window.electronAPI.agreementBoardLoad(path);
-    }
     return requestJson('/api/agreement-board', {
       method: 'POST',
       headers: JSON_HEADERS,
@@ -50,9 +31,6 @@ const agreementBoardClient = {
   },
 
   async remove(path) {
-    if (supportsElectronAgreementBoard()) {
-      return window.electronAPI.agreementBoardDelete(path);
-    }
     return requestJson('/api/agreement-board', {
       method: 'POST',
       headers: JSON_HEADERS,
@@ -61,16 +39,10 @@ const agreementBoardClient = {
   },
 
   async getRoot() {
-    if (typeof window !== 'undefined' && window.electronAPI?.agreementBoardGetRoot) {
-      return window.electronAPI.agreementBoardGetRoot();
-    }
     return requestJson('/api/agreement-board?action=root');
   },
 
   async pickRoot() {
-    if (typeof window !== 'undefined' && window.electronAPI?.agreementBoardPickRoot) {
-      return window.electronAPI.agreementBoardPickRoot();
-    }
     return requestJson('/api/agreement-board', {
       method: 'POST',
       headers: JSON_HEADERS,
