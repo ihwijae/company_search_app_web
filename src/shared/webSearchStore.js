@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import * as XLSX from 'xlsx';
 import CREDIT_GRADE_ORDER from './creditGrades.json';
 
 const RELATIVE_OFFSETS = {
@@ -474,6 +475,89 @@ const extractCompaniesFromWorkbook = async (arrayBuffer, fileType, fileName) => 
   };
 };
 
+const extractCompaniesWithXlsxFallback = (arrayBuffer, fileType, fileName) => {
+  const workbook = XLSX.read(arrayBuffer, {
+    type: 'array',
+    cellStyles: true,
+    cellFormula: false,
+    cellHTML: false,
+    cellText: true,
+  });
+
+  const companies = [];
+  const sheetNames = [];
+
+  workbook.SheetNames.forEach((sheetName) => {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) return;
+    const trimmedSheetName = String(sheetName || '').trim();
+    if (!trimmedSheetName) return;
+    sheetNames.push(trimmedSheetName);
+
+    const ref = sheet['!ref'];
+    if (!ref) return;
+    const range = XLSX.utils.decode_range(ref);
+
+    for (let row = range.s.r; row <= range.e.r; row += 1) {
+      const headerCell = sheet[XLSX.utils.encode_cell({ r: row, c: 0 })];
+      const headerValue = normalizeCellText(headerCell?.v ?? headerCell?.w ?? '');
+      if (!headerValue.includes('회사명')) continue;
+
+      for (let col = 1; col <= range.e.c; col += 1) {
+        const companyCell = sheet[XLSX.utils.encode_cell({ r: row, c: col })];
+        const rawCompanyName = normalizeCellText(companyCell?.v ?? companyCell?.w ?? '');
+        if (!rawCompanyName) continue;
+
+        const companyName = rawCompanyName.split('\n')[0].replace(/\s*[\d.,%].*$/, '').trim();
+        if (!companyName) continue;
+
+        const companyData = {
+          '검색된 회사': companyName,
+          대표지역: trimmedSheetName,
+          _file_type: fileType,
+        };
+        const companyStatuses = {};
+
+        Object.keys(RELATIVE_OFFSETS).forEach((item) => {
+          const targetRow = row + RELATIVE_OFFSETS[item];
+          if (targetRow > range.e.r) {
+            companyData[item] = 'N/A';
+            companyStatuses[item] = 'N/A';
+            return;
+          }
+          const cell = sheet[XLSX.utils.encode_cell({ r: targetRow, c: col })];
+          let processedValue = cell?.v ?? cell?.w ?? '';
+          if ((item === '부채비율' || item === '유동비율') && typeof processedValue === 'number') {
+            processedValue *= 100;
+          }
+          if (processedValue && typeof processedValue === 'object') {
+            processedValue = normalizeCellText(processedValue);
+          }
+          companyData[item] = processedValue ?? '';
+          companyStatuses[item] = '미지정';
+        });
+
+        companyData['데이터상태'] = companyStatuses;
+        companyData['요약상태'] = getSummaryStatus(companyStatuses);
+        const manager = extractManagerName(companyData['비고']);
+        if (manager) companyData['담당자명'] = manager;
+        const normalizedCreditGrade = extractCreditGradeToken(companyData['신용평가']);
+        if (normalizedCreditGrade) companyData._creditGrade = normalizedCreditGrade;
+        companyData._creditGradeRank = getCreditGradeRank(normalizedCreditGrade);
+        companies.push(companyData);
+      }
+    }
+  });
+
+  return {
+    type: fileType,
+    fileName: fileName || '',
+    updatedAt: new Date().toISOString(),
+    sheetNames,
+    companies,
+  };
+};
+
 export const webSearchStore = {
   async ensureLoaded() {
     await loadPersisted();
@@ -498,7 +582,13 @@ export const webSearchStore = {
     }
     await this.ensureLoaded();
     const buffer = await file.arrayBuffer();
-    const dataset = await extractCompaniesFromWorkbook(buffer, fileType, file.name);
+    let dataset;
+    try {
+      dataset = await extractCompaniesFromWorkbook(buffer, fileType, file.name);
+    } catch (error) {
+      console.warn('[webSearchStore] exceljs parse failed, falling back to xlsx:', error);
+      dataset = extractCompaniesWithXlsxFallback(buffer, fileType, file.name);
+    }
     datasets.set(fileType, dataset);
     try {
       await persistDataset(dataset);
