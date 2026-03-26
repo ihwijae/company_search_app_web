@@ -90,8 +90,10 @@ function loadUserOverrides(userDataDir) {
 function getUserDataDirSafe() {
   try {
     // Try Electron app if available
-    // eslint-disable-next-line global-require
-    const electron = require('electron');
+    // NOTE: Keep electron require non-static so serverless bundlers do not include the electron package.
+    // eslint-disable-next-line no-new-func
+    const runtimeRequire = Function('return require')();
+    const electron = runtimeRequire('electron');
     const app = electron.app || (electron.remote && electron.remote.app);
     if (app && typeof app.getPath === 'function') {
       return toWSLPathIfNeeded(app.getPath('userData'));
