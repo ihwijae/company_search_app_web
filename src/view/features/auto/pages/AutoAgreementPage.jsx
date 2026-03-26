@@ -5,6 +5,7 @@ import Sidebar from '../../../../components/Sidebar';
 import { BASE_ROUTES } from '../../../../shared/navigation.js';
 import AUTO_COMPANY_PRESETS from '../../../../shared/autoCompanyPresets.js';
 import { evaluateSingleBidByConfig } from '../../../../shared/agreements/singleBidEvaluator.js';
+import formulasClient from '../../../../shared/formulasClient.js';
 
 const ROUTE_HASHES = {
   search: BASE_ROUTES.search,
@@ -290,8 +291,7 @@ export default function AutoAgreementPage() {
 
   const enrichCandidatesWithScores = React.useCallback(async (items, { ownerId, evaluationAmount, baseAmount }) => {
     if (!Array.isArray(items) || !items.length) return items;
-    const evalApi = typeof window !== 'undefined' ? window.electronAPI?.formulasEvaluate : null;
-    if (!evalApi || !ownerId) return items;
+    if (!ownerId) return items;
     const agencyId = ownerId.toLowerCase();
     const evalAmount = evaluationAmount && evaluationAmount > 0 ? evaluationAmount : (baseAmount > 0 ? baseAmount : 0);
     const enriched = [];
@@ -317,7 +317,7 @@ export default function AutoAgreementPage() {
         },
       };
       try {
-        const response = await evalApi(payload);
+        const response = await formulasClient.evaluate(payload);
         if (response?.success && response.data?.management) {
           const managementData = response.data.management;
           const scoreNumeric = parseNumericValue(managementData.score ?? managementData.rawScore);

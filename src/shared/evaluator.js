@@ -257,15 +257,18 @@ function pickTierByAmount(tiers = [], amount) {
   return tiers.find(t => a >= toNumber(t.minAmount) && a < toNumber(t.maxAmount)) || tiers[0];
 }
 
-function resolveFormulasDocument(useDefaultsOnly) {
+function resolveFormulasDocument(useDefaultsOnly, formulasDoc) {
+  if (formulasDoc && typeof formulasDoc === 'object') {
+    return formulasDoc;
+  }
   if (useDefaultsOnly) {
     return loadFormulasDefaults();
   }
   return loadFormulasMerged();
 }
 
-function evaluateScores({ agencyId, amount, inputs = {}, industryAvg, useDefaultsOnly } = {}) {
-  const formulas = resolveFormulasDocument(useDefaultsOnly);
+function evaluateScores({ agencyId, amount, inputs = {}, industryAvg, useDefaultsOnly, formulasDoc } = {}) {
+  const formulas = resolveFormulasDocument(useDefaultsOnly, formulasDoc);
   const agency = (formulas.agencies || []).find(a => String(a.id || '').toLowerCase() === String(agencyId || '').toLowerCase()) || (formulas.agencies || [])[0];
   if (!agency) return { ok: false, error: 'NO_AGENCY' };
   const tier = pickTierByAmount(agency.tiers || [], amount);

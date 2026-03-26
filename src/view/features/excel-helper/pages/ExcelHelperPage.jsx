@@ -7,6 +7,7 @@ import { BASE_ROUTES } from '../../../../shared/navigation.js';
 import { generateMany, validateAgreement } from '../../../../shared/agreements/generator.js';
 import { extractManagerNames, getQualityBadgeText, isWomenOwnedCompany } from '../../../../utils/companyIndicators.js';
 import { INDUSTRY_AVERAGES } from '../../../../ratios.js';
+import formulasClient from '../../../../shared/formulasClient.js';
 import * as XLSX from 'xlsx'; // Import xlsx library
 
 const OWNER_OPTIONS = [
@@ -1014,7 +1015,7 @@ export default function ExcelHelperPage() {
   }, [selectedCompany, fileType, ownerId, rangeId, noticeDateInput]);
 
   const evaluateManagementScore = React.useCallback(async (company, fileType) => {
-    if (!company || !window.electronAPI?.excelHelperFormulasEvaluate) return null;
+    if (!company) return null;
     const agencyId = String(ownerId || '').toUpperCase();
     if (!agencyId) return null;
     const amount = resolveRangeAmount(ownerId, rangeId);
@@ -1052,7 +1053,7 @@ export default function ExcelHelperPage() {
       const payload = industryAvg
         ? { agencyId, amount, inputs, industryAvg, noticeDate: noticeDateInput }
         : { agencyId, amount, inputs, noticeDate: noticeDateInput };
-      const response = await window.electronAPI.excelHelperFormulasEvaluate(payload);
+      const response = await formulasClient.evaluate(payload, { useDefaultsOnly: true });
       const score = Number(response?.data?.management?.score);
       const metaMax = Number(response?.data?.management?.meta?.maxScore);
       const metaIsPerfect = Boolean(response?.data?.management?.meta?.isPerfect);

@@ -9,6 +9,7 @@ import QualityModal from '../components/QualityModal';
 import BizYearsModal from '../components/BizYearsModal.jsx';
 import AgreementsRulesModal from '../components/AgreementsRulesModal.jsx';
 import PerformanceModal from '../components/PerformanceModal.jsx';
+import formulasClient from '../../../../shared/formulasClient.js';
 
 const Num = (v, d=0) => {
   const n = Number(v);
@@ -132,7 +133,7 @@ export default function SettingsPage() {
     const previousAgencyId = preserveSelection ? prevAgencyId : null;
     const previousTierIdx = preserveSelection ? prevTierIdx : 0;
 
-    const r = await window.electronAPI.formulasLoad();
+    const r = await formulasClient.load();
     if (!r.success) {
       if (!silent) setStatus('불러오기 실패');
       return false;
@@ -460,7 +461,7 @@ export default function SettingsPage() {
 
   // --- 섹션 단위 작업 핸들러 ---
   const reloadSectionMerged = async (section) => {
-    const r = await window.electronAPI.formulasLoad();
+    const r = await formulasClient.load();
     if (!r.success) { setStatus('불러오기 실패'); return; }
     const data = r.data || {};
     const ag = (data.agencies || []).find(a => a.id === currentAgency.id) || (data.agencies || [])[0];
@@ -503,7 +504,7 @@ export default function SettingsPage() {
   };
 
   const restoreSectionDefaults = async (section) => {
-    const r = await window.electronAPI.formulasLoadDefaults();
+    const r = await formulasClient.loadDefaults();
     if (!r.success) { setStatus('기본값 불러오기 실패'); return; }
     const defs = r.data || {};
     const ag = (defs.agencies || []).find(a => a.id === currentAgency.id) || (defs.agencies || [])[0];
@@ -573,7 +574,7 @@ export default function SettingsPage() {
       };
       applyRulesToCurrentSelection(rules);
       setStatus('저장 중...');
-      const r = await window.electronAPI.formulasSaveOverrides(payload);
+      const r = await formulasClient.saveOverrides(payload);
       if (!r.success) throw new Error(r.message || 'save failed');
       const reloaded = await load({ preserveSelection: true, silent: true });
       setStatus(reloaded ? '저장 완료' : '저장 완료 (재로딩 실패)');
@@ -593,7 +594,7 @@ export default function SettingsPage() {
       };
       applyRulesToCurrentSelection(rules);
       setStatus('저장 중...');
-      const r = await window.electronAPI.formulasSaveOverrides(payload);
+      const r = await formulasClient.saveOverrides(payload);
       if (!r.success) throw new Error(r.message || 'save failed');
       const reloaded = await load({ preserveSelection: true, silent: true });
       setStatus(reloaded ? '저장 완료' : '저장 완료 (재로딩 실패)');
@@ -615,7 +616,7 @@ export default function SettingsPage() {
         qualityEval: Number(qualityEval) || 85,
       }
     };
-    const r = await window.electronAPI.formulasEvaluate(payload);
+    const r = await formulasClient.evaluate(payload);
     if (r.success) setPreview(r.data); else setPreview({ ok: false, error: r.message });
   };
 
@@ -623,7 +624,7 @@ export default function SettingsPage() {
     if (!currentAgency || !currentTier) return;
     const proceed = window.confirm('현재 폼의 변경사항이 사라지고 기본값으로 되돌립니다. 계속할까요?');
     if (!proceed) return;
-    const r = await window.electronAPI.formulasLoadDefaults();
+    const r = await formulasClient.loadDefaults();
     if (!r.success) { setStatus('기본값 불러오기 실패'); return; }
     const defs = r.data || {};
     const ag = (defs.agencies || []).find(a => a.id === currentAgency.id) || (defs.agencies || [])[0];

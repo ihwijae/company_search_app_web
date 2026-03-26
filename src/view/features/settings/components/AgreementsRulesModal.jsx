@@ -2,6 +2,8 @@ import React from 'react';
 import Modal from '../../../../components/Modal';
 import CompanySearchModal from '../../../../components/CompanySearchModal.jsx';
 import { AGREEMENT_GROUPS } from '../../../../shared/navigation.js';
+import agreementsRulesClient from '../../../../shared/agreementsRulesClient.js';
+import searchClient from '../../../../shared/searchClient.js';
 
 const OWNER_PRESETS = AGREEMENT_GROUPS.map((group) => ({
   id: group.ownerId,
@@ -226,7 +228,7 @@ export default function AgreementsRulesModal({ open, onClose }) {
     if (!open) return;
     (async () => {
       try {
-        const response = await window.electronAPI.agreementsRulesLoad();
+        const response = await agreementsRulesClient.load();
         if (!response?.success) {
           setStatus(response?.message || '규칙을 불러오지 못했습니다.');
           return;
@@ -248,14 +250,14 @@ export default function AgreementsRulesModal({ open, onClose }) {
   }, [open]);
 
   React.useEffect(() => {
-    if (!open || !window.electronAPI?.getRegions) return undefined;
+    if (!open) return undefined;
     let canceled = false;
     (async () => {
       try {
-        const response = await window.electronAPI.getRegions('all');
+        const response = await searchClient.getRegions('all');
         if (canceled) return;
-        if (response?.success && Array.isArray(response.data)) {
-          const list = response.data
+        if (Array.isArray(response)) {
+          const list = response
             .map((item) => (typeof item === 'string' ? item.trim() : ''))
             .filter((item) => item && item !== '전체');
           setRegionOptions(Array.from(new Set(list))); // dedupe while preserving order
@@ -492,7 +494,7 @@ export default function AgreementsRulesModal({ open, onClose }) {
   const handleSave = async () => {
     if (!doc) return;
     setStatus('저장 중...');
-    const response = await window.electronAPI.agreementsRulesSave(doc);
+    const response = await agreementsRulesClient.save(doc);
     if (!response?.success) {
       setStatus(response?.message || '저장에 실패했습니다.');
       return;

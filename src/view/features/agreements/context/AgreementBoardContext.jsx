@@ -1,5 +1,6 @@
 import React from 'react';
 import { loadPersisted, savePersisted } from '../../../../shared/persistence.js';
+import agreementsRulesClient from '../../../../shared/agreementsRulesClient.js';
 
 const DEFAULT_GROUP_SIZE = 5;
 const DEFAULT_OWNER_ID = 'LH';
@@ -266,9 +267,8 @@ export function AgreementBoardProvider({ children }) {
     fileType = DEFAULT_FILE_TYPE,
     regionNames = [],
   ) => {
-    if (!window.electronAPI?.agreementsRulesLoad) return [];
     try {
-      const response = await window.electronAPI.agreementsRulesLoad();
+      const response = await agreementsRulesClient.load();
       if (!response?.success || !response.data) return [];
       const doc = response.data;
       const normalizedType = String(fileType || DEFAULT_FILE_TYPE).toLowerCase();

@@ -23,6 +23,7 @@ import { generateMany } from '../../../../shared/agreements/generator.js';
 import { AGREEMENT_GROUPS } from '../../../../shared/navigation.js';
 import { sanitizeHtml } from '../../../../shared/sanitizeHtml.js';
 import searchClient from '../../../../shared/searchClient.js';
+import formulasClient from '../../../../shared/formulasClient.js';
 import { AGREEMENT_BAN_CONFIG } from '../../../../shared/agreements/banConfig.js';
 import { buildAgreementExportPayload } from '../../../../shared/agreements/agreementExportPayload.js';
 import {
@@ -2000,10 +2001,8 @@ export default function AgreementBoardWindow({
     let canceled = false;
     const load = async () => {
       if (!open) return;
-      const api = typeof window !== 'undefined' ? window.electronAPI : null;
-      if (!api?.formulasLoad) return;
       try {
-        const response = await api.formulasLoad();
+        const response = await formulasClient.load();
         if (canceled) return;
         if (response?.data) {
           setFormulasDoc(response.data);
@@ -3210,8 +3209,15 @@ export default function AgreementBoardWindow({
       return;
     }
     try {
-      const result = await window.electronAPI.clipboardWriteText(text);
-      if (!result?.success) throw new Error(result?.message || 'Clipboard write failed');
+      const api = typeof window !== 'undefined' ? window.electronAPI : null;
+      if (api?.clipboardWriteText) {
+        const result = await api.clipboardWriteText(text);
+        if (!result?.success) throw new Error(result?.message || 'Clipboard write failed');
+      } else if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        throw new Error('Clipboard API is not available');
+      }
       showHeaderAlert('아이건설넷 메모가 클립보드에 복사되었습니다.');
     } catch (err) {
       console.error('Failed to copy incon memo: ', err);
@@ -3834,11 +3840,16 @@ export default function AgreementBoardWindow({
 
     try {
       const text = generateMany(items);
-      const result = await window.electronAPI.clipboardWriteText(text);
-      if (result.success) {
+      const api = typeof window !== 'undefined' ? window.electronAPI : null;
+      if (api?.clipboardWriteText) {
+        const result = await api.clipboardWriteText(text);
+        if (!result?.success) throw new Error(result?.message || 'Clipboard write failed');
+        showHeaderAlert('협정 문자 내용이 클립보드에 복사되었습니다.');
+      } else if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
         showHeaderAlert('협정 문자 내용이 클립보드에 복사되었습니다.');
       } else {
-        throw new Error(result.message || 'Clipboard write failed');
+        throw new Error('Clipboard API is not available');
       }
     } catch (err) {
       console.error('Failed to copy text: ', err);
@@ -3991,7 +4002,7 @@ export default function AgreementBoardWindow({
         estimatedValue,
         perfCoefficient: null,
         roundRatioDigits: (isLh50To100 || selectedRangeKey === LH_UNDER_50_KEY) ? 2 : null,
-        formulasEvaluate: typeof window !== 'undefined' ? window.electronAPI?.formulasEvaluate : null,
+        formulasEvaluate: formulasClient.evaluate,
         updatePerformanceCap,
         getPerformanceCap,
         toNumber,
@@ -4061,7 +4072,6 @@ export default function AgreementBoardWindow({
 
   React.useEffect(() => {
     if (!open) return;
-    const evalApi = typeof window !== 'undefined' ? window.electronAPI?.formulasEvaluate : null;
     const baseValue = parseAmountValue(baseAmount);
     const estimatedValue = parseAmountValue(estimatedAmount);
     const perfBase = isPpsUnder50
@@ -4163,7 +4173,7 @@ export default function AgreementBoardWindow({
         perfCoefficient: null,
         extractCreditGrade,
         isCreditScoreExpired,
-        formulasEvaluate: evalApi,
+        formulasEvaluate: formulasClient.evaluate,
         getCompanyName,
         clampScore,
         getPerformanceCap,
