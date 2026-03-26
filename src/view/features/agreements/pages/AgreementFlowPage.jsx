@@ -12,6 +12,7 @@ import {
 import { useAgreementBoard } from '../context/AgreementBoardContext.jsx';
 import { BASE_ROUTES, AGREEMENT_GROUPS, AGREEMENT_MENU_ITEMS, findMenuByKey } from '../../../../shared/navigation.js';
 import { loadPersisted, savePersisted } from '../../../../shared/persistence.js';
+import searchClient from '../../../../shared/searchClient.js';
 
 const createDefaultForm = () => {
   const today = new Date();
@@ -236,9 +237,9 @@ export default function AgreementFlowPage({
     (async () => {
       try {
         const fileType = toFileType(form.industry);
-        const response = await window.electronAPI.getRegions(fileType);
-        if (!response?.success || !Array.isArray(response.data)) return;
-        const list = (response.data || []).filter((name) => name && name !== '전체').sort((a, b) => a.localeCompare(b, 'ko-KR'));
+        const data = await searchClient.getRegions(fileType);
+        if (!Array.isArray(data)) return;
+        const list = data.filter((name) => name && name !== '전체').sort((a, b) => a.localeCompare(b, 'ko-KR'));
         if (!canceled) {
           setRegionList(list);
           setDutyRegions((prev) => prev.filter((name) => list.includes(name)));
@@ -526,7 +527,7 @@ export default function AgreementFlowPage({
     setCheckEval(null);
     try {
       const fileType = toFileType(form.industry);
-      const response = await window.electronAPI.searchCompanies({ name: checkQuery.trim() }, fileType);
+      const response = await searchClient.searchCompanies({ name: checkQuery.trim() }, fileType);
       if (response?.success) setCheckResults(response.data || []);
     } catch {
       /* ignore */
