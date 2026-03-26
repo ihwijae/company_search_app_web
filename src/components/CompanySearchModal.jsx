@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { openTempCompaniesWindow as openTempCompaniesPopup } from '../utils/tempCompaniesWindow.js';
+import searchClient from '../shared/searchClient.js';
 import {
   isWomenOwnedCompany,
   getQualityBadgeText,
@@ -72,7 +73,7 @@ export default function CompanySearchModal({
       if (!effectiveType) {
         throw new Error('공종을 먼저 선택하세요.');
       }
-      const r = await window.electronAPI.searchCompanies(criteria, effectiveType);
+      const r = await searchClient.searchCompanies(criteria, effectiveType);
       if (!r?.success) throw new Error(r?.message || '검색 실패');
       setResults(r.data || []);
     } catch (e) { setError(String(e.message || e)); }
