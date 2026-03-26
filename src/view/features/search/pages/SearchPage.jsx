@@ -7,6 +7,7 @@ import Sidebar from '../../../../components/Sidebar';
 import Drawer from '../../../../components/Drawer';
 import { INDUSTRY_AVERAGES, DEBT_RATIO_WARN_FACTOR, CURRENT_RATIO_WARN_FACTOR } from '../../../../ratios.js';
 import { loadPersisted, savePersisted } from '../../../../shared/persistence.js';
+import searchClient from '../../../../shared/searchClient.js';
 import CREDIT_GRADE_ORDER from '../../../../shared/creditGrades.json';
 
 // --- Helper Functions & Components (변경 없음) ---
@@ -235,16 +236,18 @@ function FileUploader({ type, label, isUploaded, onUploadSuccess }) {
   const [message, setMessage] = useState('');
   const handleSelectFile = async () => {
     setMessage('파일 선택창을 여는 중...');
-    const result = await window.electronAPI.selectFile(type);
-    if (result.success) {
-      setMessage(`경로 설정 완료: ${result.path}`);
-      onUploadSuccess(); // [핵심] 성공 시 부모에게 알림
-    } else {
-      if (result.message !== '파일 선택이 취소되었습니다.') {
+    try {
+      const result = await searchClient.selectFile(type);
+      if (result.success) {
+        setMessage(`경로 설정 완료: ${result.path}`);
+        onUploadSuccess();
+      } else if (result.message !== '파일 선택이 취소되었습니다.') {
         setMessage(result.message);
       } else {
         setMessage('');
       }
+    } catch (error) {
+      setMessage(error?.message || '파일 선택 중 오류가 발생했습니다.');
     }
   };
   return (
@@ -433,9 +436,7 @@ function App() {
   const selectedBizNumber = React.useMemo(() => normalizeBizNumber(selectedCompany?.['사업자번호']), [selectedCompany]);
   const currentSmppResult = selectedBizNumber ? smppResults[selectedBizNumber] : null;
   const smppBusyForSelected = smppStatus.busy && smppStatus.bizNo === selectedBizNumber;
-  const smppSupported = typeof window !== 'undefined'
-    && window.electronAPI
-    && typeof window.electronAPI.smppCheckOne === 'function';
+  const smppSupported = searchClient.supportsSmppLookup();
 
   useEffect(() => {
     selectedCompanyKeyRef.current = selectedCompanyKey;
@@ -553,7 +554,7 @@ function App() {
     }
 
     try {
-      const response = await window.electronAPI.searchCompanies(criteriaJson, effectiveFileType, optionsJson);
+      const response = await searchClient.searchCompanies(criteriaJson, effectiveFileType, optionsJson);
 
       if (lastRequestIdRef.current !== requestId) return;
 
@@ -729,18 +730,17 @@ function App() {
   }, [goToPage, totalPages]);
 
   const refreshFileStatuses = async () => {
-    const statuses = await window.electronAPI.checkFiles();
+    const statuses = await searchClient.checkFiles();
     setFileStatuses(statuses);
   };
   
   // 데이터 자동 갱신 이벤트 구독
   useEffect(() => {
-    if (!window.electronAPI?.onDataUpdated) return;
-    const unsubscribe = window.electronAPI.onDataUpdated(async (payload) => {
+    const unsubscribe = searchClient.onDataUpdated(async () => {
       try {
         await refreshFileStatuses();
         // 지역 목록 갱신
-        const r = await window.electronAPI.getRegions(searchedFileType);
+        const r = await searchClient.getRegions(searchedFileType);
         if (r.success && Array.isArray(r.data)) {
           setRegions(r.data);
         }
@@ -764,8 +764,7 @@ function App() {
 
   // Always update admin upload statuses on any data refresh from main
   useEffect(() => {
-    if (!window.electronAPI?.onDataUpdated) return;
-    const unsub = window.electronAPI.onDataUpdated(async () => {
+    const unsub = searchClient.onDataUpdated(async () => {
       try { await refreshFileStatuses(); } catch (e) {
         console.error('[Renderer] refresh statuses failed:', e);
       }
@@ -775,8 +774,7 @@ function App() {
 
   // Always update admin upload statuses on any data refresh from main
   useEffect(() => {
-    if (!window.electronAPI?.onDataUpdated) return;
-    const unsub = window.electronAPI.onDataUpdated(async () => {
+    const unsub = searchClient.onDataUpdated(async () => {
       try { await refreshFileStatuses(); } catch (e) {
         console.error('[Renderer] refresh statuses failed:', e);
       }
@@ -795,9 +793,9 @@ function App() {
   useEffect(() => {
     const fetchRegions = async () => {
       console.log(`[App.jsx LOG] 지역 목록(${fileType}) 가져오기 요청을 보냅니다. (트리거: uploadCount=${uploadCount})`);
-      const statuses = await window.electronAPI.checkFiles();
+      const statuses = await searchClient.checkFiles();
       if (statuses[fileType]) {
-        const response = await window.electronAPI.getRegions(fileType);
+        const response = await searchClient.getRegions(fileType);
         console.log('[App.jsx LOG] 백엔드로부터 받은 지역 목록 응답:', response);
         if (response.success && response.data.length > 1) { // '전체' 외에 다른 항목이 있는지 확인
           setRegions(response.data);
@@ -989,7 +987,7 @@ function App() {
     });
 
     try {
-      const r = await window.electronAPI.copyCsvColumn(rows);
+      const r = await searchClient.copyCsvColumn(rows);
       if (!r?.success) throw new Error(r?.message || 'copy failed');
       setDialog({ isOpen: true, message: '전체 정보가 클립보드에 복사되었습니다!' });
     } catch (e) {
@@ -1024,12 +1022,11 @@ function App() {
 
   const handleSmppLookup = React.useCallback(async () => {
     const bizNo = selectedBizNumber;
-    const api = typeof window !== 'undefined' ? window.electronAPI : null;
     if (!bizNo) {
       setDialog({ isOpen: true, message: '사업자등록번호가 없는 업체입니다.' });
       return;
     }
-    if (!api || typeof api.smppCheckOne !== 'function') {
+    if (!searchClient.supportsSmppLookup()) {
       const message = '이 버전에서는 실시간 조회를 지원하지 않습니다.';
       setSmppResults((prev) => ({
         ...prev,
@@ -1040,7 +1037,7 @@ function App() {
     }
     setSmppStatus({ busy: true, bizNo });
     try {
-      const response = await api.smppCheckOne({ bizNo });
+      const response = await searchClient.smppCheckOne({ bizNo });
       if (!response?.success) {
         throw new Error(response?.message || '실시간 조회에 실패했습니다.');
       }
