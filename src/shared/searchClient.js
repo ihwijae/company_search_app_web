@@ -56,22 +56,17 @@ export const searchClient = {
     if (api && typeof api.selectFile === 'function') {
       throw new Error('Electron 환경에서는 기존 파일 선택 흐름을 사용하세요.');
     }
-    try {
-      const fileBase64 = await readFileAsBase64(file);
-      return await fetchJson('/api/datasets/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileType,
-          fileName: file.name,
-          contentType: file.type,
-          fileBase64,
-        }),
-      });
-    } catch (error) {
-      console.warn('[searchClient] shared upload failed, fallback to local store:', error);
-      return webSearchStore.uploadFile(fileType, file);
-    }
+    const fileBase64 = await readFileAsBase64(file);
+    return fetchJson('/api/datasets/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileType,
+        fileName: file.name,
+        contentType: file.type,
+        fileBase64,
+      }),
+    });
   },
 
   async searchCompanies(criteria, fileType, options) {
