@@ -51,8 +51,9 @@ async function readManifest() {
 
 async function writeManifest(manifest) {
   const next = {
+    ...(manifest && typeof manifest === 'object' ? manifest : {}),
     updatedAt: new Date().toISOString(),
-    datasets: manifest.datasets || {},
+    datasets: (manifest && manifest.datasets) || {},
   };
   await writeJsonBlob(MANIFEST_PATH, next);
   return next;
