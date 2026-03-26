@@ -1174,7 +1174,7 @@ function App() {
   }, [filters, fileType, searchedFileType, searchPerformed, sortKey, sortDir, onlyLatest, onlyLHQuality, onlyWomenOwned, selectedIndex, selectedCompanyKey, regions, currentPage]);
 
   return (
-    <div className="app-shell">
+    <div className="app-shell sidebar-wide search-web-app">
       <Sidebar
         active={activeMenu}
         onSelect={(k) => {
@@ -1194,15 +1194,56 @@ function App() {
           if (k === 'settings') window.location.hash = '#/settings';
         }}
         fileStatuses={fileStatuses}
-        collapsed={true}
+        collapsed={false}
       />
-      <div className="main">
+      <div className="main search-web-main">
         <div className="title-drag" />
         <div className="topbar" />
-        <div className="stage">
-          <div className="content">
-          <div className="panel panel-filters">
-            <div className="search-filter-section" ref={topSectionRef}>
+        <div className="stage search-web-stage">
+          <div className="search-web-shell">
+            <section className="search-web-hero">
+              <div className="search-web-hero__content">
+                <div className="search-web-hero__eyebrow">Company Search Web</div>
+                <h1>업체조회로 바로 시작하는 웹 작업 화면</h1>
+                <p>
+                  전기, 통신, 소방 업체를 한 화면에서 찾고 비교할 수 있게 첫 화면을 웹형 검색 허브로 정리했습니다.
+                </p>
+                <div className="search-web-hero__actions">
+                  <button type="button" className="primary" onClick={() => handleSearch()} disabled={isLoading}>
+                    {isLoading ? '검색 중...' : '업체 검색'}
+                  </button>
+                  <button type="button" className="btn-soft" onClick={handleResetFilters} disabled={isLoading}>
+                    필터 초기화
+                  </button>
+                  <button type="button" className="btn-soft" onClick={() => setUploadOpen(true)}>
+                    데이터 업로드 관리
+                  </button>
+                </div>
+              </div>
+              <div className="search-web-hero__summary">
+                <div className="search-web-stat-card">
+                  <span className="search-web-stat-card__label">현재 검색 대상</span>
+                  <strong>{fileType === 'eung' ? '전기' : fileType === 'tongsin' ? '통신' : fileType === 'sobang' ? '소방' : '전체'}</strong>
+                </div>
+                <div className="search-web-stat-card">
+                  <span className="search-web-stat-card__label">검색 결과</span>
+                  <strong>{searchPerformed ? `${totalCount}건` : '대기 중'}</strong>
+                </div>
+                <div className="search-web-stat-card">
+                  <span className="search-web-stat-card__label">선택 업체</span>
+                  <strong>{selectedCompany?.['검색된 회사'] || '선택 전'}</strong>
+                </div>
+              </div>
+            </section>
+
+            <section className="panel panel-filters search-web-filters">
+              <div className="search-web-section-heading">
+                <div>
+                  <h2>검색 조건</h2>
+                  <p>웹 화면에 맞게 주요 필터를 먼저 배치하고, 결과 탐색은 아래 카드에서 이어집니다.</p>
+                </div>
+              </div>
+              <div className="search-filter-section" ref={topSectionRef}>
               <div className="file-type-selector">
                 <div className="radio-group">
                   <label><input type="radio" value="eung" checked={fileType === 'eung'} onChange={(e) => setFileType(normalizeFileType(e.target.value))} /> 전기</label>
@@ -1262,10 +1303,18 @@ function App() {
                 <div className="filter-item range"><label>5년 실적 범위</label><div className="range-inputs"><input type="text" name="min_5y" value={filters.min_5y} onChange={handleFilterChange} placeholder="최소" className="filter-input" /><span>~</span><input type="text" name="max_5y" value={filters.max_5y} onChange={handleFilterChange} placeholder="최대" className="filter-input" /></div></div>
                 <div className="filter-item"><label>&nbsp;</label><button onClick={() => handleSearch()} className="search-button" disabled={isLoading}>{isLoading ? '검색 중...' : '검색'}</button></div>
               </div>
-            </div>
-          </div>
-          <div className="panel panel-results">
-            <div className="search-results-list">
+              </div>
+            </section>
+
+            <div className="search-web-grid">
+              <div className="panel panel-results search-web-results">
+                <div className="search-web-section-heading search-web-section-heading--tight">
+                  <div>
+                    <h2>검색 결과</h2>
+                    <p>필터와 정렬을 조합해 후보를 빠르게 좁힐 수 있습니다.</p>
+                  </div>
+                </div>
+                <div className="search-results-list">
               <div className="results-header">
                 <div className="results-toolbar">
                   <button className={`sort-btn ${sortKey==='sipyung' ? 'active':''}`} onClick={()=>toggleSort('sipyung')}>
@@ -1338,7 +1387,7 @@ function App() {
                   </div>
                 </div>
               )}
-              <div className="results-scroll" ref={resultsScrollRef}>
+                  <div className="results-scroll" ref={resultsScrollRef}>
                 {isLoading && <p>로딩 중...</p>}
                 {error && <p className="error-message">{error}</p>}
                 {!isLoading && !error && totalCount === 0 && (
@@ -1384,10 +1433,16 @@ function App() {
                 )}
               </div>
             </div>
-          </div>
-          <div className="panel">
-            {searchPerformed && (
-              <div className="company-details fade-in" key={animationKey}>
+              </div>
+              <div className="panel search-web-details">
+                <div className="search-web-section-heading search-web-section-heading--tight">
+                  <div>
+                    <h2>업체 상세</h2>
+                    <p>검색 결과에서 선택한 업체의 핵심 정보와 복사 기능을 바로 확인할 수 있습니다.</p>
+                  </div>
+                </div>
+                {searchPerformed && (
+                  <div className="company-details fade-in" key={animationKey}>
                 {selectedCompany && (
                   <div className="details-header">
                     <div className={`file-type-badge file-type-${searchedFileType === 'all' ? (selectedCompany?._file_type || '') : searchedFileType}`}>
@@ -1539,18 +1594,19 @@ function App() {
                       </tbody>
                     </table>
                   </div>
-                ) : (<p>왼쪽 목록에서 업체를 선택하세요.</p>)}
+                ) : (<p>검색 결과에서 업체를 선택하세요.</p>)}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
-        </div>
+      </div>
         <CopyDialog
           isOpen={dialog.isOpen}
           message={dialog.message}
           onClose={() => setDialog({ isOpen: false, message: '' })}
         />
-      </div>
       <Drawer open={uploadOpen} onClose={() => setUploadOpen(false)}>
         <AdminUpload fileStatuses={fileStatuses} onUploadSuccess={handleUploadSuccess} />
       </Drawer>
