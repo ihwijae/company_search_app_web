@@ -296,6 +296,84 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Prete
   padding: 12px 14px;
 }
 
+@media (min-width: 1200px) {
+  .search-web-section-heading h2 {
+    font-size: 20px;
+  }
+
+  .search-web-section-heading p {
+    font-size: 12px;
+  }
+
+  .search-web-filters .filter-item label,
+  .search-web-filters .region-selector label {
+    font-size: 13px;
+  }
+
+  .search-web-filters .filter-input,
+  .search-web-filters select,
+  .search-web-filters input {
+    height: 40px;
+    padding: 8px 11px;
+    font-size: 14px;
+  }
+
+  .search-web-filters .radio-group label {
+    padding: 6px 10px;
+    font-size: 14px;
+  }
+
+  .search-web-reset-button,
+  .search-web-search-button {
+    min-height: 42px;
+    font-size: 15px;
+  }
+
+  .search-web-results .results-toolbar .sort-btn,
+  .search-web-results .pagination-summary,
+  .search-web-results .pagination-count,
+  .search-web-results .pagination-btn,
+  .search-web-results .company-name,
+  .search-web-results .summary-status-badge,
+  .search-web-results .badge-person,
+  .search-web-results .file-type-badge-small {
+    font-size: 13px;
+  }
+
+  .search-web-results .company-list-item {
+    padding: 16px 18px;
+  }
+
+  .search-web-details .details-header {
+    margin-bottom: 10px;
+  }
+
+  .search-web-details .copy-button,
+  .search-web-details .copy-all-button {
+    height: 32px;
+    padding: 0 10px;
+    font-size: 13px;
+  }
+
+  .search-web-details .details-table th,
+  .search-web-details .details-table td {
+    padding: 8px 9px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .search-web-details .details-table th {
+    width: 108px;
+  }
+
+  .search-web-details .copy-single-button,
+  .search-web-details .smpp-lookup-button {
+    min-height: 28px;
+    font-size: 12px;
+    padding: 0 8px;
+  }
+}
+
 @media (min-width: 1500px) {
   .search-web-workspace {
     grid-template-columns: 380px minmax(500px, 1.08fr) minmax(560px, 1.16fr);
