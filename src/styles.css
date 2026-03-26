@@ -128,7 +128,7 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Prete
 }
 .search-web-section-heading h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 18px;
   letter-spacing: -0.02em;
   color: #0f172a;
 }
@@ -136,6 +136,7 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Prete
   margin: 2px 0 0;
   font-size: 11px;
   color: #64748b;
+  line-height: 1.25;
 }
 .search-web-filter-actions {
   display: flex;
@@ -149,7 +150,7 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Prete
   border-color: #e2e8f0;
   color: #334155;
   font-weight: 700;
-  font-size: 12px;
+  font-size: 13px;
 }
 .search-web-type-selector {
   margin-bottom: 6px;
@@ -170,7 +171,7 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Prete
   background: linear-gradient(135deg, #5b21b6, #7c3aed);
   border: 0;
   color: #fff;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 800;
   box-shadow: 0 14px 28px rgba(91, 33, 182, 0.24);
 }
@@ -191,21 +192,22 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Prete
 .search-web-filters .filter-item label,
 .search-web-filters .region-selector label {
   margin-bottom: 0.1rem;
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 600;
 }
 .search-web-filters .filter-input,
 .search-web-filters select,
 .search-web-filters input {
   height: 34px;
   padding: 6px 9px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .search-web-filters .range-inputs {
   gap: 4px;
 }
 .search-web-filters .range-inputs span {
   align-self: center;
-  font-size: 11px;
+  font-size: 12px;
 }
 .search-web-filter-grid > .region-selector,
 .search-web-filter-grid > .filter-item.range {
@@ -218,7 +220,7 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Prete
 .search-web-filters .radio-group label {
   min-width: 0;
   padding: 4px 8px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .search-web-results .search-results-list,
 .search-web-details .company-details {
@@ -242,11 +244,13 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Prete
 .search-web-details .details-table th,
 .search-web-details .details-table td {
   padding: 5px 6px;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.3;
 }
 .search-web-details .details-table th {
   width: 96px;
+  font-weight: 700;
+  color: #475569;
 }
 .search-web-details .details-header {
   display: flex;
@@ -264,7 +268,7 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Prete
 .search-web-details .copy-all-button {
   height: 28px;
   padding: 0 8px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .search-web-details .value-cell {
   gap: 6px;
@@ -272,8 +276,23 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Prete
 .search-web-details .copy-single-button,
 .search-web-details .smpp-lookup-button {
   min-height: 24px;
-  font-size: 11px;
+  font-size: 12px;
   padding: 0 6px;
+}
+.search-web-results .results-toolbar .sort-btn {
+  font-size: 12px;
+}
+.search-web-results .pagination-summary,
+.search-web-results .pagination-count,
+.search-web-results .pagination-btn,
+.search-web-results .company-name,
+.search-web-results .summary-status-badge,
+.search-web-results .badge-person,
+.search-web-results .file-type-badge-small {
+  font-size: 12px;
+}
+.search-web-results .company-list-item {
+  padding: 10px 12px;
 }
 
 .drawer-overlay { position: fixed; inset: 0; background: rgba(16,24,40,.2); display: none; z-index: 1000; }
