@@ -1236,61 +1236,43 @@ function App() {
         <div className="topbar" />
         <div className="stage search-web-stage">
           <div className="search-web-shell">
-            <section className="search-web-hero">
-              <div className="search-web-hero__content">
-                <div className="search-web-hero__eyebrow">Company Search Web</div>
-                <h1>업체조회로 바로 시작하는 웹 작업 화면</h1>
-                <p>
-                  전기, 통신, 소방 업체를 한 화면에서 찾고 비교할 수 있게 첫 화면을 웹형 검색 허브로 정리했습니다.
-                </p>
-                <div className="search-web-hero__actions">
-                  <button type="button" className="primary" onClick={() => handleSearch()} disabled={isLoading}>
-                    {isLoading ? '검색 중...' : '업체 검색'}
-                  </button>
-                  <button type="button" className="btn-soft" onClick={handleResetFilters} disabled={isLoading}>
-                    필터 초기화
-                  </button>
-                  <button type="button" className="btn-soft" onClick={() => setUploadOpen(true)}>
-                    데이터 업로드 관리
-                  </button>
-                </div>
+            <section className="search-web-toolbar">
+              <div className="search-web-toolbar__title">
+                <h1>업체조회</h1>
+                <p>필터로 좁히고, 목록에서 고른 뒤, 우측에서 상세 정보를 바로 확인합니다.</p>
               </div>
-              <div className="search-web-hero__summary">
-                <div className="search-web-stat-card">
-                  <span className="search-web-stat-card__label">현재 검색 대상</span>
-                  <strong>{fileType === 'eung' ? '전기' : fileType === 'tongsin' ? '통신' : fileType === 'sobang' ? '소방' : '전체'}</strong>
-                </div>
-                <div className="search-web-stat-card">
-                  <span className="search-web-stat-card__label">검색 결과</span>
-                  <strong>{searchPerformed ? `${totalCount}건` : '대기 중'}</strong>
-                </div>
-                <div className="search-web-stat-card">
-                  <span className="search-web-stat-card__label">선택 업체</span>
-                  <strong>{selectedCompany?.['검색된 회사'] || '선택 전'}</strong>
-                </div>
+              <div className="search-web-toolbar__meta">
+                <span className="search-web-meta-pill">{fileType === 'eung' ? '전기' : fileType === 'tongsin' ? '통신' : fileType === 'sobang' ? '소방' : '전체'}</span>
+                <span className="search-web-meta-text">{searchPerformed ? `총 ${totalCount}건` : '검색 전'}</span>
+                <button type="button" className="btn-soft" onClick={() => setUploadOpen(true)}>
+                  데이터 업로드 관리
+                </button>
               </div>
             </section>
 
-            <section className="panel panel-filters search-web-filters">
-              <div className="search-web-section-heading">
-                <div>
-                  <h2>검색 조건</h2>
-                  <p>웹 화면에 맞게 주요 필터를 먼저 배치하고, 결과 탐색은 아래 카드에서 이어집니다.</p>
+            <div className="search-web-workspace">
+              <section className="panel panel-filters search-web-filters">
+                <div className="search-web-section-heading">
+                  <div>
+                    <h2>검색 조건</h2>
+                    <p>좌측 필터는 항상 고정하고, 검색과 초기화는 하단에서 바로 실행합니다.</p>
+                  </div>
                 </div>
-              </div>
-              <div className="search-filter-section" ref={topSectionRef}>
-              <div className="file-type-selector">
-                <div className="radio-group">
-                  <label><input type="radio" value="eung" checked={fileType === 'eung'} onChange={(e) => setFileType(normalizeFileType(e.target.value))} /> 전기</label>
-                  <label><input type="radio" value="tongsin" checked={fileType === 'tongsin'} onChange={(e) => setFileType(normalizeFileType(e.target.value))} /> 통신</label>
-                  <label><input type="radio" value="sobang" checked={fileType === 'sobang'} onChange={(e) => setFileType(normalizeFileType(e.target.value))} /> 소방</label>
-                  <label><input type="radio" value="all" checked={fileType === 'all'} onChange={(e) => setFileType(normalizeFileType(e.target.value))} /> 전체</label>
+                <div className="search-web-filter-actions">
+                  <button type="button" className="reset-button search-web-reset-button" onClick={handleResetFilters} disabled={isLoading}>필터 초기화</button>
                 </div>
-              </div>
-              <div className="filter-grid" onKeyDown={handleKeyDown}>
-                <div className="filter-item"><label>&nbsp;</label><button onClick={handleResetFilters} className="reset-button" disabled={isLoading}>{"\uD544\uD130 \uCD08\uAE30\uD654"}</button></div>
-                <div className="filter-item"><label>업체명</label><input type="text" name="name" value={filters.name} onChange={handleFilterChange} onKeyDown={handleKeyDown} className="filter-input" /></div>
-                <div className="filter-item"><label>사업자번호</label>
+                <div className="search-filter-section" ref={topSectionRef}>
+                  <div className="file-type-selector search-web-type-selector">
+                    <div className="radio-group">
+                      <label><input type="radio" value="eung" checked={fileType === 'eung'} onChange={(e) => setFileType(normalizeFileType(e.target.value))} /> 전기</label>
+                      <label><input type="radio" value="tongsin" checked={fileType === 'tongsin'} onChange={(e) => setFileType(normalizeFileType(e.target.value))} /> 통신</label>
+                      <label><input type="radio" value="sobang" checked={fileType === 'sobang'} onChange={(e) => setFileType(normalizeFileType(e.target.value))} /> 소방</label>
+                      <label><input type="radio" value="all" checked={fileType === 'all'} onChange={(e) => setFileType(normalizeFileType(e.target.value))} /> 전체</label>
+                    </div>
+                  </div>
+                  <div className="filter-grid search-web-filter-grid" onKeyDown={handleKeyDown}>
+                    <div className="filter-item"><label>업체명</label><input type="text" name="name" value={filters.name} onChange={handleFilterChange} onKeyDown={handleKeyDown} className="filter-input" /></div>
+                    <div className="filter-item"><label>사업자번호</label>
                   <input
                     type="text"
                     name="bizNumber"
@@ -1300,27 +1282,27 @@ function App() {
                     onKeyDown={handleKeyDown}
                     className="filter-input"
                   />
-                </div>
-                <RegionSelector
-                  label="지역 포함"
-                  options={regionOptions}
-                  selected={filters.includeRegions}
-                  onToggle={handleIncludeRegionToggle}
-                  onSelectAll={handleIncludeRegionSelectAll}
-                  onClear={handleIncludeRegionClear}
-                  placeholder="지역을 선택하세요"
-                />
-                <RegionSelector
-                  label="지역 제외"
-                  options={regionOptions}
-                  selected={filters.excludeRegions}
-                  onToggle={handleExcludeRegionToggle}
-                  onSelectAll={handleExcludeRegionSelectAll}
-                  onClear={handleExcludeRegionClear}
-                  placeholder="제외할 지역을 선택하세요"
-                />
-                <div className="filter-item"><label>담당자</label><input type="text" name="manager" value={filters.manager} onChange={handleFilterChange} className="filter-input" /></div>
-                <div className="filter-item"><label>신용평가</label>
+                    </div>
+                    <RegionSelector
+                      label="지역 포함"
+                      options={regionOptions}
+                      selected={filters.includeRegions}
+                      onToggle={handleIncludeRegionToggle}
+                      onSelectAll={handleIncludeRegionSelectAll}
+                      onClear={handleIncludeRegionClear}
+                      placeholder="지역을 선택하세요"
+                    />
+                    <RegionSelector
+                      label="지역 제외"
+                      options={regionOptions}
+                      selected={filters.excludeRegions}
+                      onToggle={handleExcludeRegionToggle}
+                      onSelectAll={handleExcludeRegionSelectAll}
+                      onClear={handleExcludeRegionClear}
+                      placeholder="제외할 지역을 선택하세요"
+                    />
+                    <div className="filter-item"><label>담당자</label><input type="text" name="manager" value={filters.manager} onChange={handleFilterChange} className="filter-input" /></div>
+                    <div className="filter-item"><label>신용평가</label>
                   <select
                     name="min_credit_grade"
                     value={filters.min_credit_grade}
@@ -1332,21 +1314,22 @@ function App() {
                       <option key={grade} value={grade}>{grade} 이상</option>
                     ))}
                   </select>
+                    </div>
+                    <div className="filter-item range"><label>시평액 범위</label><div className="range-inputs"><input type="text" name="min_sipyung" value={filters.min_sipyung} onChange={handleFilterChange} placeholder="최소" className="filter-input" /><span>~</span><input type="text" name="max_sipyung" value={filters.max_sipyung} onChange={handleFilterChange} placeholder="최대" className="filter-input" /></div></div>
+                    <div className="filter-item range"><label>3년 실적 범위</label><div className="range-inputs"><input type="text" name="min_3y" value={filters.min_3y} onChange={handleFilterChange} placeholder="최소" className="filter-input" /><span>~</span><input type="text" name="max_3y" value={filters.max_3y} onChange={handleFilterChange} placeholder="최대" className="filter-input" /></div></div>
+                    <div className="filter-item range"><label>5년 실적 범위</label><div className="range-inputs"><input type="text" name="min_5y" value={filters.min_5y} onChange={handleFilterChange} placeholder="최소" className="filter-input" /><span>~</span><input type="text" name="max_5y" value={filters.max_5y} onChange={handleFilterChange} placeholder="최대" className="filter-input" /></div></div>
+                  </div>
+                  <div className="search-web-search-action">
+                    <button onClick={() => handleSearch()} className="search-button search-web-search-button" disabled={isLoading}>{isLoading ? '검색 중...' : '검색'}</button>
+                  </div>
                 </div>
-                <div className="filter-item range"><label>시평액 범위</label><div className="range-inputs"><input type="text" name="min_sipyung" value={filters.min_sipyung} onChange={handleFilterChange} placeholder="최소" className="filter-input" /><span>~</span><input type="text" name="max_sipyung" value={filters.max_sipyung} onChange={handleFilterChange} placeholder="최대" className="filter-input" /></div></div>
-                <div className="filter-item range"><label>3년 실적 범위</label><div className="range-inputs"><input type="text" name="min_3y" value={filters.min_3y} onChange={handleFilterChange} placeholder="최소" className="filter-input" /><span>~</span><input type="text" name="max_3y" value={filters.max_3y} onChange={handleFilterChange} placeholder="최대" className="filter-input" /></div></div>
-                <div className="filter-item range"><label>5년 실적 범위</label><div className="range-inputs"><input type="text" name="min_5y" value={filters.min_5y} onChange={handleFilterChange} placeholder="최소" className="filter-input" /><span>~</span><input type="text" name="max_5y" value={filters.max_5y} onChange={handleFilterChange} placeholder="최대" className="filter-input" /></div></div>
-                <div className="filter-item"><label>&nbsp;</label><button onClick={() => handleSearch()} className="search-button" disabled={isLoading}>{isLoading ? '검색 중...' : '검색'}</button></div>
-              </div>
-              </div>
-            </section>
+              </section>
 
-            <div className="search-web-grid">
               <div className="panel panel-results search-web-results">
                 <div className="search-web-section-heading search-web-section-heading--tight">
                   <div>
                     <h2>검색 결과</h2>
-                    <p>필터와 정렬을 조합해 후보를 빠르게 좁힐 수 있습니다.</p>
+                    <p>정렬과 상태 필터를 적용하면서 원하는 업체를 선택합니다.</p>
                   </div>
                 </div>
                 <div className="search-results-list">
@@ -1473,7 +1456,7 @@ function App() {
                 <div className="search-web-section-heading search-web-section-heading--tight">
                   <div>
                     <h2>업체 상세</h2>
-                    <p>검색 결과에서 선택한 업체의 핵심 정보와 복사 기능을 바로 확인할 수 있습니다.</p>
+                    <p>선택한 업체의 값과 복사 동작을 우측에서 바로 처리합니다.</p>
                   </div>
                 </div>
                 {searchPerformed && (
@@ -1637,11 +1620,11 @@ function App() {
           </div>
         </div>
       </div>
-        <CopyDialog
-          isOpen={dialog.isOpen}
-          message={dialog.message}
-          onClose={() => setDialog({ isOpen: false, message: '' })}
-        />
+      <CopyDialog
+        isOpen={dialog.isOpen}
+        message={dialog.message}
+        onClose={() => setDialog({ isOpen: false, message: '' })}
+      />
       <Drawer open={uploadOpen} onClose={() => setUploadOpen(false)}>
         <AdminUpload fileStatuses={fileStatuses} onUploadSuccess={handleUploadSuccess} />
       </Drawer>
