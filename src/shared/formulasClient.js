@@ -18,28 +18,28 @@ const formulasClient = {
   async load() {
     const api = getElectronApi();
     if (api?.formulasLoad) return api.formulasLoad();
-    return fetchJson('/api/formulas/load');
+    return fetchJson('/api/formulas?action=load');
   },
 
   async loadDefaults() {
     const api = getElectronApi();
     if (api?.formulasLoadDefaults) return api.formulasLoadDefaults();
-    return fetchJson('/api/formulas/defaults');
+    return fetchJson('/api/formulas?action=defaults');
   },
 
   async loadOverrides() {
     const api = getElectronApi();
     if (api?.formulasLoadOverrides) return api.formulasLoadOverrides({});
-    return fetchJson('/api/formulas/load-overrides');
+    return fetchJson('/api/formulas?action=load-overrides');
   },
 
   async saveOverrides(payload = {}) {
     const api = getElectronApi();
     if (api?.formulasSaveOverrides) return api.formulasSaveOverrides(payload);
-    return fetchJson('/api/formulas/save-overrides', {
+    return fetchJson('/api/formulas', {
       method: 'POST',
       headers: JSON_HEADERS,
-      body: JSON.stringify(payload || {}),
+      body: JSON.stringify({ action: 'save-overrides', payload: payload || {} }),
     });
   },
 
@@ -51,13 +51,15 @@ const formulasClient = {
     if (!useDefaultsOnly && api?.formulasEvaluate) {
       return api.formulasEvaluate(payload);
     }
-    return fetchJson(useDefaultsOnly ? '/api/formulas/evaluate-defaults' : '/api/formulas/evaluate', {
+    return fetchJson('/api/formulas', {
       method: 'POST',
       headers: JSON_HEADERS,
-      body: JSON.stringify(payload || {}),
+      body: JSON.stringify({
+        action: useDefaultsOnly ? 'evaluate-defaults' : 'evaluate',
+        payload: payload || {},
+      }),
     });
   },
 };
 
 export default formulasClient;
-

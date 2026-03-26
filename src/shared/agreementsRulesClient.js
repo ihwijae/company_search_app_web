@@ -18,19 +18,18 @@ const agreementsRulesClient = {
   async load() {
     const api = getElectronApi();
     if (api?.agreementsRulesLoad) return api.agreementsRulesLoad();
-    return fetchJson('/api/agreements-rules/load');
+    return fetchJson('/api/agreements-rules?action=load');
   },
 
   async save(payload = {}) {
     const api = getElectronApi();
     if (api?.agreementsRulesSave) return api.agreementsRulesSave(payload);
-    return fetchJson('/api/agreements-rules/save', {
+    return fetchJson('/api/agreements-rules', {
       method: 'POST',
       headers: JSON_HEADERS,
-      body: JSON.stringify(payload || {}),
+      body: JSON.stringify({ action: 'save', payload: payload || {} }),
     });
   },
 };
 
 export default agreementsRulesClient;
-

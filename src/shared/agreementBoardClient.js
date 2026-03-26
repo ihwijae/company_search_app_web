@@ -24,10 +24,10 @@ const agreementBoardClient = {
     if (supportsElectronAgreementBoard()) {
       return window.electronAPI.agreementBoardSave(payload);
     }
-    return requestJson('/api/agreement-board/save', {
+    return requestJson('/api/agreement-board', {
       method: 'POST',
       headers: JSON_HEADERS,
-      body: JSON.stringify(payload || {}),
+      body: JSON.stringify({ action: 'save', payload: payload || {} }),
     });
   },
 
@@ -35,17 +35,17 @@ const agreementBoardClient = {
     if (supportsElectronAgreementBoard()) {
       return window.electronAPI.agreementBoardList();
     }
-    return requestJson('/api/agreement-board/list');
+    return requestJson('/api/agreement-board?action=list');
   },
 
   async load(path) {
     if (supportsElectronAgreementBoard()) {
       return window.electronAPI.agreementBoardLoad(path);
     }
-    return requestJson('/api/agreement-board/load', {
+    return requestJson('/api/agreement-board', {
       method: 'POST',
       headers: JSON_HEADERS,
-      body: JSON.stringify({ path }),
+      body: JSON.stringify({ action: 'load', path }),
     });
   },
 
@@ -53,10 +53,10 @@ const agreementBoardClient = {
     if (supportsElectronAgreementBoard()) {
       return window.electronAPI.agreementBoardDelete(path);
     }
-    return requestJson('/api/agreement-board/delete', {
+    return requestJson('/api/agreement-board', {
       method: 'POST',
       headers: JSON_HEADERS,
-      body: JSON.stringify({ path }),
+      body: JSON.stringify({ action: 'delete', path }),
     });
   },
 
@@ -64,17 +64,17 @@ const agreementBoardClient = {
     if (typeof window !== 'undefined' && window.electronAPI?.agreementBoardGetRoot) {
       return window.electronAPI.agreementBoardGetRoot();
     }
-    return requestJson('/api/agreement-board/root');
+    return requestJson('/api/agreement-board?action=root');
   },
 
   async pickRoot() {
     if (typeof window !== 'undefined' && window.electronAPI?.agreementBoardPickRoot) {
       return window.electronAPI.agreementBoardPickRoot();
     }
-    return requestJson('/api/agreement-board/root', {
+    return requestJson('/api/agreement-board', {
       method: 'POST',
       headers: JSON_HEADERS,
-      body: JSON.stringify({}),
+      body: JSON.stringify({ action: 'root' }),
     });
   },
 };
