@@ -3,7 +3,7 @@ const { parseDatasetBuffer } = require('./dataset-parser');
 
 const DATASET_TYPES = ['eung', 'tongsin', 'sobang'];
 const MANIFEST_PATH = 'company-search/datasets/manifest.json';
-const cache = new Map();
+const datasetCache = new Map();
 
 const resolveToken = () => process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL_BLOB_READ_WRITE_TOKEN || '';
 
@@ -58,6 +58,23 @@ async function writeManifest(manifest) {
   return next;
 }
 
+async function storeParsedDataset(fileType, dataset, token) {
+  const pathname = `company-search/datasets/${fileType}.parsed.json`;
+  const uploaded = await put(pathname, Buffer.from(JSON.stringify(dataset), 'utf8'), {
+    access: 'private',
+    contentType: 'application/json; charset=utf-8',
+    allowOverwrite: true,
+    addRandomSuffix: false,
+    token,
+  });
+  return {
+    pathname: uploaded.pathname,
+    url: uploaded.url,
+    downloadUrl: uploaded.downloadUrl,
+    contentType: uploaded.contentType,
+  };
+}
+
 async function uploadDataset({ fileType, fileName, buffer, contentType }) {
   const token = resolveToken();
   if (!token) throw new Error('BLOB_READ_WRITE_TOKEN is not configured');
@@ -65,6 +82,7 @@ async function uploadDataset({ fileType, fileName, buffer, contentType }) {
 
   const extension = fileName && fileName.includes('.') ? fileName.split('.').pop() : 'xlsx';
   const pathname = `company-search/datasets/${fileType}.${extension || 'xlsx'}`;
+  const parsedDataset = await parseDatasetBuffer(buffer, fileType, fileName || pathname);
   const uploaded = await put(pathname, buffer, {
     access: 'private',
     contentType: contentType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -72,6 +90,7 @@ async function uploadDataset({ fileType, fileName, buffer, contentType }) {
     addRandomSuffix: false,
     token,
   });
+  const parsedMeta = await storeParsedDataset(fileType, parsedDataset, token);
 
   const manifest = await readManifest();
   manifest.datasets[fileType] = {
@@ -82,10 +101,19 @@ async function uploadDataset({ fileType, fileName, buffer, contentType }) {
     downloadUrl: uploaded.downloadUrl,
     contentType: uploaded.contentType,
     uploadedAt: new Date().toISOString(),
+    parsedPathname: parsedMeta.pathname,
+    parsedUrl: parsedMeta.url,
+    parsedDownloadUrl: parsedMeta.downloadUrl,
+    parsedContentType: parsedMeta.contentType,
+    companyCount: Array.isArray(parsedDataset.companies) ? parsedDataset.companies.length : 0,
+    sheetCount: Array.isArray(parsedDataset.sheetNames) ? parsedDataset.sheetNames.length : 0,
   };
   const nextManifest = await writeManifest(manifest);
-  cache.delete(fileType);
-  return { uploaded, manifest: nextManifest };
+  datasetCache.set(fileType, {
+    version: nextManifest.datasets[fileType]?.uploadedAt || nextManifest.updatedAt || new Date().toISOString(),
+    dataset: parsedDataset,
+  });
+  return { uploaded, parsed: parsedMeta, manifest: nextManifest };
 }
 
 async function getDatasetMeta(fileType) {
@@ -108,22 +136,63 @@ async function parseSharedDataset(fileType) {
 
   const meta = await getDatasetMeta(fileType);
   if (!meta || !meta.pathname) return null;
+  const version = meta.uploadedAt || meta.parsedPathname || meta.pathname;
+  const cached = datasetCache.get(fileType);
+  if (cached && cached.version === version) return cached.dataset;
 
-  const blobMeta = await head(meta.pathname, { token });
-  const cached = cache.get(fileType);
-  if (cached && cached.etag === blobMeta.etag) return cached.dataset;
+  if (meta.parsedPathname) {
+    try {
+      const parsedBlobMeta = await head(meta.parsedPathname, { token });
+      const parsedCached = datasetCache.get(fileType);
+      if (parsedCached && parsedCached.version === parsedBlobMeta.etag) return parsedCached.dataset;
+      const parsed = await readJsonBlob(meta.parsedPathname);
+      if (parsed && typeof parsed === 'object') {
+        datasetCache.set(fileType, {
+          version: parsedBlobMeta.etag || version,
+          dataset: parsed,
+        });
+        return parsed;
+      }
+    } catch (error) {
+      console.warn('[blob-store] parsed dataset lookup failed:', fileType, error && error.message ? error.message : error);
+    }
+  }
 
   try {
     const result = await get(meta.pathname, { access: 'private', token, useCache: false });
     if (!result || result.statusCode !== 200) return null;
     const buffer = await streamToBuffer(result.stream);
     const parsed = await parseDatasetBuffer(buffer, fileType, meta.fileName || meta.pathname);
-    cache.set(fileType, { etag: blobMeta.etag, dataset: parsed });
+    try {
+      const parsedMeta = await storeParsedDataset(fileType, parsed, token);
+      if (!meta.parsedPathname || meta.parsedPathname !== parsedMeta.pathname) {
+        const manifest = await readManifest();
+        manifest.datasets[fileType] = {
+          ...(manifest.datasets[fileType] || {}),
+          ...meta,
+          parsedPathname: parsedMeta.pathname,
+          parsedUrl: parsedMeta.url,
+          parsedDownloadUrl: parsedMeta.downloadUrl,
+          parsedContentType: parsedMeta.contentType,
+          companyCount: Array.isArray(parsed.companies) ? parsed.companies.length : 0,
+          sheetCount: Array.isArray(parsed.sheetNames) ? parsed.sheetNames.length : 0,
+        };
+        await writeManifest(manifest);
+      }
+    } catch (persistError) {
+      console.warn('[blob-store] failed to persist parsed dataset:', fileType, persistError && persistError.message ? persistError.message : persistError);
+    }
+    datasetCache.set(fileType, { version, dataset: parsed });
     return parsed;
   } catch (error) {
     console.error('[blob-store] parseSharedDataset failed:', fileType, error);
     return null;
   }
+}
+
+function getDatasetVersion(meta) {
+  if (!meta || typeof meta !== 'object') return '';
+  return meta.uploadedAt || meta.parsedPathname || meta.pathname || '';
 }
 
 module.exports = {
@@ -135,4 +204,5 @@ module.exports = {
   getDatasetMeta,
   getStatuses,
   parseSharedDataset,
+  getDatasetVersion,
 };
