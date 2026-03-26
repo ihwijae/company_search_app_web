@@ -1,0 +1,104 @@
+const { dialog, BrowserWindow } = require('electron');
+
+function createResponse(data) {
+  return { success: true, data };
+}
+
+function createErrorResponse(error) {
+  const message = error && error.message ? error.message : 'Unknown error';
+  return { success: false, error: message };
+}
+
+function registerRecordsIpcHandlers({ ipcMain, recordsService }) {
+  if (!ipcMain) throw new Error('ipcMain is required');
+  if (!recordsService) throw new Error('recordsService is required');
+
+  const handle = (channel, handler) => {
+    ipcMain.handle(channel, async (event, payload) => {
+      try {
+        const result = await handler(payload, event);
+        return createResponse(result);
+      } catch (error) {
+        console.error(`[MAIN][records] ${channel} failed:`, error);
+        return createErrorResponse(error);
+      }
+    });
+  };
+
+  handle('records:list-projects', (payload) => recordsService.listProjects(payload));
+  handle('records:get-project', (payload) => {
+    if (!payload || !payload.id) throw new Error('id is required');
+    return recordsService.getProject(payload.id);
+  });
+  handle('records:create-project', (payload) => recordsService.createProject(payload));
+  handle('records:update-project', (payload) => {
+    if (!payload || !payload.id) throw new Error('id is required');
+    return recordsService.updateProject(payload.id, payload.data || {});
+  });
+  handle('records:delete-project', (payload) => {
+    if (!payload || !payload.id) throw new Error('id is required');
+    return recordsService.deleteProject(payload.id);
+  });
+  handle('records:remove-attachment', (payload) => {
+    if (!payload || !payload.projectId) throw new Error('projectId is required');
+    return recordsService.removeAttachment(payload.projectId, payload.attachmentId);
+  });
+  handle('records:add-attachments', (payload) => {
+    if (!payload || !payload.projectId) throw new Error('projectId is required');
+    return recordsService.addAttachments(payload.projectId, Array.isArray(payload.attachments) ? payload.attachments : []);
+  });
+  handle('records:open-attachment', (payload) => {
+    if (!payload || !payload.projectId) throw new Error('projectId is required');
+    return recordsService.openAttachment(payload.projectId, payload.attachmentId);
+  });
+  handle('records:export-database', async (_payload, event) => {
+    const dbPath = recordsService.getDatabasePath();
+    if (!dbPath) throw new Error('DB 파일을 찾을 수 없습니다.');
+    const ownerWindow = (event && event.sender && BrowserWindow.fromWebContents(event.sender))
+      || BrowserWindow.getFocusedWindow();
+    const saveTo = await dialog.showSaveDialog(ownerWindow, {
+      title: '실적 DB 내보내기',
+      defaultPath: '실적관리.zip',
+      filters: [{ name: '실적 데이터 묶음', extensions: ['zip'] }],
+    });
+    if (saveTo.canceled || !saveTo.filePath) {
+      return { canceled: true };
+    }
+    const result = recordsService.exportDatabase(saveTo.filePath);
+    return result;
+  });
+
+  handle('records:import-database', async (_payload, event) => {
+    const ownerWindow = (event && event.sender && BrowserWindow.fromWebContents(event.sender))
+      || BrowserWindow.getFocusedWindow();
+    const selection = await dialog.showOpenDialog(ownerWindow, {
+      title: '실적 DB 가져오기',
+      filters: [{ name: '실적 데이터 묶음', extensions: ['zip'] }],
+      properties: ['openFile', 'openDirectory'],
+    });
+    if (selection.canceled || !selection.filePaths || !selection.filePaths.length) {
+      return { canceled: true };
+    }
+    const importPath = selection.filePaths[0];
+    const result = await recordsService.importDatabase(importPath);
+    return result;
+  });
+
+  handle('records:list-companies', (payload) => recordsService.listCompanies(payload || {}));
+  handle('records:save-company', (payload) => recordsService.saveCompany(payload));
+  handle('records:delete-company', (payload) => {
+    if (!payload || !payload.id) throw new Error('id is required');
+    return recordsService.deleteCompany(payload.id);
+  });
+
+  handle('records:list-categories', (payload) => recordsService.listCategories(payload || {}));
+  handle('records:save-category', (payload) => recordsService.saveCategory(payload));
+  handle('records:delete-category', (payload) => {
+    if (!payload || !payload.id) throw new Error('id is required');
+    return recordsService.deleteCategory(payload.id);
+  });
+}
+
+module.exports = {
+  registerRecordsIpcHandlers,
+};
