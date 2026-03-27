@@ -851,11 +851,26 @@ async function exportAgreementExcel({
   return { buffer, sheetName: worksheet.name };
 }
 
-async function downloadAgreementWorkbook(buffer, fileName) {
+async function downloadAgreementWorkbook(buffer, fileName, options = {}) {
   const resolvedFileName = fileName || '협정보드.xlsx';
   const blob = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
+  const targetFileHandle = options?.fileHandle || null;
+
+  if (targetFileHandle && typeof targetFileHandle.createWritable === 'function') {
+    try {
+      const writable = await targetFileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return { savedWithPicker: true, overwritten: true };
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        return { canceled: true };
+      }
+      console.warn('[exportAgreementWorkbook] direct file write failed, fallback to save picker:', error);
+    }
+  }
 
   if (typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function') {
     try {

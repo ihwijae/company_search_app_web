@@ -1175,6 +1175,7 @@ export default function AgreementBoardWindow({
     sourceDocument: typeof document !== 'undefined' ? document : null,
   });
   const [exportTargetFile, setExportTargetFile] = React.useState(null);
+  const [exportTargetFileHandle, setExportTargetFileHandle] = React.useState(null);
   const [exportTargetName, setExportTargetName] = React.useState('');
   const [exportSheetName, setExportSheetName] = React.useState('');
   const exportFileInputRef = React.useRef(null);
@@ -3737,14 +3738,18 @@ export default function AgreementBoardWindow({
       });
       const downloadName = exportTargetName
         || `${sanitizeExportFileName([noticeNo, templateConfig.label, '협정보드'].filter(Boolean).join('_')) || '협정보드'}.xlsx`;
-      const saveResult = await downloadAgreementWorkbook(result.buffer, downloadName);
+      const saveResult = await downloadAgreementWorkbook(result.buffer, downloadName, {
+        fileHandle: exportTargetFileHandle,
+      });
       if (saveResult?.canceled) {
         showHeaderAlert('엑셀 저장이 취소되었습니다.');
         return false;
       }
       showHeaderAlert(
-        saveResult?.savedWithPicker
-          ? '엑셀 파일을 저장했습니다.'
+        saveResult?.overwritten
+          ? '선택한 엑셀 파일에 바로 저장했습니다.'
+          : saveResult?.savedWithPicker
+            ? '엑셀 파일을 저장했습니다.'
           : '엑셀 파일을 다운로드했습니다.'
       );
       return true;
@@ -3761,6 +3766,7 @@ export default function AgreementBoardWindow({
     showLoading,
     hideLoading,
     exportTargetFile,
+    exportTargetFileHandle,
     exportTargetName,
     ownerId,
     ownerKeyUpper,
@@ -5225,12 +5231,41 @@ export default function AgreementBoardWindow({
     const file = event.target.files && event.target.files[0];
     if (!file) return;
     setExportTargetFile(file);
+    setExportTargetFileHandle(null);
     setExportTargetName(file.name || '');
     if (event.target) event.target.value = '';
   }, []);
 
+  const handlePickExportFileHandle = React.useCallback(async () => {
+    if (typeof window === 'undefined' || typeof window.showOpenFilePicker !== 'function') {
+      exportFileInputRef.current?.click();
+      return;
+    }
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        multiple: false,
+        types: [{
+          description: 'Excel Workbook',
+          accept: {
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+          },
+        }],
+      });
+      if (!handle) return;
+      const file = await handle.getFile();
+      setExportTargetFile(file);
+      setExportTargetFileHandle(handle);
+      setExportTargetName(file.name || handle.name || '');
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        console.warn('[AgreementBoard] export target handle pick failed:', error);
+      }
+    }
+  }, []);
+
   const handleClearExportFile = React.useCallback(() => {
     setExportTargetFile(null);
+    setExportTargetFileHandle(null);
     setExportTargetName('');
   }, []);
 
@@ -6572,6 +6607,9 @@ export default function AgreementBoardWindow({
               <button type="button" className="excel-btn" onClick={() => exportFileInputRef.current?.click()}>
                 파일 선택
               </button>
+              <button type="button" className="excel-btn" onClick={handlePickExportFileHandle}>
+                기존 파일 선택
+              </button>
               <span className="export-sheet-file__name">
                 {exportTargetName || '선택 안 함 (새 파일 생성)'}
               </span>
@@ -6588,7 +6626,7 @@ export default function AgreementBoardWindow({
               style={{ display: 'none' }}
               onChange={handleExportFilePick}
             />
-            <p className="export-sheet-hint">파일을 선택하지 않으면 새 파일을 바로 다운로드합니다.</p>
+            <p className="export-sheet-hint">지원 브라우저에서는 기존 파일을 직접 선택하면 같은 파일에 바로 저장합니다. 선택하지 않으면 새 파일을 다운로드합니다.</p>
           </div>
           <div className="export-sheet-field">
             <span className="export-sheet-label">시트명</span>
