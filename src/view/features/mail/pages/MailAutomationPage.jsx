@@ -5,6 +5,7 @@ import 'xlsx/dist/cpexcel.js';
 import FeedbackProvider, { useFeedback } from '../../../../components/FeedbackProvider.jsx';
 import seedContacts from '../addressBook.seed.json';
 import { loadPersisted, savePersisted } from '../../../../shared/persistence.js';
+import mailAddressBookClient from '../../../../shared/mailAddressBookClient.js';
 
 const DEFAULT_PROJECT_INFO = {
   announcementNumber: '공고번호를 불러오세요',
@@ -235,10 +236,10 @@ function MailAutomationPageInner() {
   const [recipients, setRecipients] = React.useState(() => (
     sanitizeRecipientDraftList(initialDraft.recipients) || SEED_RECIPIENTS
   ));
-  const persistedContacts = React.useMemo(() => (
-    sanitizeContactsList(loadPersisted('mail:addressBook', SEED_CONTACTS))
-  ), []);
-  const [contacts, setContacts] = React.useState(persistedContacts);
+  const [contacts, setContacts] = React.useState(SEED_CONTACTS);
+  const [contactsDirty, setContactsDirty] = React.useState(false);
+  const [contactsLoading, setContactsLoading] = React.useState(true);
+  const [contactsSaving, setContactsSaving] = React.useState(false);
   const [vendorAmounts, setVendorAmounts] = React.useState(() => (
     isPlainObject(initialDraft.vendorAmounts) ? { ...initialDraft.vendorAmounts } : {}
   ));
@@ -297,7 +298,7 @@ function MailAutomationPageInner() {
   const excelInputRef = React.useRef(null);
   const attachmentInputs = React.useRef({});
   const recipientIdRef = React.useRef(SEED_RECIPIENTS.length + 1);
-  const contactIdRef = React.useRef(persistedContacts.length + 1);
+  const contactIdRef = React.useRef(SEED_CONTACTS.length + 1);
   const contactsFileInputRef = React.useRef(null);
   const contactIndex = React.useMemo(() => {
     const index = new Map();
@@ -336,7 +337,29 @@ function MailAutomationPageInner() {
   }, [contactIndex]);
 
   React.useEffect(() => {
-    savePersisted('mail:addressBook', contacts);
+    let cancelled = false;
+    const loadContacts = async () => {
+      setContactsLoading(true);
+      try {
+        const response = await mailAddressBookClient.load();
+        if (cancelled) return;
+        const nextContacts = sanitizeContactsList(response?.data);
+        setContacts(nextContacts.length ? nextContacts : SEED_CONTACTS);
+        setContactsDirty(false);
+      } catch (error) {
+        console.error('[mail] address book load failed', error);
+        if (cancelled) return;
+        setContacts(SEED_CONTACTS);
+        showStatusMessage('공용 주소록을 불러오지 못했습니다. 기본 주소록으로 시작합니다.', { type: 'warning' });
+      } finally {
+        if (!cancelled) setContactsLoading(false);
+      }
+    };
+    loadContacts();
+    return () => { cancelled = true; };
+  }, [showStatusMessage]);
+
+  React.useEffect(() => {
     const nextId = contacts.reduce((max, item) => Math.max(max, Number(item.id) || 0), 0) + 1;
     contactIdRef.current = Math.max(nextId, 1);
   }, [contacts]);
@@ -720,15 +743,18 @@ function MailAutomationPageInner() {
       ...prev,
       { id: nextId, vendorName: '', contactName: '', email: '' },
     ]));
+    setContactsDirty(true);
     showStatusMessage('주소록에 빈 항목을 추가했습니다. 정보를 입력해 주세요.');
   };
 
   const handleContactFieldChange = (id, field, value) => {
     setContacts((prev) => prev.map((contact) => (contact.id === id ? { ...contact, [field]: value } : contact)));
+    setContactsDirty(true);
   };
 
   const handleRemoveContact = (id) => {
     setContacts((prev) => prev.filter((contact) => contact.id !== id));
+    setContactsDirty(true);
     showStatusMessage('주소록에서 항목을 삭제했습니다.');
   };
 
@@ -753,6 +779,7 @@ function MailAutomationPageInner() {
           };
         });
         setContacts(imported);
+        setContactsDirty(true);
         showStatusMessage(`주소록을 ${importedCount}건으로 덮어썼습니다.`);
       } catch (error) {
         console.error('[mail] contacts import failed', error);
@@ -779,10 +806,22 @@ function MailAutomationPageInner() {
     showStatusMessage(`주소록 ${contacts.length}건을 내보냈습니다.`);
   };
 
-  const handleManualSaveContacts = React.useCallback(() => {
-    savePersisted('mail:addressBook', contacts);
-    notify({ type: 'success', message: '주소록을 저장했습니다.' });
-  }, [contacts, notify]);
+  const handleManualSaveContacts = React.useCallback(async () => {
+    if (contactsSaving) return;
+    setContactsSaving(true);
+    try {
+      const response = await mailAddressBookClient.save(contacts);
+      const nextContacts = sanitizeContactsList(response?.data);
+      setContacts(nextContacts);
+      setContactsDirty(false);
+      notify({ type: 'success', message: '공용 주소록을 저장했습니다.' });
+    } catch (error) {
+      console.error('[mail] address book save failed', error);
+      notify({ type: 'error', message: error?.message || '주소록 저장에 실패했습니다.' });
+    } finally {
+      setContactsSaving(false);
+    }
+  }, [contacts, contactsSaving, notify]);
 
   const handleUseContact = (contact) => {
     if (!contact.email && !contact.vendorName) return;
@@ -1546,17 +1585,22 @@ function MailAutomationPageInner() {
             onClick={(event) => event.stopPropagation()}
           >
             <header className="mail-addressbook-modal__header">
-              <h2>주소록 ({contacts.length})</h2>
+              <h2>
+                주소록 ({contacts.length})
+                {contactsLoading ? ' 불러오는 중...' : ''}
+                {!contactsLoading && contactsDirty ? ' · 저장 안 됨' : ''}
+              </h2>
               <div className="mail-addressbook-modal__actions">
-                <button type="button" className="btn-sm btn-soft" onClick={handleAddContact}>주소 추가</button>
-                <button type="button" className="btn-sm btn-soft" onClick={() => contactsFileInputRef.current?.click()}>가져오기</button>
+                <button type="button" className="btn-sm btn-soft" onClick={handleAddContact} disabled={contactsLoading || contactsSaving}>주소 추가</button>
+                <button type="button" className="btn-sm btn-soft" onClick={() => contactsFileInputRef.current?.click()} disabled={contactsLoading || contactsSaving}>가져오기</button>
                 <button type="button" className="btn-sm btn-soft" onClick={handleExportContacts} disabled={!contacts.length}>내보내기</button>
                 <button
                   type="button"
                   className="btn-sm btn-primary"
                   onClick={handleManualSaveContacts}
+                  disabled={contactsLoading || contactsSaving || !contactsDirty}
                 >
-                  저장
+                  {contactsSaving ? '저장 중...' : '저장'}
                 </button>
                 <button type="button" className="btn-sm btn-muted" onClick={handleCloseAddressBook}>닫기</button>
               </div>
