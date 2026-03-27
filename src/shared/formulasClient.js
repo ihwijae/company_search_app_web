@@ -1,13 +1,7 @@
 import industryAverages from './industryAverages.json';
+import { evaluateScores } from './evaluator.web.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
-
-const resolveEvaluateScores = (evaluatorModule) => {
-  if (typeof evaluatorModule === 'function') return evaluatorModule;
-  if (typeof evaluatorModule?.evaluateScores === 'function') return evaluatorModule.evaluateScores;
-  if (typeof evaluatorModule?.default?.evaluateScores === 'function') return evaluatorModule.default.evaluateScores;
-  return null;
-};
 
 const normalizeFileType = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -51,12 +45,6 @@ const formulasClient = {
   },
 
   async evaluate(payload = {}, { useDefaultsOnly = false } = {}) {
-    const evaluatorModule = await import('./evaluator.js');
-    const evaluateScores = resolveEvaluateScores(evaluatorModule);
-    if (typeof evaluateScores !== 'function') {
-      throw new Error('Local formulas evaluator is not available');
-    }
-
     const sanitized = payload && typeof payload === 'object' ? deepClone(payload) : {};
     if (!sanitized.industryAvg) {
       const key = normalizeFileType(sanitized.fileType || sanitized?.inputs?.fileType);
