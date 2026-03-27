@@ -572,12 +572,9 @@ export default function SettingsPage() {
           { id: currentAgency.id, tiers: [ { minAmount: currentTier.minAmount, maxAmount: currentTier.maxAmount, rules } ] }
         ]
       };
+      void payload;
       applyRulesToCurrentSelection(rules);
-      setStatus('저장 중...');
-      const r = await formulasClient.saveOverrides(payload);
-      if (!r.success) throw new Error(r.message || 'save failed');
-      const reloaded = await load({ preserveSelection: true, silent: true });
-      setStatus(reloaded ? '저장 완료' : '저장 완료 (재로딩 실패)');
+      setStatus('런타임 저장은 비활성화되었습니다. src/shared/formulas.defaults.json 을 수정하세요.');
       setTimeout(()=>setStatus(''), 1200);
     } catch (e) { setStatus('저장 실패: ' + (e?.message || e)); }
   };
@@ -592,12 +589,9 @@ export default function SettingsPage() {
           { id: currentAgency.id, tiers: [ { minAmount: currentTier.minAmount, maxAmount: currentTier.maxAmount, rules } ] }
         ]
       };
+      void payload;
       applyRulesToCurrentSelection(rules);
-      setStatus('저장 중...');
-      const r = await formulasClient.saveOverrides(payload);
-      if (!r.success) throw new Error(r.message || 'save failed');
-      const reloaded = await load({ preserveSelection: true, silent: true });
-      setStatus(reloaded ? '저장 완료' : '저장 완료 (재로딩 실패)');
+      setStatus('런타임 저장은 비활성화되었습니다. src/shared/formulas.defaults.json 을 수정하세요.');
       setTimeout(()=>setStatus(''), 1200);
     } catch (e) { setStatus('저장 실패: ' + (e?.message || e)); }
   };

@@ -55,4 +55,3 @@ module.exports = async function handler(req, res) {
   allowMethods(res, ['GET', 'POST']);
   return sendJson(res, 405, { success: false, message: 'Method not allowed' });
 };
-

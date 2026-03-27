@@ -1,7 +1,6 @@
 const formulasModule = require('../../src/shared/formulas.js');
 const evaluator = require('../../src/shared/evaluator.js');
 const industryAverages = require('../../src/shared/industryAverages.json');
-const { FORMULAS_OVERRIDES_PATH, readConfigJson, writeConfigJson } = require('./config-store');
 
 function normalizeFileType(value) {
   const normalized = String(value || '').trim().toLowerCase();
@@ -20,38 +19,16 @@ function loadDefaults() {
   return formulasModule.loadFormulasDefaults();
 }
 
-async function loadOverrides() {
-  const overrides = await readConfigJson(FORMULAS_OVERRIDES_PATH, { version: 1, agencies: [] });
-  if (!overrides || typeof overrides !== 'object') return { version: 1, agencies: [] };
-  return {
-    version: Number(overrides.version) || 1,
-    agencies: Array.isArray(overrides.agencies) ? overrides.agencies : [],
-  };
-}
-
 async function loadMerged() {
-  const defaults = loadDefaults();
-  const overrides = await loadOverrides();
-  const mergedAgencies = formulasModule._internals.mergeAgencies(
-    Array.isArray(defaults.agencies) ? defaults.agencies : [],
-    Array.isArray(overrides.agencies) ? overrides.agencies : []
-  );
-  return {
-    ...defaults,
-    agencies: mergedAgencies,
-  };
+  return loadDefaults();
 }
 
-async function saveOverrides(payload = {}) {
-  const incoming = payload && payload.agencies ? payload : { agencies: [] };
-  const base = await loadOverrides();
-  const mergedAgencies = formulasModule._internals.mergeAgencies(base.agencies, incoming.agencies);
-  const next = {
-    version: Math.max(base.version || 1, Number(incoming.version) || 1),
-    agencies: mergedAgencies,
-  };
-  await writeConfigJson(FORMULAS_OVERRIDES_PATH, next);
-  return next;
+async function loadOverrides() {
+  return { version: 1, agencies: [] };
+}
+
+async function saveOverrides() {
+  throw new Error('Formula overrides are disabled. Edit src/shared/formulas.defaults.json instead.');
 }
 
 async function evaluate(payload = {}, { useDefaultsOnly = false } = {}) {
@@ -65,8 +42,8 @@ async function evaluate(payload = {}, { useDefaultsOnly = false } = {}) {
   }
 
   if (!useDefaultsOnly) {
-    const merged = await loadMerged();
-    return evaluator.evaluateScores({ ...sanitized, formulasDoc: merged });
+    const defaults = loadDefaults();
+    return evaluator.evaluateScores({ ...sanitized, formulasDoc: defaults });
   }
 
   return evaluator.evaluateScores({ ...sanitized, useDefaultsOnly: true });

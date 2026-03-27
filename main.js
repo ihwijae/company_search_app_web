@@ -855,7 +855,6 @@ const AGREEMENTS_PATH = path.join(userDataDir, 'agreements.json');
 const DEFAULT_AGREEMENT_BOARD_DIR = path.join(userDataDir, 'agreement-board');
 let AGREEMENT_BOARD_DIR = DEFAULT_AGREEMENT_BOARD_DIR;
 const AGREEMENTS_RULES_PATH = path.join(userDataDir, 'agreements.rules.json');
-const FORMULAS_PATH = path.join(userDataDir, 'formulas.json');
 const RENDERER_STATE_PATH = path.join(userDataDir, 'renderer-state.json');
 const COMPANY_NOTES_PATH = path.join(userDataDir, 'company-notes.json');
 
@@ -2850,28 +2849,11 @@ try {
   });
 
   ipcMain.handle('formulas-load-overrides', async () => {
-    try {
-      if (!fs.existsSync(FORMULAS_PATH)) return { success: true, data: { version: 1, agencies: [] } };
-      const raw = JSON.parse(fs.readFileSync(FORMULAS_PATH, 'utf-8'));
-      return { success: true, data: raw };
-    } catch (e) {
-      return { success: false, message: e?.message || 'Failed to load overrides' };
-    }
+    return { success: true, data: { version: 1, agencies: [] } };
   });
 
-  ipcMain.handle('formulas-save-overrides', async (_event, payload) => {
-    try {
-      const incoming = payload && payload.agencies ? payload : { agencies: [] };
-      let base = { version: 1, agencies: [] };
-      try { if (fs.existsSync(FORMULAS_PATH)) base = JSON.parse(fs.readFileSync(FORMULAS_PATH, 'utf-8')); } catch {}
-      const mergedAgencies = formulasMod._internals.mergeAgencies(base.agencies, incoming.agencies);
-      const out = { version: Math.max(base.version || 1, incoming.version || 1), agencies: mergedAgencies };
-      fs.writeFileSync(FORMULAS_PATH, JSON.stringify(out, null, 2));
-      invalidateFormulasCache();
-      return { success: true };
-    } catch (e) {
-      return { success: false, message: e?.message || 'Failed to save overrides' };
-    }
+  ipcMain.handle('formulas-save-overrides', async () => {
+    return { success: false, message: '기준값 저장은 비활성화되었습니다. src/shared/formulas.defaults.json 을 수정하세요.' };
   });
 
   ipcMain.handle('formulas-evaluate', async (_event, payload) => {
@@ -2961,7 +2943,7 @@ try {
   });
 } catch {}
 
-// Settings import/export (rules + formulas overrides)
+// Settings import/export (rules only)
 try {
   if (ipcMain.removeHandler) {
     try { ipcMain.removeHandler('agreements-settings-export'); } catch {}
@@ -2977,10 +2959,9 @@ try {
       });
       if (saveTo.canceled || !saveTo.filePath) return { success: false, message: '사용자 취소' };
 
-      let rules = null; let formulas = null;
+      let rules = null;
       try { if (fs.existsSync(AGREEMENTS_RULES_PATH)) rules = JSON.parse(fs.readFileSync(AGREEMENTS_RULES_PATH, 'utf-8')); } catch {}
-      try { if (fs.existsSync(FORMULAS_PATH)) formulas = JSON.parse(fs.readFileSync(FORMULAS_PATH, 'utf-8')); } catch {}
-      const payload = { version: 1, exportedAt: Date.now(), rules, formulas };
+      const payload = { version: 1, exportedAt: Date.now(), rules };
       fs.writeFileSync(saveTo.filePath, JSON.stringify(payload, null, 2));
       return { success: true, path: saveTo.filePath };
     } catch (e) {
@@ -3003,7 +2984,6 @@ try {
       // Backup existing
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
       try { if (fs.existsSync(AGREEMENTS_RULES_PATH)) fs.copyFileSync(AGREEMENTS_RULES_PATH, AGREEMENTS_RULES_PATH + '.' + stamp + '.bak'); } catch {}
-      try { if (fs.existsSync(FORMULAS_PATH)) fs.copyFileSync(FORMULAS_PATH, FORMULAS_PATH + '.' + stamp + '.bak'); } catch {}
 
       // Validate and write rules if present
       if (payload.rules) {
@@ -3014,16 +2994,6 @@ try {
           fs.writeFileSync(AGREEMENTS_RULES_PATH, JSON.stringify(payload.rules, null, 2));
         } catch (e) {
           return { success: false, message: '규칙 처리 실패: ' + (e?.message || e) };
-        }
-      }
-
-      // Write formulas overrides if present
-      if (payload.formulas) {
-        try {
-          fs.writeFileSync(FORMULAS_PATH, JSON.stringify(payload.formulas, null, 2));
-          invalidateFormulasCache();
-        } catch (e) {
-          return { success: false, message: '산식 처리 실패: ' + (e?.message || e) };
         }
       }
 
