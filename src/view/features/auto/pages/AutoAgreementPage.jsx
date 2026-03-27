@@ -5,6 +5,7 @@ import Sidebar from '../../../../components/Sidebar';
 import { BASE_ROUTES } from '../../../../shared/navigation.js';
 import AUTO_COMPANY_PRESETS from '../../../../shared/autoCompanyPresets.js';
 import { evaluateSingleBidByConfig } from '../../../../shared/agreements/singleBidEvaluator.js';
+import agreementCandidatesClient from '../../../../shared/agreementCandidatesClient.js';
 import formulasClient from '../../../../shared/formulasClient.js';
 
 const ROUTE_HASHES = {
@@ -504,10 +505,6 @@ export default function AutoAgreementPage() {
       window.alert('지원하지 않는 발주처/금액 구간입니다.');
       return;
     }
-    if (!window?.electronAPI?.fetchCandidates) {
-      window.alert('후보 조회 API를 사용할 수 없습니다.');
-      return;
-    }
     const entryAmountValue = entry.mode === 'none' ? 0 : parseAmountValue(entry.amount);
     const baseAmountValue = parseAmountValue(amounts.base);
     const estimatedAmount = parseAmountValue(amounts.estimated) || baseAmountValue;
@@ -515,7 +512,7 @@ export default function AutoAgreementPage() {
     const filterByRegion = form.dutyRegions.length > 0;
     setCandidateState((prev) => ({ ...prev, loading: true, error: '' }));
     try {
-      const response = await window.electronAPI.fetchCandidates({
+      const response = await agreementCandidatesClient.fetchCandidates({
         ownerId: menuInfo.ownerId,
         menuKey: menuInfo.menuKey,
         rangeId: menuInfo.menuKey,

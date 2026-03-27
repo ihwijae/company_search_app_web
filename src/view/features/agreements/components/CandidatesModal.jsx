@@ -13,6 +13,7 @@ import {
   getCandidateManagementScore,
   isCreditScoreExpired,
 } from '../../../../shared/agreements/calculations/managementScore.js';
+import agreementCandidatesClient from '../../../../shared/agreementCandidatesClient.js';
 
 const REGION_WINDOW_STORAGE_KEY = '__regionSearchWindow';
 
@@ -712,7 +713,7 @@ const industryToLabel = (type) => {
     setLoading(true); setError(''); setList([]);
     try {
       const perfectAmountParam = perfAmountValue || requestParams.baseAmount;
-      const r = await window.electronAPI.fetchCandidates({
+      const r = await agreementCandidatesClient.fetchCandidates({
         ownerId,
         menuKey,
         rangeId,
