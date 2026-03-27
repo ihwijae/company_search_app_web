@@ -1,0 +1,873 @@
+import ExcelJS from 'exceljs';
+
+const sanitizeFileName = (value, fallback = '협정보드') => {
+  const text = String(value || '').replace(/[\\/:*?"<>|]/g, '').trim();
+  return text || fallback;
+};
+
+const toExcelNumber = (value) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  const cleaned = String(value).replace(/[^0-9.\-]/g, '');
+  if (!cleaned) return null;
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const hasFractionalShareValue = (value) => {
+  const numeric = toExcelNumber(value);
+  if (numeric == null) return false;
+  return Math.abs(numeric - Math.round(numeric)) > 1e-6;
+};
+
+const toPlainText = (value) => {
+  if (!value) return '';
+  return String(value)
+    .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+    .replace(/<\s*\/p\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\n{2,}/g, '\n')
+    .trim();
+};
+
+const sanitizeSheetName = (value, fallback = '협정보드') => {
+  const cleaned = String(value || '')
+    .replace(/[\\/:*?\[\]]/g, '')
+    .trim();
+  const truncated = cleaned.slice(0, 31);
+  return truncated || fallback;
+};
+
+const ensureUniqueSheetName = (workbook, name) => {
+  const existing = new Set(workbook.worksheets.map((sheet) => sheet.name));
+  if (!existing.has(name)) return name;
+  const base = name.replace(/\(\d+\)$/, '').trim();
+  for (let i = 2; i < 1000; i += 1) {
+    const suffix = `(${i})`;
+    const candidateBase = base.slice(0, Math.max(0, 31 - suffix.length));
+    const candidate = `${candidateBase}${suffix}`;
+    if (!existing.has(candidate)) return candidate;
+  }
+  return sanitizeSheetName(`${name}-${Date.now()}`);
+};
+
+const cloneCellStyle = (style) => {
+  if (!style) return style;
+  try { return JSON.parse(JSON.stringify(style)); } catch { return style; }
+};
+
+const buildCredibilityFormula = (members, shareColumns, rowIndex, scaleValue = 1, scaleExpr = '') => {
+  if (!Array.isArray(members) || !Array.isArray(shareColumns) || !rowIndex) return null;
+  const parts = [];
+  let result = 0;
+  let hasResult = false;
+  members.forEach((member) => {
+    if (!member || typeof member !== 'object') return;
+    const cred = Number(member.credibilityBonus);
+    if (!Number.isFinite(cred) || cred === 0) return;
+    const slotIndex = member.slotIndex;
+    const shareColumn = shareColumns[slotIndex];
+    if (!shareColumn) return;
+    parts.push(`${cred}*${shareColumn}${rowIndex}`);
+    const sharePercent = Number(member.sharePercent);
+    if (Number.isFinite(sharePercent)) {
+      const ratio = sharePercent >= 1 ? sharePercent / 100 : sharePercent;
+      result += cred * ratio;
+      hasResult = true;
+    }
+  });
+  if (parts.length === 0) return null;
+  const scale = Number(scaleValue);
+  const scaleText = scaleExpr || (Number.isFinite(scale) && scale !== 1 ? String(scale) : '');
+  const joined = parts.join('+');
+  const formula = scaleText ? `(${joined})*${scaleText}` : joined;
+  return {
+    formula,
+    result: hasResult ? (Number.isFinite(scale) ? result * scale : null) : null,
+  };
+};
+
+const copyWorksheet = (source, target) => {
+  target.properties = {
+    ...cloneCellStyle(source.properties),
+    tabColor: target.properties?.tabColor || source.properties?.tabColor,
+  };
+  if (source.properties) {
+    if (source.properties.defaultRowHeight != null) {
+      target.properties.defaultRowHeight = source.properties.defaultRowHeight;
+    }
+    if (source.properties.defaultColWidth != null) {
+      target.properties.defaultColWidth = source.properties.defaultColWidth;
+    }
+  }
+  target.pageSetup = cloneCellStyle(source.pageSetup);
+  const sourceViews = cloneCellStyle(source.views);
+  if (Array.isArray(sourceViews) && sourceViews.length > 0) {
+    target.views = sourceViews.map((view) => ({
+      ...view,
+      zoomScale: view.zoomScale || 100,
+    }));
+  } else {
+    target.views = [{ state: 'normal', zoomScale: 100 }];
+  }
+  target.autoFilter = cloneCellStyle(source.autoFilter);
+  source.columns.forEach((column, index) => {
+    const targetColumn = target.getColumn(index + 1);
+    targetColumn.width = column.width;
+    targetColumn.hidden = column.hidden;
+    targetColumn.style = cloneCellStyle(column.style);
+  });
+
+  source.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+    const targetRow = target.getRow(rowNumber);
+    targetRow.height = row.height;
+    targetRow.hidden = row.hidden;
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      const targetCell = targetRow.getCell(colNumber);
+      targetCell.value = cell.value;
+      targetCell.style = cloneCellStyle(cell.style);
+      targetCell.numFmt = cell.numFmt;
+      targetCell.alignment = cloneCellStyle(cell.alignment);
+      targetCell.border = cloneCellStyle(cell.border);
+      targetCell.font = cloneCellStyle(cell.font);
+      targetCell.fill = cloneCellStyle(cell.fill);
+      targetCell.protection = cloneCellStyle(cell.protection);
+      // Skip data validation to avoid Excel showing hover prompts on every cell.
+      targetCell.note = undefined;
+    });
+  });
+
+  const merges = source.model?.merges || [];
+  merges.forEach((range) => target.mergeCells(range));
+};
+
+const clearHoverArtifacts = (sheet) => {
+  sheet.eachRow({ includeEmpty: true }, (row) => {
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      if (cell.note) cell.note = undefined;
+      if (cell._comment) cell._comment = undefined;
+      if (cell.dataValidation) cell.dataValidation = undefined;
+      if (cell.model && cell.model.dataValidation) delete cell.model.dataValidation;
+      if (cell.model && cell.model.note) delete cell.model.note;
+      if (cell.model && cell.model.comment) delete cell.model.comment;
+    });
+  });
+  if (sheet.dataValidations && sheet.dataValidations.model) {
+    sheet.dataValidations.model = {};
+  }
+  if (sheet.model && Array.isArray(sheet.model.comments)) {
+    sheet.model.comments = [];
+  }
+  if (sheet._comments) {
+    sheet._comments = [];
+  }
+};
+
+const cloneFill = (fill) => {
+  if (!fill) return null;
+  try { return JSON.parse(JSON.stringify(fill)); } catch { return fill; }
+};
+
+const DEFAULT_MANAGEMENT_SCORE_MAX = 15;
+const ORANGE_FILL = {
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FFFFC000' },
+  bgColor: { indexed: 64 },
+};
+const YELLOW_FILL = {
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FFFFFF00' },
+  bgColor: { indexed: 64 },
+};
+const RED_FILL = {
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FFFF0000' },
+  bgColor: { indexed: 64 },
+};
+const APPROVAL_INFO_FILL = {
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FF00B0F0' },
+  bgColor: { indexed: 64 },
+};
+const CLEAR_FILL = { type: 'pattern', pattern: 'none' };
+const AWARD_HISTORY_FONT = {
+  color: { argb: 'FFFF0000' },
+  bold: true,
+};
+
+const getApprovalFill = (value) => {
+  const approval = String(value || '').trim();
+  if (approval === '알림' || approval === '추가' || approval === '정정') {
+    return cloneFill(APPROVAL_INFO_FILL);
+  }
+  if (approval === '취소' || approval === '취솔') {
+    return cloneFill(RED_FILL);
+  }
+  return null;
+};
+
+const debugAgreementExport = typeof process !== 'undefined'
+  && Boolean(process?.env?.DEBUG_AGREEMENT_EXPORT === '1');
+
+async function fetchTemplateBuffer(templateUrl) {
+  const response = await fetch(templateUrl);
+  if (!response.ok) {
+    throw new Error('엑셀 템플릿을 불러오지 못했습니다.');
+  }
+  return response.arrayBuffer();
+}
+
+async function exportAgreementExcel({
+  config,
+  payload,
+  appendWorkbookBuffer = null,
+  sheetName = '',
+  sheetColor = 'FF00B050',
+}) {
+  if (!config || !config.templateUrl) throw new Error('템플릿 설정이 올바르지 않습니다.');
+  if (!payload) throw new Error('엑셀 내보내기 데이터가 없습니다.');
+  const { header = {}, groups = [], candidates = [] } = payload;
+  const isLh100To300 = String(payload?.context?.ownerId || '').toUpperCase() === 'LH'
+    && String(payload?.context?.rangeId || '').toLowerCase() === 'lh-100to300';
+
+  const workbook = new ExcelJS.Workbook();
+  const templateBuffer = await fetchTemplateBuffer(config.templateUrl);
+  await workbook.xlsx.load(templateBuffer);
+  workbook.calcProperties = {
+    ...workbook.calcProperties,
+    fullCalcOnLoad: true,
+  };
+  const worksheet = config.sheetName
+    ? workbook.getWorksheet(config.sheetName)
+    : workbook.worksheets[0];
+  if (!worksheet) {
+    throw new Error('엑셀 템플릿 시트를 찾을 수 없습니다.');
+  }
+  if (sheetName) {
+    worksheet.name = sanitizeSheetName(sheetName, worksheet.name);
+  }
+  if (sheetColor) {
+    worksheet.properties.tabColor = { argb: sheetColor };
+  }
+  if (!workbook.calcProperties) workbook.calcProperties = {};
+  workbook.calcProperties.fullCalcOnLoad = true;
+
+  const preservedColumns = worksheet.columns.map((column) => ({
+    width: column?.width,
+    hidden: column?.hidden,
+  }));
+  const preservedRowHeights = new Map();
+  const maxRowToPreserve = config.maxRows || worksheet.rowCount;
+  for (let rowIdx = 1; rowIdx <= maxRowToPreserve; rowIdx += 1) {
+    const row = worksheet.getRow(rowIdx);
+    if (row && row.height != null) {
+      preservedRowHeights.set(rowIdx, row.height);
+    }
+  }
+
+  const regionFillTemplate = config.regionFill ? cloneFill(config.regionFill) : null;
+  const slotColumns = config.slotColumns || {};
+  const nameColumns = Array.isArray(slotColumns.name) ? slotColumns.name : [];
+  const slotCount = nameColumns.length;
+  const summaryColumns = config.summaryColumns || {};
+  const qualityColumns = Array.isArray(config.qualityColumns) ? config.qualityColumns : [];
+  const qualityHighlightMin = Number.isFinite(config.qualityHighlightMin)
+    ? Number(config.qualityHighlightMin)
+    : null;
+  const managementScoreMax = Number.isFinite(config.managementScoreMax)
+    ? Number(config.managementScoreMax)
+    : DEFAULT_MANAGEMENT_SCORE_MAX;
+  const rowStep = Number(config.rowStep) > 0 ? Number(config.rowStep) : 1;
+  const qualityRowOffset = Number.isFinite(config.qualityRowOffset) ? Number(config.qualityRowOffset) : 0;
+  const approvalColumn = config.approvalColumn || null;
+  const managementBonusColumn = config.managementBonusColumn || null;
+  const credibilityScaleValue = config.credibilityScale ?? 1;
+  const credibilityScaleExpr = config.credibilityScaleExpr || '';
+
+  const availableRows = config.maxRows
+    ? Math.floor((config.maxRows - config.startRow) / rowStep) + 1
+    : Infinity;
+  if (groups.length > availableRows) {
+    throw new Error(`템플릿이 지원하는 최대 협정 수(${availableRows}개)를 초과했습니다.`);
+  }
+  const endRow = config.maxRows || (config.startRow + (availableRows - 1) * rowStep);
+  for (let row = config.startRow; row <= endRow; row += 1) {
+    const rowObj = worksheet.getRow(row);
+    if (rowObj && rowObj.style) {
+      rowObj.style = {
+        ...rowObj.style,
+        fill: { type: 'pattern', pattern: 'none' },
+      };
+    }
+    const isQualityRow = rowStep > 1 && qualityRowOffset > 0
+      && ((row - config.startRow) % rowStep) === qualityRowOffset;
+    if (isQualityRow) continue;
+  }
+
+  const amountForScore = (
+    toExcelNumber(header.amountForScore)
+    ?? toExcelNumber(header.estimatedAmount)
+    ?? toExcelNumber(header.baseAmount)
+  );
+  const headerCells = config.headerCells || {};
+  const amountForScoreCell = headerCells.amountForScore
+    || (Object.keys(headerCells).length > 0 ? null : 'D2');
+  const estimatedAmountCell = headerCells.estimatedAmount || null;
+  const baseAmountCell = headerCells.baseAmount || null;
+  const bidAmountCell = headerCells.bidAmount || null;
+  const ratioBaseAmountCell = headerCells.ratioBaseAmount || null;
+  const entryAmountCell = headerCells.entryAmount || null;
+  const entryAmountNoteCell = headerCells.entryAmountNote || null;
+  const netCostPenaltyNoticeCell = headerCells.netCostPenaltyNotice || null;
+  const memoCell = headerCells.memo || null;
+
+  const estimatedValue = toExcelNumber(header.estimatedAmount);
+  const baseValue = toExcelNumber(header.baseAmount);
+  const bidValue = toExcelNumber(header.bidAmount);
+  const ratioBaseValue = toExcelNumber(header.ratioBaseAmount);
+  const entryAmountValue = toExcelNumber(header.entryAmount);
+
+  if (amountForScoreCell) {
+    worksheet.getCell(amountForScoreCell).value = amountForScore != null ? amountForScore : null;
+  }
+  if (estimatedAmountCell && estimatedAmountCell !== baseAmountCell) {
+    worksheet.getCell(estimatedAmountCell).value = estimatedValue != null ? estimatedValue : null;
+  }
+  if (baseAmountCell) {
+    const targetValue = baseValue != null ? baseValue : (estimatedAmountCell === baseAmountCell ? estimatedValue : null);
+    worksheet.getCell(baseAmountCell).value = targetValue != null ? targetValue : null;
+  }
+  if (bidAmountCell) {
+    worksheet.getCell(bidAmountCell).value = bidValue != null ? bidValue : null;
+  }
+  if (ratioBaseAmountCell) {
+    worksheet.getCell(ratioBaseAmountCell).value = ratioBaseValue != null ? ratioBaseValue : null;
+  }
+  if (entryAmountCell) {
+    worksheet.getCell(entryAmountCell).value = entryAmountValue != null ? entryAmountValue : null;
+  }
+  if (entryAmountNoteCell) {
+    const entryMode = String(header.entryMode || '').trim().toLowerCase();
+    const modeLabel = entryMode === 'ratio'
+      ? '비율반영'
+      : (entryMode === 'sum' ? '단순합산' : '');
+    const entryText = (entryAmountValue != null && modeLabel)
+      ? `※입찰참가자격 : 시공능력평가액 ${Math.round(entryAmountValue).toLocaleString('ko-KR')}원 이상 (${modeLabel})`
+      : '';
+    worksheet.getCell(entryAmountNoteCell).value = entryText;
+  }
+  const compositeTitle = [header.noticeNo, header.noticeTitle]
+    .map((part) => (part ? String(part).trim() : ''))
+    .filter(Boolean)
+    .join(' ');
+  const noticeCell = headerCells.noticeTitle || 'M1';
+  worksheet.getCell(noticeCell).value = compositeTitle;
+  const deadlineText = header.bidDeadline || header.rawBidDeadline || '';
+  const deadlineCell = headerCells.bidDeadline || 'P2';
+  const dutyCell = headerCells.dutySummary || 'W2';
+  worksheet.getCell(deadlineCell).value = deadlineText ? String(deadlineText) : '';
+  worksheet.getCell(dutyCell).value = header.dutySummary || '';
+  if (netCostPenaltyNoticeCell) {
+    const noticeText = header.netCostPenaltyNotice ? '올라탈수록 점수 깎임' : '';
+    const noticeCell = worksheet.getCell(netCostPenaltyNoticeCell);
+    noticeCell.value = noticeText;
+    if (noticeText) {
+      const baseStyle = noticeCell.style ? { ...noticeCell.style } : {};
+      noticeCell.style = {
+        ...baseStyle,
+        font: { ...(baseStyle.font || {}), bold: true },
+      };
+    }
+  }
+  if (memoCell) {
+    const memoText = header.memoText
+      ? String(header.memoText).trim()
+      : toPlainText(header.memoHtml || '');
+    worksheet.getCell(memoCell).value = memoText || '';
+  }
+
+  const regionCells = [];
+  const nonRegionCells = [];
+
+  groups.forEach((group, index) => {
+    const rowNumber = config.startRow + (index * rowStep);
+    const members = Array.isArray(group.members) ? group.members : [];
+    const slotData = Array(slotCount).fill(null);
+    members.forEach((member) => {
+      if (!member || typeof member !== 'object') return;
+      const { slotIndex } = member;
+      if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= slotCount) return;
+      slotData[slotIndex] = member;
+    });
+
+    const rowIndex = rowNumber;
+    const summary = group?.summary || null;
+    if (approvalColumn) {
+      const approvalCell = worksheet.getCell(`${approvalColumn}${rowIndex}`);
+      const approvalValue = group?.approval ? String(group.approval) : '';
+      approvalCell.value = approvalValue || null;
+      const approvalFill = getApprovalFill(approvalValue);
+      if (approvalFill) {
+        const baseStyle = approvalCell.style ? { ...approvalCell.style } : {};
+        approvalCell.style = {
+          ...baseStyle,
+          fill: approvalFill,
+        };
+      }
+    }
+    if (managementBonusColumn) {
+      const bonusCell = worksheet.getCell(`${managementBonusColumn}${rowIndex}`);
+      const bonusValue = group?.summary?.managementBonusApplied ? 1.1 : null;
+      if (bonusValue != null) {
+        bonusCell.value = bonusValue;
+        const baseStyle = bonusCell.style ? { ...bonusCell.style } : {};
+        bonusCell.style = {
+          ...baseStyle,
+          fill: cloneFill(YELLOW_FILL),
+        };
+      }
+    }
+    const indexValue = Number(group.index);
+    if (Number.isFinite(indexValue)) {
+      worksheet.getCell(`A${rowIndex}`).value = indexValue;
+    }
+    if (approvalColumn !== 'B') {
+      worksheet.getCell(`B${rowIndex}`).value = '';
+    }
+
+    for (let slotIndex = 0; slotIndex < slotCount; slotIndex += 1) {
+      const member = slotData[slotIndex];
+      const nameColumn = slotColumns.name[slotIndex];
+      const shareColumn = slotColumns.share?.[slotIndex];
+      const managementColumn = slotColumns.management?.[slotIndex];
+      const performanceColumn = slotColumns.performance?.[slotIndex];
+      const abilityColumn = slotColumns.ability?.[slotIndex];
+      const technicianColumn = slotColumns.technician?.[slotIndex];
+
+      const nameCell = worksheet.getCell(`${nameColumn}${rowIndex}`);
+      const shareCell = shareColumn ? worksheet.getCell(`${shareColumn}${rowIndex}`) : null;
+      const managementCell = managementColumn ? worksheet.getCell(`${managementColumn}${rowIndex}`) : null;
+      const performanceCell = performanceColumn ? worksheet.getCell(`${performanceColumn}${rowIndex}`) : null;
+      const abilityCell = abilityColumn ? worksheet.getCell(`${abilityColumn}${rowIndex}`) : null;
+      const technicianCell = technicianColumn ? worksheet.getCell(`${technicianColumn}${rowIndex}`) : null;
+
+      if (!member || member.empty) {
+        nameCell.value = '';
+        nameCell.fill = undefined;
+        if (shareCell) { shareCell.value = null; shareCell.fill = undefined; }
+        if (managementCell) { managementCell.value = null; managementCell.fill = undefined; }
+        if (performanceCell) { performanceCell.value = null; performanceCell.fill = undefined; }
+        if (abilityCell) { abilityCell.value = null; abilityCell.fill = undefined; }
+        if (technicianCell) { technicianCell.value = null; technicianCell.fill = undefined; }
+        continue;
+      }
+
+      const rawName = typeof member.name === 'string' ? member.name : '';
+      const trimmedName = rawName.trim();
+      const isEmptySlot = !trimmedName && !member.isRegion;
+
+      if (isEmptySlot) {
+        nameCell.value = '';
+        nameCell.fill = { type: 'pattern', pattern: 'none' };
+        if (shareCell) { shareCell.value = null; }
+        continue;
+      }
+
+      nameCell.value = rawName;
+      if (isLh100To300 && member.hasRecentAwardHistory) {
+        const baseStyle = nameCell.style ? { ...nameCell.style } : {};
+        const baseFont = nameCell.font ? { ...nameCell.font } : { ...(baseStyle.font || {}) };
+        nameCell.style = {
+          ...baseStyle,
+          font: {
+            ...baseFont,
+            ...AWARD_HISTORY_FONT,
+          },
+        };
+      }
+      if (shareCell) {
+        const shareValueRaw = toExcelNumber(member.sharePercent);
+        if (shareValueRaw != null) {
+          const normalizedShare = shareValueRaw >= 1 ? shareValueRaw / 100 : shareValueRaw;
+          shareCell.value = normalizedShare;
+        } else {
+          shareCell.value = null;
+        }
+        const baseStyle = shareCell.style ? { ...shareCell.style } : {};
+        shareCell.style = {
+          ...baseStyle,
+          fill: hasFractionalShareValue(member.sharePercent)
+            ? cloneFill(ORANGE_FILL)
+            : cloneFill(CLEAR_FILL),
+        };
+      }
+      if (managementCell) {
+        const managementValue = toExcelNumber(member.managementScore);
+        managementCell.value = managementValue;
+        const baseStyle = managementCell.style ? { ...managementCell.style } : {};
+        managementCell.style = {
+          ...baseStyle,
+          fill: cloneFill(CLEAR_FILL),
+        };
+        if (managementValue != null && managementValue < managementScoreMax) {
+          managementCell.style = {
+            ...baseStyle,
+            fill: cloneFill(ORANGE_FILL),
+          };
+        }
+      }
+      if (performanceCell) { performanceCell.value = toExcelNumber(member.performanceAmount); performanceCell.fill = undefined; }
+      if (abilityCell) { abilityCell.value = toExcelNumber(member.sipyung); abilityCell.fill = undefined; }
+      if (technicianCell) { technicianCell.value = toExcelNumber(member.technicianScore); technicianCell.fill = undefined; }
+      if (qualityColumns.length > 0 && member.qualityScore != null) {
+        const qualityColumn = qualityColumns[slotIndex];
+        if (qualityColumn) {
+          const qualityRowIndex = rowIndex + qualityRowOffset;
+          const qualityCell = worksheet.getCell(`${qualityColumn}${qualityRowIndex}`);
+          const qualityValue = toExcelNumber(member.qualityScore);
+          if (qualityValue != null) qualityCell.value = qualityValue;
+          const baseStyle = qualityCell.style ? { ...qualityCell.style } : {};
+          qualityCell.style = {
+            ...baseStyle,
+            fill: cloneFill(CLEAR_FILL),
+          };
+          if (qualityValue != null && qualityHighlightMin != null && qualityValue > qualityHighlightMin) {
+            qualityCell.style = {
+              ...baseStyle,
+              fill: cloneFill(YELLOW_FILL),
+            };
+          }
+        }
+      }
+
+      if (member.isRegion && regionFillTemplate) {
+        regionCells.push({ column: nameColumn, row: rowIndex });
+        const baseStyle = nameCell.style ? { ...nameCell.style } : {};
+        nameCell.style = {
+          ...baseStyle,
+          fill: cloneFill(regionFillTemplate),
+        };
+        if (debugAgreementExport) {
+          console.log('[exportExcel] set region fill', nameColumn, rowIndex);
+        }
+      } else {
+        nonRegionCells.push({ column: nameColumn, row: rowIndex });
+        const baseStyle = nameCell.style ? { ...nameCell.style } : {};
+        nameCell.style = {
+          ...baseStyle,
+          fill: { type: 'pattern', pattern: 'none' },
+        };
+        if (debugAgreementExport) {
+          console.log('[exportExcel] set non-region fill', nameColumn, rowIndex, nameCell.fill);
+        }
+      }
+    }
+
+    if (summaryColumns.credibility && summary?.credibilityScore != null) {
+      const credCell = worksheet.getCell(`${summaryColumns.credibility}${rowIndex}`);
+      const credibilityFormula = buildCredibilityFormula(
+        members,
+        slotColumns.share,
+        rowIndex,
+        credibilityScaleValue,
+        credibilityScaleExpr
+      );
+      if (credibilityFormula) {
+        credCell.value = {
+          formula: credibilityFormula.formula,
+          result: credibilityFormula.result,
+        };
+      } else {
+        const credValue = toExcelNumber(summary.credibilityScore);
+        if (credValue != null) {
+          credCell.value = credValue;
+        }
+      }
+    }
+    if (summaryColumns.netCostBonus && summary?.netCostBonusScore != null && Number(summary.netCostBonusScore) !== 0) {
+      const bonusCell = worksheet.getCell(`${summaryColumns.netCostBonus}${rowIndex}`);
+      const bonusValue = toExcelNumber(summary.netCostBonusScore);
+      if (bonusValue != null) {
+        bonusCell.value = bonusValue;
+      }
+    }
+    if (summaryColumns.subcontract && summary?.subcontractScore != null) {
+      const subcontractCell = worksheet.getCell(`${summaryColumns.subcontract}${rowIndex}`);
+      const subcontractValue = toExcelNumber(summary.subcontractScore);
+      if (subcontractValue != null) {
+        subcontractCell.value = subcontractValue;
+      }
+    }
+    if (summaryColumns.material && summary?.materialScore != null) {
+      const materialCell = worksheet.getCell(`${summaryColumns.material}${rowIndex}`);
+      const materialValue = toExcelNumber(summary.materialScore);
+      if (materialValue != null) {
+        materialCell.value = materialValue;
+      }
+    }
+    if (summaryColumns.bid && summary?.bidScore != null) {
+      const bidCell = worksheet.getCell(`${summaryColumns.bid}${rowIndex}`);
+      const bidValue = toExcelNumber(summary.bidScore);
+      if (bidValue != null) {
+        bidCell.value = bidValue;
+      }
+    }
+    if (summaryColumns.qualityPoints) {
+      const qualityCell = worksheet.getCell(`${summaryColumns.qualityPoints}${rowIndex}`);
+      const qualityValue = summary?.qualityPoints != null ? toExcelNumber(summary.qualityPoints) : null;
+      qualityCell.value = qualityValue != null ? qualityValue : null;
+      const shouldWarn = qualityValue != null && Number.isFinite(qualityValue) && qualityValue < 2;
+      const baseStyle = qualityCell.style ? { ...qualityCell.style } : {};
+      qualityCell.style = {
+        ...baseStyle,
+        fill: cloneFill(CLEAR_FILL),
+      };
+      if (shouldWarn) {
+        qualityCell.style = {
+          ...baseStyle,
+          fill: cloneFill(ORANGE_FILL),
+        };
+      }
+    }
+  });
+
+  if (slotCount > 0 && Array.isArray(candidates) && candidates.length > 0) {
+    const candidateRowStep = rowStep > 0 ? rowStep : 1;
+    const candidateStartRow = groups.length > 0
+      ? (config.startRow + ((groups.length - 1) * rowStep) + (3 * candidateRowStep))
+      : (config.startRow + (3 * candidateRowStep));
+
+    candidates.forEach((candidate, index) => {
+      if (!candidate || typeof candidate !== 'object') return;
+      const rowIndex = candidateStartRow + (Math.floor(index / slotCount) * candidateRowStep);
+      const slotIndex = index % slotCount;
+      const nameColumn = slotColumns.name?.[slotIndex];
+      const managementColumn = slotColumns.management?.[slotIndex];
+      const performanceColumn = slotColumns.performance?.[slotIndex];
+      const abilityColumn = slotColumns.ability?.[slotIndex];
+      if (!nameColumn) return;
+
+      const nameCell = worksheet.getCell(`${nameColumn}${rowIndex}`);
+      const managementCell = managementColumn ? worksheet.getCell(`${managementColumn}${rowIndex}`) : null;
+      const performanceCell = performanceColumn ? worksheet.getCell(`${performanceColumn}${rowIndex}`) : null;
+      const abilityCell = abilityColumn ? worksheet.getCell(`${abilityColumn}${rowIndex}`) : null;
+
+      nameCell.value = typeof candidate.name === 'string' ? candidate.name : '';
+      if (isLh100To300 && candidate.hasRecentAwardHistory) {
+        const baseStyle = nameCell.style ? { ...nameCell.style } : {};
+        const baseFont = nameCell.font ? { ...nameCell.font } : { ...(baseStyle.font || {}) };
+        nameCell.style = {
+          ...baseStyle,
+          font: {
+            ...baseFont,
+            ...AWARD_HISTORY_FONT,
+          },
+        };
+      }
+      if (candidate.isRegion && regionFillTemplate) {
+        regionCells.push({ column: nameColumn, row: rowIndex });
+        const baseStyle = nameCell.style ? { ...nameCell.style } : {};
+        nameCell.style = {
+          ...baseStyle,
+          fill: cloneFill(regionFillTemplate),
+        };
+      } else {
+        nonRegionCells.push({ column: nameColumn, row: rowIndex });
+        const baseStyle = nameCell.style ? { ...nameCell.style } : {};
+        nameCell.style = {
+          ...baseStyle,
+          fill: { type: 'pattern', pattern: 'none' },
+        };
+      }
+
+      if (managementCell) {
+        const managementValue = toExcelNumber(candidate.managementScore);
+        managementCell.value = managementValue;
+        const baseStyle = managementCell.style ? { ...managementCell.style } : {};
+        managementCell.style = {
+          ...baseStyle,
+          fill: cloneFill(CLEAR_FILL),
+        };
+        if (managementValue != null && managementValue < managementScoreMax) {
+          managementCell.style = {
+            ...baseStyle,
+            fill: cloneFill(ORANGE_FILL),
+          };
+        }
+      }
+
+      if (performanceCell) {
+        performanceCell.value = toExcelNumber(candidate.performanceAmount);
+        performanceCell.fill = undefined;
+      }
+      if (abilityCell) {
+        abilityCell.value = toExcelNumber(candidate.sipyung);
+        abilityCell.fill = undefined;
+      }
+      if (qualityColumns.length > 0 && candidate.qualityScore != null && qualityRowOffset > 0) {
+        const qualityColumn = qualityColumns[slotIndex];
+        if (qualityColumn) {
+          const qualityCell = worksheet.getCell(`${qualityColumn}${rowIndex + qualityRowOffset}`);
+          const qualityValue = toExcelNumber(candidate.qualityScore);
+          if (qualityValue != null) qualityCell.value = qualityValue;
+          const baseStyle = qualityCell.style ? { ...qualityCell.style } : {};
+          qualityCell.style = {
+            ...baseStyle,
+            fill: cloneFill(CLEAR_FILL),
+          };
+          if (qualityValue != null && qualityHighlightMin != null && qualityValue > qualityHighlightMin) {
+            qualityCell.style = {
+              ...baseStyle,
+              fill: cloneFill(YELLOW_FILL),
+            };
+          }
+        }
+      }
+    });
+  }
+
+  if (Array.isArray(preservedColumns) && preservedColumns.length > 0) {
+    worksheet.columns.forEach((column, index) => {
+      const preset = preservedColumns[index];
+      if (!preset) return;
+      if (preset.width != null) {
+        column.width = preset.width;
+        column.customWidth = true;
+      }
+      if (preset.hidden != null) column.hidden = preset.hidden;
+    });
+  }
+
+  nameColumns.forEach((columnKey) => {
+    const column = worksheet.getColumn(columnKey);
+    if (!column) return;
+    column.style = {
+      ...column.style,
+      fill: { type: 'pattern', pattern: 'none' },
+    };
+  });
+
+  preservedRowHeights.forEach((height, rowIdx) => {
+    const row = worksheet.getRow(rowIdx);
+    if (row) row.height = height;
+  });
+
+  nonRegionCells.forEach(({ column, row }) => {
+    const cell = worksheet.getCell(`${column}${row}`);
+    const baseStyle = cell.style ? { ...cell.style } : {};
+    cell.style = {
+      ...baseStyle,
+      fill: { type: 'pattern', pattern: 'none' },
+    };
+    if (debugAgreementExport) {
+      console.log('[exportExcel] applied non-region final fill', column, row, cell.fill);
+    }
+  });
+
+  regionCells.forEach(({ column, row }) => {
+    const cell = worksheet.getCell(`${column}${row}`);
+    const baseStyle = cell.style ? { ...cell.style } : {};
+    cell.style = {
+      ...baseStyle,
+      fill: cloneFill(regionFillTemplate),
+    };
+  });
+
+  if (debugAgreementExport) {
+    const debugCell = worksheet.getCell(`${slotColumns.name?.[1] || 'C'}${config.startRow}`);
+    console.log('[exportExcel] debug fill', debugCell.fill, 'regionCells', regionCells);
+    ['C','D','E','F','G'].forEach((col) => {
+      const cell = worksheet.getCell(`${col}${config.startRow}`);
+      console.log('[exportExcel] final cell state', col, cell.fill);
+    });
+  }
+
+  clearHoverArtifacts(worksheet);
+
+  if (appendWorkbookBuffer) {
+    const targetWorkbook = new ExcelJS.Workbook();
+    await targetWorkbook.xlsx.load(appendWorkbookBuffer);
+    targetWorkbook.calcProperties = {
+      ...targetWorkbook.calcProperties,
+      fullCalcOnLoad: true,
+    };
+
+    const layoutSnapshot = new Map();
+    targetWorkbook.worksheets.forEach((sheet) => {
+      const columns = sheet.columns.map((column) => ({
+        width: column?.width,
+        hidden: column?.hidden,
+      }));
+      const rowHeights = new Map();
+      sheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+        if (row && row.height != null) {
+          rowHeights.set(rowNumber, row.height);
+        }
+      });
+      layoutSnapshot.set(sheet.name, { columns, rowHeights });
+    });
+
+    const resolvedName = ensureUniqueSheetName(targetWorkbook, worksheet.name);
+    const targetSheet = targetWorkbook.addWorksheet(resolvedName);
+    if (sheetColor) {
+      targetSheet.properties.tabColor = { argb: sheetColor };
+    }
+    copyWorksheet(worksheet, targetSheet);
+    clearHoverArtifacts(targetSheet);
+
+    layoutSnapshot.forEach((layout, name) => {
+      const sheet = targetWorkbook.getWorksheet(name);
+      if (!sheet) return;
+      if (sheet.name === resolvedName) return;
+      if (Array.isArray(layout.columns)) {
+        sheet.columns.forEach((column, index) => {
+          const preset = layout.columns[index];
+          if (!preset) return;
+          if (preset.width != null) {
+            column.width = preset.width;
+            column.customWidth = true;
+          }
+          if (preset.hidden != null) column.hidden = preset.hidden;
+        });
+      }
+      if (layout.rowHeights instanceof Map) {
+        layout.rowHeights.forEach((height, rowIdx) => {
+          const row = sheet.getRow(rowIdx);
+          if (row) row.height = height;
+        });
+      }
+    });
+
+    const buffer = await targetWorkbook.xlsx.writeBuffer();
+    return { buffer, sheetName: resolvedName };
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return { buffer, sheetName: worksheet.name };
+}
+
+function downloadAgreementWorkbook(buffer, fileName) {
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName || '협정보드.xlsx';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+export {
+  sanitizeFileName,
+  toExcelNumber,
+  exportAgreementExcel,
+  downloadAgreementWorkbook,
+};

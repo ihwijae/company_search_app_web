@@ -24,9 +24,14 @@ import { AGREEMENT_GROUPS } from '../../../../shared/navigation.js';
 import { sanitizeHtml } from '../../../../shared/sanitizeHtml.js';
 import searchClient from '../../../../shared/searchClient.js';
 import formulasClient from '../../../../shared/formulasClient.js';
-import agreementTemplateClient from '../../../../shared/agreementTemplateClient.js';
 import { AGREEMENT_BAN_CONFIG } from '../../../../shared/agreements/banConfig.js';
 import { buildAgreementExportPayload } from '../../../../shared/agreements/agreementExportPayload.js';
+import {
+  downloadAgreementWorkbook,
+  exportAgreementExcel as exportAgreementWorkbook,
+  sanitizeFileName as sanitizeExportFileName,
+} from '../../../../shared/agreements/exportAgreementWorkbook.js';
+import { resolveWebAgreementTemplateConfig } from '../../../../shared/agreements/templateConfigs.web.js';
 import {
   calculatePossibleShareRatio,
   formatPossibleShareText,
@@ -1161,9 +1166,6 @@ export default function AgreementBoardWindow({
   const [memoDraft, setMemoDraft] = React.useState('');
   const memoEditorRef = React.useRef(null);
   const [exportModalOpen, setExportModalOpen] = React.useState(false);
-  const [templateModalOpen, setTemplateModalOpen] = React.useState(false);
-  const [templateBusy, setTemplateBusy] = React.useState(false);
-  const [templateItems, setTemplateItems] = React.useState({});
   const {
     portalContainer: awardHistoryPortalContainer,
     closeWindow: closeAwardHistoryWindow,
@@ -1172,11 +1174,10 @@ export default function AgreementBoardWindow({
     setOpen: setAwardHistoryWindowOpen,
     sourceDocument: typeof document !== 'undefined' ? document : null,
   });
-  const [exportTargetPath, setExportTargetPath] = React.useState('');
+  const [exportTargetFile, setExportTargetFile] = React.useState(null);
   const [exportTargetName, setExportTargetName] = React.useState('');
   const [exportSheetName, setExportSheetName] = React.useState('');
   const exportFileInputRef = React.useRef(null);
-  const templateFileInputRef = React.useRef(null);
   const regionSearchSessionRef = React.useRef(null);
   const [technicianModalOpen, setTechnicianModalOpen] = React.useState(false);
   const technicianWindowRef = React.useRef(null);
@@ -3623,26 +3624,21 @@ export default function AgreementBoardWindow({
     () => resolveTemplateKey(ownerId, rangeId, fileType),
     [ownerId, rangeId, fileType],
   );
-  const currentTemplateMeta = React.useMemo(() => {
-    if (!currentTemplateKey || !templateItems || typeof templateItems !== 'object') return null;
-    return templateItems[currentTemplateKey] || null;
-  }, [currentTemplateKey, templateItems]);
-
   const rangeBadgeLabel = selectedRangeOption?.label || '기본 구간';
 
   const bidDeadlineLabel = React.useMemo(() => formatBidDeadline(bidDeadline), [bidDeadline]);
 
   const handleExportExcel = React.useCallback(async (options = {}) => {
     if (exporting) return;
-    const api = typeof window !== 'undefined' ? window.electronAPI : null;
-    if (!api?.agreementsExportExcel) {
-      showHeaderAlert('엑셀 내보내기 채널이 준비되지 않았습니다. 데스크탑 앱에서만 실행 가능합니다.');
-      return;
-    }
     const templateKey = resolveTemplateKey(ownerId, rangeId, fileType);
     if (!templateKey) {
       showHeaderAlert('현재 선택한 발주처/구간은 엑셀 템플릿이 아직 준비되지 않았습니다.');
-      return;
+      return false;
+    }
+    const templateConfig = resolveWebAgreementTemplateConfig(templateKey);
+    if (!templateConfig) {
+      showHeaderAlert('웹 엑셀 템플릿 설정을 찾을 수 없습니다.');
+      return false;
     }
 
     setExporting(true);
@@ -3678,7 +3674,6 @@ export default function AgreementBoardWindow({
       const formattedDeadline = formatBidDeadline(bidDeadline);
       const payload = buildAgreementExportPayload({
         templateKey,
-        appendTargetPath: options.appendTargetPath || '',
         sheetName: options.sheetName || '',
         ownerId,
         rangeId,
@@ -3733,13 +3728,18 @@ export default function AgreementBoardWindow({
         hasRecentAwardHistory: isRecentAwardHistoryCompany,
       });
 
-      const response = await api.agreementsExportExcel(payload);
-      if (response?.success) {
-        showHeaderAlert('엑셀 파일을 저장했습니다.');
-        return true;
-      }
-      showHeaderAlert(response?.message || '엑셀 내보내기에 실패했습니다.');
-      return false;
+      const result = await exportAgreementWorkbook({
+        config: templateConfig,
+        payload,
+        appendWorkbookBuffer: exportTargetFile ? await exportTargetFile.arrayBuffer() : null,
+        sheetName: options.sheetName || '',
+        sheetColor: 'FF00B050',
+      });
+      const downloadName = exportTargetName
+        || `${sanitizeExportFileName([noticeNo, templateConfig.label, '협정보드'].filter(Boolean).join('_')) || '협정보드'}.xlsx`;
+      downloadAgreementWorkbook(result.buffer, downloadName);
+      showHeaderAlert('엑셀 파일을 다운로드했습니다.');
+      return true;
     } catch (error) {
       console.error('[AgreementBoard] Excel export failed:', error);
       showHeaderAlert('엑셀 내보내기 중 오류가 발생했습니다.');
@@ -3752,6 +3752,8 @@ export default function AgreementBoardWindow({
     exporting,
     showLoading,
     hideLoading,
+    exportTargetFile,
+    exportTargetName,
     ownerId,
     ownerKeyUpper,
     rangeId,
@@ -5211,87 +5213,16 @@ export default function AgreementBoardWindow({
     setExportModalOpen(true);
   }, [noticeTitle, noticeNo, resolveSheetName]);
 
-  const refreshTemplateItems = React.useCallback(async () => {
-    setTemplateBusy(true);
-    try {
-      const response = await agreementTemplateClient.list();
-      if (!response?.success) throw new Error(response?.message || '템플릿 목록 조회 실패');
-      const data = response?.data && typeof response.data === 'object' ? response.data : {};
-      setTemplateItems(data);
-      return data;
-    } catch (error) {
-      showHeaderAlert(error?.message || '템플릿 목록 조회 실패');
-      return null;
-    } finally {
-      setTemplateBusy(false);
-    }
-  }, [showHeaderAlert]);
-
-  const handleOpenTemplateModal = React.useCallback(async () => {
-    setTemplateModalOpen(true);
-    await refreshTemplateItems();
-  }, [refreshTemplateItems]);
-
-  const handleTemplateFilePick = React.useCallback(async (event) => {
-    const file = event?.target?.files?.[0];
-    if (event?.target) event.target.value = '';
-    if (!file) return;
-    if (!currentTemplateKey) {
-      showHeaderAlert('현재 발주처/구간/공종 조합은 템플릿 키를 만들 수 없습니다.');
-      return;
-    }
-    setTemplateBusy(true);
-    try {
-      const response = await agreementTemplateClient.upload({
-        templateKey: currentTemplateKey,
-        file,
-      });
-      if (!response?.success) throw new Error(response?.message || '템플릿 업로드 실패');
-      await refreshTemplateItems();
-      showHeaderAlert('템플릿 업로드 완료');
-    } catch (error) {
-      showHeaderAlert(error?.message || '템플릿 업로드 실패');
-    } finally {
-      setTemplateBusy(false);
-    }
-  }, [currentTemplateKey, refreshTemplateItems, showHeaderAlert]);
-
-  const handleDeleteTemplate = React.useCallback(async () => {
-    if (!currentTemplateKey) {
-      showHeaderAlert('삭제할 템플릿 키가 없습니다.');
-      return;
-    }
-    const ok = await confirm({
-      title: '템플릿을 삭제하시겠습니까?',
-      message: `키: ${currentTemplateKey}`,
-      confirmText: '삭제',
-      cancelText: '취소',
-      tone: 'warning',
-    });
-    if (!ok) return;
-    setTemplateBusy(true);
-    try {
-      const response = await agreementTemplateClient.remove(currentTemplateKey);
-      if (!response?.success) throw new Error(response?.message || '템플릿 삭제 실패');
-      await refreshTemplateItems();
-      showHeaderAlert('템플릿 삭제 완료');
-    } catch (error) {
-      showHeaderAlert(error?.message || '템플릿 삭제 실패');
-    } finally {
-      setTemplateBusy(false);
-    }
-  }, [confirm, currentTemplateKey, refreshTemplateItems, showHeaderAlert]);
-
   const handleExportFilePick = React.useCallback((event) => {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
-    setExportTargetPath(file.path || '');
+    setExportTargetFile(file);
     setExportTargetName(file.name || '');
     if (event.target) event.target.value = '';
   }, []);
 
   const handleClearExportFile = React.useCallback(() => {
-    setExportTargetPath('');
+    setExportTargetFile(null);
     setExportTargetName('');
   }, []);
 
@@ -6101,12 +6032,6 @@ export default function AgreementBoardWindow({
                   className="excel-btn"
                   disabled={exporting}
                 >엑셀로 내보내기</button>
-                <button
-                  type="button"
-                  onClick={handleOpenTemplateModal}
-                  className="excel-btn"
-                  disabled={templateBusy}
-                >템플릿 관리</button>
                 <button type="button" className="excel-btn" onClick={handleGenerateText}>협정 문자 생성</button>
                 <button
                   type="button"
@@ -6605,75 +6530,6 @@ export default function AgreementBoardWindow({
         </div>
       </Modal>
       <Modal
-        open={templateModalOpen}
-        onClose={() => setTemplateModalOpen(false)}
-        title="템플릿 관리"
-        closeOnSave={false}
-        confirmLabel="새로고침"
-        cancelLabel="닫기"
-        onSave={refreshTemplateItems}
-        size="sm"
-        boxClassName="agreement-export-modal"
-      >
-        <div className="export-sheet-modal">
-          <div className="export-sheet-hero">
-            <div className="export-sheet-hero__badge">TEMPLATE</div>
-            <div>
-              <strong>현재 조합 템플릿을 업로드/교체합니다.</strong>
-              <p>같은 키로 업로드하면 기존 템플릿을 덮어씁니다.</p>
-            </div>
-          </div>
-          <div className="export-sheet-field">
-            <span className="export-sheet-label">현재 템플릿 키</span>
-            <div className="readonly-value">{currentTemplateKey || '지원되지 않는 조합'}</div>
-          </div>
-          <div className="export-sheet-field">
-            <span className="export-sheet-label">저장소 상태</span>
-            {currentTemplateMeta ? (
-              <div className="readonly-value">
-                {currentTemplateMeta.fileName || currentTemplateMeta.pathname || '등록됨'}
-                {currentTemplateMeta.uploadedAt ? ` / ${new Date(currentTemplateMeta.uploadedAt).toLocaleString('ko-KR')}` : ''}
-              </div>
-            ) : (
-              <div className="readonly-value">등록된 템플릿 없음</div>
-            )}
-          </div>
-          <div className="export-sheet-field">
-            <span className="export-sheet-label">템플릿 파일(.xlsx)</span>
-            <div className="export-sheet-file">
-              <button
-                type="button"
-                className="excel-btn"
-                onClick={() => templateFileInputRef.current?.click()}
-                disabled={!currentTemplateKey || templateBusy}
-              >
-                파일 선택
-              </button>
-              {currentTemplateMeta && (
-                <button
-                  type="button"
-                  className="excel-btn"
-                  onClick={handleDeleteTemplate}
-                  disabled={templateBusy}
-                >
-                  삭제
-                </button>
-              )}
-            </div>
-            <input
-              ref={templateFileInputRef}
-              type="file"
-              accept=".xlsx,.xlsm,.xls"
-              style={{ display: 'none' }}
-              onChange={handleTemplateFilePick}
-            />
-            <p className="export-sheet-hint">
-              템플릿 키: <strong>{currentTemplateKey || '-'}</strong>
-            </p>
-          </div>
-        </div>
-      </Modal>
-      <Modal
         open={exportModalOpen}
         onClose={() => setExportModalOpen(false)}
         title="엑셀 내보내기"
@@ -6686,10 +6542,7 @@ export default function AgreementBoardWindow({
             showHeaderAlert('시트명을 입력해 주세요.');
             return;
           }
-          const ok = await handleExportExcel({
-            appendTargetPath: exportTargetPath || '',
-            sheetName: resolvedSheetName,
-          });
+          const ok = await handleExportExcel({ sheetName: resolvedSheetName });
           if (ok) {
             setExportModalOpen(false);
           }
@@ -6701,8 +6554,8 @@ export default function AgreementBoardWindow({
           <div className="export-sheet-hero">
             <div className="export-sheet-hero__badge">EXPORT</div>
             <div>
-              <strong>협정 결과를 엑셀로 저장합니다.</strong>
-              <p>파일을 선택하면 해당 파일에 시트가 추가됩니다.</p>
+              <strong>협정 결과를 브라우저에서 바로 엑셀로 생성합니다.</strong>
+              <p>파일을 선택하면 해당 파일에 시트를 추가한 새 파일을 다운로드합니다.</p>
             </div>
           </div>
           <div className="export-sheet-field">
@@ -6727,7 +6580,7 @@ export default function AgreementBoardWindow({
               style={{ display: 'none' }}
               onChange={handleExportFilePick}
             />
-            <p className="export-sheet-hint">파일을 선택하지 않으면 새 파일로 저장됩니다.</p>
+            <p className="export-sheet-hint">파일을 선택하지 않으면 새 파일을 바로 다운로드합니다.</p>
           </div>
           <div className="export-sheet-field">
             <span className="export-sheet-label">시트명</span>
