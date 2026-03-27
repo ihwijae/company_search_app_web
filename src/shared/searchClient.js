@@ -186,9 +186,11 @@ export const searchClient = {
         pagination: null,
         ...(options || {}),
       });
-      const items = Array.isArray(response?.items)
-        ? response.items
-        : (Array.isArray(response) ? response : []);
+      const items = Array.isArray(response?.data)
+        ? response.data
+        : Array.isArray(response?.items)
+          ? response.items
+          : (Array.isArray(response) ? response : []);
       collected.push(...items);
     }
 
