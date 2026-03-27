@@ -857,6 +857,7 @@ async function downloadAgreementWorkbook(buffer, fileName, options = {}) {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
   const targetFileHandle = options?.fileHandle || null;
+  const preferFileHandle = Boolean(options?.preferFileHandle);
 
   if (targetFileHandle && typeof targetFileHandle.createWritable === 'function') {
     try {
@@ -868,7 +869,13 @@ async function downloadAgreementWorkbook(buffer, fileName, options = {}) {
       if (error?.name === 'AbortError') {
         return { canceled: true };
       }
-      console.warn('[exportAgreementWorkbook] direct file write failed, fallback to save picker:', error);
+      console.warn('[exportAgreementWorkbook] direct file write failed:', error);
+      if (preferFileHandle) {
+        return {
+          error: true,
+          message: '선택한 파일에 직접 저장하지 못했습니다. 브라우저 파일 권한을 확인해 주세요.',
+        };
+      }
     }
   }
 

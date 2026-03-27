@@ -3740,9 +3740,14 @@ export default function AgreementBoardWindow({
         || `${sanitizeExportFileName([noticeNo, templateConfig.label, '협정보드'].filter(Boolean).join('_')) || '협정보드'}.xlsx`;
       const saveResult = await downloadAgreementWorkbook(result.buffer, downloadName, {
         fileHandle: exportTargetFileHandle,
+        preferFileHandle: Boolean(exportTargetFileHandle),
       });
       if (saveResult?.canceled) {
         showHeaderAlert('엑셀 저장이 취소되었습니다.');
+        return false;
+      }
+      if (saveResult?.error) {
+        showHeaderAlert(saveResult.message || '선택한 파일에 저장하지 못했습니다.');
         return false;
       }
       showHeaderAlert(
@@ -5252,6 +5257,13 @@ export default function AgreementBoardWindow({
         }],
       });
       if (!handle) return;
+      if (typeof handle.requestPermission === 'function') {
+        const permission = await handle.requestPermission({ mode: 'readwrite' });
+        if (permission !== 'granted') {
+          showHeaderAlert('선택한 파일에 쓸 수 있는 권한이 필요합니다.');
+          return;
+        }
+      }
       const file = await handle.getFile();
       setExportTargetFile(file);
       setExportTargetFileHandle(handle);
