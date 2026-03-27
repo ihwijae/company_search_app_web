@@ -329,9 +329,9 @@ export async function fetchAgreementCandidates(params = {}) {
         ? `${bizYearsStartDate.getFullYear()}-${String(bizYearsStartDate.getMonth() + 1).padStart(2, '0')}-${String(bizYearsStartDate.getDate()).padStart(2, '0')}`
         : null,
       bizYearsScore: composite?.parts?.yearsScore ?? null,
-      bizYearsMaxScore: composite?.maxScore ?? null,
-      debtMaxScore: composite?.maxScore ?? null,
-      currentMaxScore: composite?.maxScore ?? null,
+      bizYearsMaxScore: null,
+      debtMaxScore: null,
+      currentMaxScore: null,
       creditMaxScore: credit?.maxScore ?? null,
       creditScore: creditExpired ? null : (credit?.score ?? null),
       creditGrade,

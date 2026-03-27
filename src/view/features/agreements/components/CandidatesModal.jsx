@@ -1379,7 +1379,12 @@ const industryToLabel = (type) => {
                   const combinedMax = (Number.isFinite(debtMax) ? debtMax : 0)
                     + (Number.isFinite(currentMax) ? currentMax : 0)
                     + (Number.isFinite(bizYearsMax) ? bizYearsMax : 0);
-                  const managementMax = Math.max(combinedMax, Number.isFinite(creditMax) ? creditMax : 0);
+                  const managementMaxDirect = Number.isFinite(Number(c.managementMaxScore)) && Number(c.managementMaxScore) > 0
+                    ? Number(c.managementMaxScore)
+                    : null;
+                  const managementMax = managementMaxDirect != null
+                    ? managementMaxDirect
+                    : Math.max(combinedMax, Number.isFinite(creditMax) ? creditMax : 0);
                   const creditNoteLower = String(c.creditNote || '').trim().toLowerCase();
                   const creditNoteTextRaw = c.creditNoteText || '';
                   const creditNoteTextLower = creditNoteTextRaw.trim().toLowerCase();
