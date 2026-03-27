@@ -1,3 +1,13 @@
+import {
+  getCachedAgreementBoardList,
+  setCachedAgreementBoardList,
+  upsertCachedAgreementBoardMeta,
+  removeCachedAgreementBoardMeta,
+  getCachedAgreementBoardPayload,
+  setCachedAgreementBoardPayload,
+  removeCachedAgreementBoardPayload,
+} from './agreementBoardCache.js';
+
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 async function requestJson(url, options = {}) {
@@ -10,32 +20,68 @@ async function requestJson(url, options = {}) {
 }
 
 const agreementBoardClient = {
+  getCachedList() {
+    return getCachedAgreementBoardList();
+  },
+
   async save(payload) {
-    return requestJson('/api/agreement-board', {
+    const result = await requestJson('/api/agreement-board', {
       method: 'POST',
       headers: JSON_HEADERS,
       body: JSON.stringify({ action: 'save', payload: payload || {} }),
     });
+    if (result?.success && result?.data?.path) {
+      upsertCachedAgreementBoardMeta({
+        path: result.data.path,
+        meta: result.data.meta || {},
+      });
+      if (payload && typeof payload === 'object' && payload.payload && typeof payload.payload === 'object') {
+        setCachedAgreementBoardPayload(
+          result.data.path,
+          payload.payload,
+          result?.data?.meta?.savedAt || '',
+        );
+      }
+    }
+    return result;
   },
 
   async list() {
-    return requestJson('/api/agreement-board?action=list');
+    const result = await requestJson('/api/agreement-board?action=list');
+    if (result?.success) {
+      setCachedAgreementBoardList(result.data || []);
+    }
+    return result;
   },
 
-  async load(path) {
-    return requestJson('/api/agreement-board', {
+  async load(path, options = {}) {
+    const savedAt = String(options?.savedAt || '');
+    const cachedPayload = getCachedAgreementBoardPayload(path, savedAt);
+    if (cachedPayload) {
+      return { success: true, data: cachedPayload, cached: true };
+    }
+    const result = await requestJson('/api/agreement-board', {
       method: 'POST',
       headers: JSON_HEADERS,
       body: JSON.stringify({ action: 'load', path }),
     });
+    if (result?.success) {
+      setCachedAgreementBoardPayload(path, result.data || {}, savedAt);
+    }
+    return result;
   },
 
   async remove(path) {
-    return requestJson('/api/agreement-board', {
+    const result = await requestJson('/api/agreement-board', {
       method: 'POST',
       headers: JSON_HEADERS,
       body: JSON.stringify({ action: 'delete', path }),
     });
+    if (result?.success) {
+      removeCachedAgreementBoardMeta(path);
+      removeCachedAgreementBoardPayload(path);
+    }
+    return result;
   },
 
   async getRoot() {

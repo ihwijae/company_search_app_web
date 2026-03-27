@@ -178,39 +178,9 @@ async function readAgreementMetaFromBlob(pathname, token) {
 }
 
 async function listAgreementBoards() {
-  const token = ensureToken();
   const manifest = normalizeManifest(await readManifest());
   const manifestItems = getAgreementBoardItems(manifest);
-  const byPath = new Map(
-    manifestItems
-      .filter((item) => item && item.path)
-      .map((item) => [item.path, item])
-  );
-
-  const blobPaths = await listAllAgreementBoardBlobPaths(token);
-  const blobPathSet = new Set(blobPaths);
-  let mutated = false;
-
-  for (const path of blobPaths) {
-    const current = byPath.get(path);
-    if (current && current.meta && (current.meta.noticeNo || current.meta.noticeTitle)) continue;
-    try {
-      const meta = await readAgreementMetaFromBlob(path, token);
-      byPath.set(path, { path, meta: meta || {} });
-      mutated = true;
-    } catch (error) {
-      console.warn('[agreement-board-store] failed to read meta:', path, error && error.message ? error.message : error);
-      if (!current) {
-        byPath.set(path, { path, meta: {} });
-        mutated = true;
-      }
-    }
-  }
-
-  const compactItems = Array.from(byPath.values())
-    .filter((item) => item && item.path && blobPathSet.has(item.path));
-  if (compactItems.length !== manifestItems.length) mutated = true;
-
+  const compactItems = manifestItems.filter((item) => item && item.path);
   const deduped = [];
   for (const item of compactItems) {
     const duplicateIndex = deduped.findIndex((existing) => isSameAgreementIdentity(existing?.meta || {}, item?.meta || {}));
@@ -220,7 +190,6 @@ async function listAgreementBoards() {
       if (nextSavedAt >= currentSavedAt) {
         deduped[duplicateIndex] = item;
       }
-      mutated = true;
       continue;
     }
     deduped.push(item);
@@ -231,11 +200,6 @@ async function listAgreementBoards() {
     const bTs = Date.parse(String(b?.meta?.savedAt || b?.meta?.noticeDate || '')) || 0;
     return bTs - aTs;
   });
-
-  if (mutated) {
-    manifest[AGREEMENT_BOARD_MANIFEST_KEY] = deduped;
-    await writeManifest(manifest);
-  }
 
   return deduped;
 }

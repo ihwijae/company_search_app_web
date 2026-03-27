@@ -204,6 +204,10 @@ export default function useAgreementBoardStorage({
 
   const openLoadModal = React.useCallback(async () => {
     setLoadModalOpen(true);
+    const cachedItems = agreementBoardClient.getCachedList();
+    if (cachedItems.length) {
+      setLoadItems(cachedItems);
+    }
     await Promise.all([refreshLoadRoot(), refreshLoadList()]);
   }, [refreshLoadList, refreshLoadRoot]);
 
@@ -278,7 +282,10 @@ export default function useAgreementBoardStorage({
     if (!path) return;
     setLoadBusy(true);
     try {
-      const result = await agreementBoardClient.load(path);
+      const selectedItem = loadItems.find((item) => item?.path === path);
+      const result = await agreementBoardClient.load(path, {
+        savedAt: selectedItem?.meta?.savedAt || '',
+      });
       if (!result?.success) throw new Error(result?.message || '불러오기 실패');
       applyAgreementSnapshot(result.data || {});
       showHeaderAlert('협정 불러오기 완료');
@@ -288,7 +295,7 @@ export default function useAgreementBoardStorage({
     } finally {
       setLoadBusy(false);
     }
-  }, [applyAgreementSnapshot, showHeaderAlert]);
+  }, [applyAgreementSnapshot, loadItems, showHeaderAlert]);
 
   const handleDeleteAgreement = React.useCallback(async (path, confirm) => {
     if (!path || typeof confirm !== 'function') return;
