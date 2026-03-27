@@ -415,7 +415,6 @@ function App() {
     persistedRef.current = loadPersisted(SEARCH_STORAGE_KEY, null);
   }
   const persisted = persistedRef.current || {};
-  const restoreSearchRef = useRef(Boolean(persisted.searchPerformed));
 
   const [fileStatuses, setFileStatuses] = useState({ eung: false, tongsin: false, sobang: false });
   const [activeMenu, setActiveMenu] = useState('search');
@@ -430,15 +429,13 @@ function App() {
     return base;
   });
   const [fileType, setFileType] = useState(() => normalizeFileType(persisted.fileType || 'eung'));
-  const [searchedFileType, setSearchedFileType] = useState(() => normalizeFileType(persisted.searchedFileType || persisted.fileType || 'eung'));
+  const [searchedFileType, setSearchedFileType] = useState(() => normalizeFileType(persisted.fileType || 'eung'));
   const [regions, setRegions] = useState(() => (
     Array.isArray(persisted.regions) && persisted.regions.length > 0 ? persisted.regions : ['전체']
   ));
   const [searchPerformed, setSearchPerformed] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
-  const [page, setPage] = useState(() => (
-    Number.isInteger(persisted.page) && persisted.page > 0 ? persisted.page : 1
-  ));
+  const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [sortKey, setSortKey] = useState(() => persisted.sortKey || null); // 'sipyung' | '3y' | '5y'
@@ -446,15 +443,8 @@ function App() {
   const [onlyLHQuality, setOnlyLHQuality] = useState(() => !!persisted.onlyLHQuality);
   const [onlyWomenOwned, setOnlyWomenOwned] = useState(() => !!persisted.onlyWomenOwned);
   const [sortDir, setSortDir] = useState(() => (persisted.sortDir === 'asc' ? 'asc' : 'desc'));
-  const [selectedIndex, setSelectedIndex] = useState(() => (
-    typeof persisted.selectedIndex === 'number' ? persisted.selectedIndex : null
-  ));
-  const initialKey = () => {
-    if (typeof persisted.selectedCompanyKey === 'string') return persisted.selectedCompanyKey;
-    if (typeof persisted.selectedBizNo === 'string') return persisted.selectedBizNo;
-    return '';
-  };
-  const [selectedCompanyKey, setSelectedCompanyKey] = useState(initialKey);
+  const [selectedIndex, setSelectedIndex] = useState(null);
+  const [selectedCompanyKey, setSelectedCompanyKey] = useState('');
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [smppStatus, setSmppStatus] = useState({ busy: false, bizNo: '' });
   const [smppResults, setSmppResults] = useState({});
@@ -661,9 +651,6 @@ function App() {
     } finally {
       if (lastRequestIdRef.current === requestId) {
         setIsLoading(false);
-        if (restoreSearchRef.current) {
-          restoreSearchRef.current = false;
-        }
       }
     }
   }, [buildSearchCriteria, fileType, handleCompanySelect, onlyLatest, onlyLHQuality, onlyWomenOwned, sortDir, sortKey]);
@@ -976,11 +963,6 @@ function App() {
     }));
   };
 
-  useEffect(() => {
-    if (!restoreSearchRef.current) return;
-    handleSearch(page, { preserveSelection: true });
-  }, [handleSearch, page]);
-
   const handleKeyDown = (e) => { if (e.key === 'Enter') handleSearch(); };
   const handleCopySingle = (key, value) => { navigator.clipboard.writeText(String(value)); setDialog({ isOpen: true, message: `'${key}' 항목이 복사되었습니다.` }); };
   const escapeHtml = (s) => String(s)
@@ -1165,7 +1147,6 @@ function App() {
     if (!modifiersChanged) return;
     if (prevState.fileType !== nextState.fileType) return;
     if (!searchPerformed) return;
-    if (restoreSearchRef.current) return;
 
     const latest = latestQueryRef.current;
     if (!latest || !latest.criteria) return;
@@ -1191,22 +1172,22 @@ function App() {
     const snapshot = {
       filters: sanitizedFilters,
       fileType,
-      searchedFileType,
-      searchPerformed,
+      searchedFileType: fileType,
+      searchPerformed: false,
       sortKey,
       sortDir,
       onlyLatest,
       onlyLHQuality,
       onlyWomenOwned,
-      selectedIndex,
-      selectedCompanyKey,
-      page: currentPage,
+      selectedIndex: null,
+      selectedCompanyKey: '',
+      page: 1,
       // legacy key retained for backwards compatibility in case old snapshots exist
-      selectedBizNo: selectedCompanyKey,
+      selectedBizNo: '',
       regions: sanitizedRegions.length > 0 ? sanitizedRegions : ['전체'],
     };
     savePersisted(SEARCH_STORAGE_KEY, snapshot);
-  }, [filters, fileType, searchedFileType, searchPerformed, sortKey, sortDir, onlyLatest, onlyLHQuality, onlyWomenOwned, selectedIndex, selectedCompanyKey, regions, currentPage]);
+  }, [filters, fileType, sortKey, sortDir, onlyLatest, onlyLHQuality, onlyWomenOwned, regions]);
 
   return (
     <div className="app-shell sidebar-wide search-web-app">
