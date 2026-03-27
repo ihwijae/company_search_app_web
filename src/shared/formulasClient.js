@@ -1,9 +1,8 @@
-import * as evaluatorModule from './evaluator.js';
 import industryAverages from './industryAverages.json';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
-const resolveEvaluateScores = () => {
+const resolveEvaluateScores = (evaluatorModule) => {
   if (typeof evaluatorModule === 'function') return evaluatorModule;
   if (typeof evaluatorModule?.evaluateScores === 'function') return evaluatorModule.evaluateScores;
   if (typeof evaluatorModule?.default?.evaluateScores === 'function') return evaluatorModule.default.evaluateScores;
@@ -52,7 +51,8 @@ const formulasClient = {
   },
 
   async evaluate(payload = {}, { useDefaultsOnly = false } = {}) {
-    const evaluateScores = resolveEvaluateScores();
+    const evaluatorModule = await import('./evaluator.js');
+    const evaluateScores = resolveEvaluateScores(evaluatorModule);
     if (typeof evaluateScores !== 'function') {
       throw new Error('Local formulas evaluator is not available');
     }

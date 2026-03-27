@@ -754,6 +754,7 @@ function App() {
   const refreshFileStatuses = async () => {
     const statuses = await searchClient.checkFiles();
     setFileStatuses(statuses);
+    return statuses;
   };
   
   // 데이터 자동 갱신 이벤트 구독
@@ -783,58 +784,45 @@ function App() {
     });
     return () => { if (typeof unsubscribe === 'function') unsubscribe(); };
   }, [buildSearchCriteria, currentPage, executeSearch, fileType, searchPerformed, searchedFileType]);
-
-  // Always update admin upload statuses on any data refresh from main
-  useEffect(() => {
-    const unsub = searchClient.onDataUpdated(async () => {
-      try { await refreshFileStatuses(); } catch (e) {
-        console.error('[Renderer] refresh statuses failed:', e);
-      }
-    });
-    return () => { if (typeof unsub === 'function') unsub(); };
-  }, []);
-
-  // Always update admin upload statuses on any data refresh from main
-  useEffect(() => {
-    const unsub = searchClient.onDataUpdated(async () => {
-      try { await refreshFileStatuses(); } catch (e) {
-        console.error('[Renderer] refresh statuses failed:', e);
-      }
-    });
-    return () => { if (typeof unsub === 'function') unsub(); };
-  }, []);
   
   // [추가] 파일 선택이 성공하면 이 함수가 호출됩니다.
   const handleUploadSuccess = () => {
     console.log('[App.jsx LOG] 파일 선택 성공! 갱신 트리거를 작동시킵니다.');
-    refreshFileStatuses();
     setUploadCount(prev => prev + 1); // 카운터를 증가시켜 useEffect를 다시 실행시킵니다.
   };
 
 
   useEffect(() => {
-    const fetchRegions = async () => {
-      console.log(`[App.jsx LOG] 지역 목록(${fileType}) 가져오기 요청을 보냅니다. (트리거: uploadCount=${uploadCount})`);
-      const statuses = await searchClient.checkFiles();
-      if (statuses[fileType]) {
-        const response = await searchClient.getRegions(fileType);
-        console.log('[App.jsx LOG] 백엔드로부터 받은 지역 목록 응답:', response);
-        if (Array.isArray(response) && response.length > 1) { // '전체' 외에 다른 항목이 있는지 확인
-          setRegions(response);
+    let canceled = false;
+    const initializeSearchData = async () => {
+      try {
+        console.log(`[App.jsx LOG] 검색 초기 데이터(${fileType})를 가져옵니다. (트리거: uploadCount=${uploadCount})`);
+        const statuses = await refreshFileStatuses();
+        if (canceled) return;
+        if (statuses?.[fileType]) {
+          const response = await searchClient.getRegions(fileType);
+          if (canceled) return;
+          console.log('[App.jsx LOG] 지역 목록 응답:', response);
+          if (Array.isArray(response) && response.length > 1) {
+            setRegions(response);
+          } else {
+            setRegions(['전체']);
+          }
         } else {
+          console.log(`[App.jsx LOG] ${fileType} 파일이 없어 지역 목록을 가져오지 않습니다.`);
           setRegions(['전체']);
         }
-      } else {
-        console.log(`[App.jsx LOG] ${fileType} 파일이 없어 지역 목록을 가져오지 않습니다.`);
+      } catch (error) {
+        if (canceled) return;
+        console.error('[App.jsx LOG] 검색 초기 데이터 로딩 실패:', error);
         setRegions(['전체']);
       }
     };
-    fetchRegions();
+    initializeSearchData();
+    return () => {
+      canceled = true;
+    };
   }, [fileType, uploadCount]); // [수정] uploadCount가 바뀔 때마다 이 함수가 다시 실행됩니다.
-
-  useEffect(() => {
-    refreshFileStatuses();
-  }, []);
 
 
 

@@ -124,6 +124,35 @@ const persistDataset = async (dataset) => {
   }));
 };
 
+const removePersistedDataset = async (type) => {
+  await withStore('readwrite', (store) => new Promise((resolve, reject) => {
+    const request = store.delete(type);
+    request.onerror = () => reject(request.error || new Error('Failed to remove dataset'));
+    request.onsuccess = () => resolve(request.result);
+  }));
+};
+
+const fetchJson = async (url, init = {}) => {
+  const response = await fetch(url, init);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.message || `Request failed: ${response.status}`);
+  }
+  return payload;
+};
+
+const normalizeDataset = (dataset, fileType, fallbackVersion = '') => {
+  const nextType = String(dataset?.type || fileType || '').trim().toLowerCase();
+  return {
+    type: nextType,
+    fileName: String(dataset?.fileName || ''),
+    updatedAt: dataset?.updatedAt || new Date().toISOString(),
+    version: String(dataset?.version || fallbackVersion || dataset?.updatedAt || ''),
+    sheetNames: Array.isArray(dataset?.sheetNames) ? dataset.sheetNames : [],
+    companies: Array.isArray(dataset?.companies) ? dataset.companies : [],
+  };
+};
+
 const normalizeCellText = (value) => {
   if (value === null || value === undefined) return '';
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
@@ -589,9 +618,10 @@ export const webSearchStore = {
       console.warn('[webSearchStore] exceljs parse failed, falling back to xlsx:', error);
       dataset = extractCompaniesWithXlsxFallback(buffer, fileType, file.name);
     }
-    datasets.set(fileType, dataset);
+    const normalizedDataset = normalizeDataset(dataset, fileType, dataset?.updatedAt || '');
+    datasets.set(fileType, normalizedDataset);
     try {
-      await persistDataset(dataset);
+      await persistDataset(normalizedDataset);
     } catch (error) {
       console.warn('[webSearchStore] dataset persistence failed:', error);
     }
@@ -604,6 +634,66 @@ export const webSearchStore = {
         fileName: file.name,
         count: dataset.companies.length,
       },
+    };
+  },
+
+  getDatasetVersion(fileType) {
+    return String(datasets.get(fileType)?.version || '');
+  },
+
+  async syncSharedDataset(fileType, meta = null) {
+    if (!DATASET_TYPES.includes(fileType)) {
+      throw new Error('지원하지 않는 파일 유형입니다.');
+    }
+    await this.ensureLoaded();
+
+    const current = datasets.get(fileType);
+    const targetVersion = String(meta?.uploadedAt || meta?.parsedPathname || meta?.pathname || '');
+    if (current?.companies?.length && current.version && targetVersion && current.version === targetVersion) {
+      return { updated: false, dataset: current };
+    }
+
+    const payload = await fetchJson(`/api/datasets/snapshot?fileType=${encodeURIComponent(fileType)}`);
+    const normalizedDataset = normalizeDataset(payload?.data || {}, fileType, targetVersion);
+    datasets.set(fileType, normalizedDataset);
+    try {
+      await persistDataset(normalizedDataset);
+    } catch (error) {
+      console.warn('[webSearchStore] shared dataset persistence failed:', error);
+    }
+    notifyListeners({ type: fileType, source: 'shared-sync' });
+    return { updated: true, dataset: normalizedDataset };
+  },
+
+  async syncSharedDatasets(statusPayload, { types = DATASET_TYPES } = {}) {
+    await this.ensureLoaded();
+    const normalizedTypes = Array.isArray(types)
+      ? types.filter((type) => DATASET_TYPES.includes(type))
+      : DATASET_TYPES;
+    const metaMap = statusPayload?.meta?.datasets || {};
+    const availableTypes = normalizedTypes.filter((type) => metaMap[type]);
+    const missingTypes = normalizedTypes.filter((type) => !metaMap[type]);
+
+    missingTypes.forEach((type) => {
+      if (datasets.has(type)) {
+        datasets.delete(type);
+      }
+    });
+    await Promise.all(missingTypes.map(async (type) => {
+      try {
+        await removePersistedDataset(type);
+      } catch (error) {
+        console.warn('[webSearchStore] shared dataset removal failed:', error);
+      }
+    }));
+
+    await Promise.all(availableTypes.map((type) => this.syncSharedDataset(type, metaMap[type])));
+    return {
+      success: true,
+      data: normalizedTypes.reduce((acc, type) => {
+        acc[type] = Array.isArray(datasets.get(type)?.companies) && datasets.get(type).companies.length > 0;
+        return acc;
+      }, {}),
     };
   },
 

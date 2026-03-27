@@ -25,6 +25,56 @@ const fetchJson = async (url, init = {}) => {
   return payload;
 };
 
+const DATASET_TYPES = ['eung', 'tongsin', 'sobang'];
+const STATUS_CACHE_TTL_MS = 30 * 1000;
+let sharedStatusCache = { payload: null, storedAt: 0, promise: null };
+
+const normalizeFileType = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return 'eung';
+  if (normalized === '전기') return 'eung';
+  if (normalized === '통신') return 'tongsin';
+  if (normalized === '소방') return 'sobang';
+  if (normalized === '전체') return 'all';
+  return normalized;
+};
+
+const shouldUseWebStore = () => !getElectronApi() && webSearchStore.isAvailable();
+
+const getSharedStatus = async ({ force = false } = {}) => {
+  const now = Date.now();
+  if (!force && sharedStatusCache.payload && (now - sharedStatusCache.storedAt) < STATUS_CACHE_TTL_MS) {
+    return sharedStatusCache.payload;
+  }
+  if (!force && sharedStatusCache.promise) {
+    return sharedStatusCache.promise;
+  }
+  const request = fetchJson('/api/datasets/status')
+    .then((payload) => {
+      sharedStatusCache = {
+        payload,
+        storedAt: Date.now(),
+        promise: null,
+      };
+      return payload;
+    })
+    .catch((error) => {
+      sharedStatusCache.promise = null;
+      throw error;
+    });
+  sharedStatusCache.promise = request;
+  return request;
+};
+
+const syncSharedDatasetsIfNeeded = async (fileType) => {
+  if (!shouldUseWebStore()) return null;
+  const payload = await getSharedStatus();
+  const normalized = normalizeFileType(fileType || 'eung');
+  const types = normalized === 'all' ? DATASET_TYPES : [normalized];
+  await webSearchStore.syncSharedDatasets(payload, { types });
+  return payload;
+};
+
 const normalizeRegionsResponse = (payload) => {
   if (Array.isArray(payload)) return payload;
   if (payload && Array.isArray(payload.data)) return payload.data;
@@ -81,6 +131,10 @@ export const searchClient = {
       return api.searchCompanies(criteria, fileType, options);
     }
     try {
+      if (shouldUseWebStore()) {
+        await syncSharedDatasetsIfNeeded(fileType);
+        return await webSearchStore.searchCompanies(criteria, normalizeFileType(fileType), options);
+      }
       return await fetchJson('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -96,7 +150,10 @@ export const searchClient = {
     const api = getElectronApi();
     if (!api || typeof api.checkFiles !== 'function') {
       try {
-        const payload = await fetchJson('/api/datasets/status');
+        const payload = await getSharedStatus();
+        if (shouldUseWebStore()) {
+          await webSearchStore.syncSharedDatasets(payload);
+        }
         return payload?.data || { eung: false, tongsin: false, sobang: false };
       } catch (error) {
         console.warn('[searchClient] shared status failed, fallback to local store:', error);
@@ -110,6 +167,11 @@ export const searchClient = {
     const api = getElectronApi();
     if (!api || typeof api.getRegions !== 'function') {
       try {
+        if (shouldUseWebStore()) {
+          await syncSharedDatasetsIfNeeded(fileType);
+          const payload = await webSearchStore.getRegions(normalizeFileType(fileType));
+          return normalizeRegionsResponse(payload);
+        }
         const query = new URLSearchParams({ fileType }).toString();
         const payload = await fetchJson(`/api/regions?${query}`);
         return normalizeRegionsResponse(payload);

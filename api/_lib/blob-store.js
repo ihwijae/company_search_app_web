@@ -4,6 +4,8 @@ const { parseDatasetBuffer } = require('./dataset-parser');
 const DATASET_TYPES = ['eung', 'tongsin', 'sobang'];
 const MANIFEST_PATH = 'company-search/datasets/manifest.json';
 const datasetCache = new Map();
+const MANIFEST_CACHE_TTL_MS = 30 * 1000;
+let manifestCache = { value: null, storedAt: 0 };
 
 const resolveToken = () => process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL_BLOB_READ_WRITE_TOKEN || '';
 
@@ -41,12 +43,19 @@ async function writeJsonBlob(pathname, value) {
 }
 
 async function readManifest() {
+  if (manifestCache.value && (Date.now() - manifestCache.storedAt) < MANIFEST_CACHE_TTL_MS) {
+    return manifestCache.value;
+  }
   const manifest = await readJsonBlob(MANIFEST_PATH);
-  if (manifest && typeof manifest === 'object') return manifest;
-  return {
+  const resolved = manifest && typeof manifest === 'object' ? manifest : {
     updatedAt: null,
     datasets: {},
   };
+  manifestCache = {
+    value: resolved,
+    storedAt: Date.now(),
+  };
+  return resolved;
 }
 
 async function writeManifest(manifest) {
@@ -56,6 +65,10 @@ async function writeManifest(manifest) {
     datasets: (manifest && manifest.datasets) || {},
   };
   await writeJsonBlob(MANIFEST_PATH, next);
+  manifestCache = {
+    value: next,
+    storedAt: Date.now(),
+  };
   return next;
 }
 
