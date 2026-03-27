@@ -6,6 +6,7 @@ import FeedbackProvider, { useFeedback } from '../../../../components/FeedbackPr
 import seedContacts from '../addressBook.seed.json';
 import { loadPersisted, savePersisted } from '../../../../shared/persistence.js';
 import mailAddressBookClient from '../../../../shared/mailAddressBookClient.js';
+import mailClient from '../../../../shared/mailClient.js';
 
 const DEFAULT_PROJECT_INFO = {
   announcementNumber: '공고번호를 불러오세요',
@@ -45,13 +46,40 @@ const buildAttachmentDescriptor = (raw) => {
     return { path, name };
   }
   const path = trimValue(raw.path || raw.webkitRelativePath || '');
+  const fileName = raw.name || raw.filename || raw.label || path.split(/[/\\]/).pop();
+  if (!path && typeof raw.arrayBuffer === 'function' && fileName) {
+    return {
+      name: fileName,
+      file: raw,
+    };
+  }
   if (!path) return null;
-  const name = raw.name || raw.filename || raw.label || path.split(/[/\\]/).pop();
+  const name = fileName;
   return { path, name };
 };
 const normalizeAttachmentList = (list = []) => {
   if (!Array.isArray(list) || !list.length) return [];
   return list.map(buildAttachmentDescriptor).filter(Boolean);
+};
+const serializeAttachmentListForPersist = (list = []) => {
+  if (!Array.isArray(list) || !list.length) return [];
+  return list
+    .map((item) => {
+      if (!item) return null;
+      if (item.path) {
+        return {
+          path: item.path,
+          name: item.name || '',
+        };
+      }
+      if (item.name) {
+        return {
+          name: item.name,
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
 };
 const sanitizeContactsList = (list = []) => {
   if (!Array.isArray(list) || !list.length) return [];
@@ -86,7 +114,7 @@ const sanitizeRecipientDraftList = (list = []) => {
       email: item.email || '',
       tenderAmount: item.tenderAmount || '',
       workerName: item.workerName || '',
-      attachments: normalizeAttachmentList(item.attachments),
+      attachments: serializeAttachmentListForPersist(item.attachments),
       status: item.status || '대기',
     };
   }).filter(Boolean);
@@ -102,7 +130,7 @@ const serializeRecipientsForPersist = (recipients = []) => {
       email: item.email || '',
       tenderAmount: item.tenderAmount || '',
       workerName: item.workerName || '',
-      attachments: normalizeAttachmentList(item.attachments),
+      attachments: serializeAttachmentListForPersist(item.attachments),
       status: item.status || '대기',
     };
   });
@@ -123,6 +151,30 @@ const stripHtmlTags = (html) => {
     .replace(/<[^>]+>/g, '')
     .replace(/\n{2,}/g, '\n\n')
     .trim();
+};
+const attachmentToPayload = async (attachment) => {
+  if (!attachment) return null;
+  if (attachment.path) {
+    return {
+      path: attachment.path,
+      filename: attachment.name || attachment.path.split(/[/\\]/).pop(),
+    };
+  }
+  if (attachment.file && typeof attachment.file.arrayBuffer === 'function') {
+    const arrayBuffer = await attachment.file.arrayBuffer();
+    let binary = '';
+    const bytes = new Uint8Array(arrayBuffer);
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    return {
+      filename: attachment.name || attachment.file.name || 'attachment',
+      contentType: attachment.file.type || undefined,
+      contentBase64: btoa(binary),
+    };
+  }
+  return null;
 };
 const DEFAULT_SUBJECT_TEMPLATE = '{{owner}} "{{announcementNumber}} {{announcementName}}"_{{vendorName}}';
 const DEFAULT_LH_BODY_TEMPLATE = `
@@ -1092,12 +1144,6 @@ function MailAutomationPageInner() {
       return;
     }
 
-    const mailApi = window.electronAPI?.mail;
-    if (typeof mailApi?.sendBatch !== 'function') {
-      showStatusMessage('이 빌드에서는 메일 발송 기능을 사용할 수 없습니다.', { type: 'warning' });
-      return;
-    }
-
     let smtpConfig;
     try {
       smtpConfig = resolveSmtpConfig();
@@ -1108,8 +1154,8 @@ function MailAutomationPageInner() {
 
     const progressChannel = `mail:progress:${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     let unsubscribeProgress = null;
-    if (typeof mailApi?.onProgress === 'function') {
-      unsubscribeProgress = mailApi.onProgress(progressChannel, (count) => {
+    if (mailClient.supportsProgress()) {
+      unsubscribeProgress = mailClient.onProgress(progressChannel, (count) => {
         setProgressModal((prev) => ({ ...prev, processed: Math.min(count || 0, prev.total) }));
       });
     }
@@ -1120,37 +1166,30 @@ function MailAutomationPageInner() {
     setSending(true);
     showStatusMessage(`총 ${ready.length}건 발송을 시작합니다...`);
 
-    const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
-    const messages = ready.map((recipient) => {
-      const context = buildRecipientContext(recipient);
-      const resolvedSubject = replaceTemplateTokens(subjectTemplate || '', context).trim() || `${context.announcementName || '입찰'} 안내`;
-      const resolvedBodyHtml = replaceTemplateTokens(bodyTemplate || '', context).trim();
-      const plainText = stripHtmlTags(resolvedBodyHtml) || buildFallbackText(context);
-      const recipientAddress = buildRecipientHeader(recipient);
-      const attachments = (recipient.attachments || [])
-        .map((file) => {
-          const filePath = file?.path || file?.webkitRelativePath;
-          if (!filePath) return null;
-          const filename = file?.name || filePath.split(/[/\\]/).pop();
-          return { path: filePath, filename };
-        })
-        .filter(Boolean);
-      return {
-        recipientId: recipient.id,
-        to: recipientAddress,
-        from: smtpConfig.senderEmail,
-        fromName: smtpConfig.senderName,
-        replyTo: smtpConfig.replyTo || undefined,
-        subject: resolvedSubject,
-        text: `${plainText}\n\n발송 시각: ${timestamp}`,
-        html: resolvedBodyHtml || undefined,
-        attachments,
-      };
-    });
-
     try {
+      const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
+      const messages = await Promise.all(ready.map(async (recipient) => {
+        const context = buildRecipientContext(recipient);
+        const resolvedSubject = replaceTemplateTokens(subjectTemplate || '', context).trim() || `${context.announcementName || '입찰'} 안내`;
+        const resolvedBodyHtml = replaceTemplateTokens(bodyTemplate || '', context).trim();
+        const plainText = stripHtmlTags(resolvedBodyHtml) || buildFallbackText(context);
+        const recipientAddress = buildRecipientHeader(recipient);
+        const attachments = (await Promise.all((recipient.attachments || []).map(attachmentToPayload))).filter(Boolean);
+        return {
+          recipientId: recipient.id,
+          to: recipientAddress,
+          from: smtpConfig.senderEmail,
+          fromName: smtpConfig.senderName,
+          replyTo: smtpConfig.replyTo || undefined,
+          subject: resolvedSubject,
+          text: `${plainText}\n\n발송 시각: ${timestamp}`,
+          html: resolvedBodyHtml || undefined,
+          attachments,
+        };
+      }));
+
       const delayMs = Math.max(0, Number(sendDelay) || 0) * 1000;
-      const response = await mailApi.sendBatch({
+      const response = await mailClient.sendBatch({
         connection: smtpConfig.connection,
         messages,
         delayMs,
@@ -1197,11 +1236,6 @@ function MailAutomationPageInner() {
 
   const handleTestMail = React.useCallback(async () => {
     if (!ensureOwnerSelected()) return;
-    const api = window.electronAPI?.mail?.sendTest;
-    if (typeof api !== 'function') {
-      showStatusMessage('이 빌드에서는 테스트 메일 기능을 사용할 수 없습니다.', { type: 'warning' });
-      return;
-    }
     let smtpConfig;
     try {
       smtpConfig = resolveSmtpConfig();
@@ -1255,7 +1289,7 @@ function MailAutomationPageInner() {
 
     showStatusMessage('테스트 메일을 보내는 중입니다...');
     try {
-      const response = await api({
+      const response = await mailClient.sendTest({
         connection,
         message: {
           from: trimmedSenderEmail,

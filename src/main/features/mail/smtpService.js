@@ -59,6 +59,18 @@ const sanitizeAttachments = (attachments = []) => attachments
         content: item.content,
       };
     }
+    if (item.contentBase64 && item.filename) {
+      try {
+        const buffer = Buffer.from(String(item.contentBase64), 'base64');
+        return {
+          filename: item.filename,
+          content: buffer,
+          contentType: item.contentType || undefined,
+        };
+      } catch {
+        return null;
+      }
+    }
     return null;
   })
   .filter(Boolean);
