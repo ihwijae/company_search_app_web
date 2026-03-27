@@ -730,7 +730,7 @@ export const webSearchStore = {
         if (!dataset?.companies?.length) return;
         dataset.companies.forEach((item) => merged.push({ ...item, _file_type: type }));
       });
-      const processed = postProcessResults(merged, normalizedOptions || {});
+      const processed = searchCompaniesInDataset(merged, normalizedCriteria, normalizedOptions || {});
       return { success: true, data: processed.items, meta: processed.meta };
     }
 
