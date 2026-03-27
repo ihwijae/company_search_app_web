@@ -1155,14 +1155,6 @@ function MailAutomationPageInner() {
       return;
     }
 
-    const progressChannel = `mail:progress:${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    let unsubscribeProgress = null;
-    if (mailClient.supportsProgress()) {
-      unsubscribeProgress = mailClient.onProgress(progressChannel, (count) => {
-        setProgressModal((prev) => ({ ...prev, processed: Math.min(count || 0, prev.total) }));
-      });
-    }
-
     const readyIds = new Set(ready.map((item) => item.id));
     setProgressModal({ open: true, total: ready.length, processed: 0, complete: false });
     setRecipients((prev) => prev.map((item) => (readyIds.has(item.id) ? { ...item, status: '발송 중' } : item)));
@@ -1170,15 +1162,19 @@ function MailAutomationPageInner() {
     showStatusMessage(`총 ${ready.length}건 발송을 시작합니다...`);
 
     try {
-      const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
-      const messages = await Promise.all(ready.map(async (recipient) => {
+      const delayMs = Math.max(0, Number(sendDelay) || 0) * 1000;
+      const results = [];
+      let processed = 0;
+
+      for (const recipient of ready) {
+        const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
         const context = buildRecipientContext(recipient);
         const resolvedSubject = replaceTemplateTokens(subjectTemplate || '', context).trim() || `${context.announcementName || '입찰'} 안내`;
         const resolvedBodyHtml = replaceTemplateTokens(bodyTemplate || '', context).trim();
         const plainText = stripHtmlTags(resolvedBodyHtml) || buildFallbackText(context);
         const recipientAddress = buildRecipientHeader(recipient);
         const attachments = (await Promise.all((recipient.attachments || []).map(attachmentToPayload))).filter(Boolean);
-        return {
+        const message = {
           recipientId: recipient.id,
           to: recipientAddress,
           from: smtpConfig.senderEmail,
@@ -1189,39 +1185,60 @@ function MailAutomationPageInner() {
           html: resolvedBodyHtml || undefined,
           attachments,
         };
-      }));
 
-      const delayMs = Math.max(0, Number(sendDelay) || 0) * 1000;
-      const response = await mailClient.sendBatch({
-        connection: smtpConfig.connection,
-        messages,
-        delayMs,
-        progressChannel,
-      });
-      if (response?.success) {
-        const results = response.results || [];
-        const resultMap = new Map(results.map((item) => [item.recipientId, item]));
-        setRecipients((prev) => prev.map((item) => {
-          if (!readyIds.has(item.id)) return item;
-          const result = resultMap.get(item.id);
-          if (!result) return { ...item, status: '완료' };
-          return { ...item, status: result.success ? '완료' : '실패' };
-        }));
-        setProgressModal((prev) => ({ ...prev, processed: ready.length, complete: true }));
-        const successCount = results.filter((item) => item.success).length;
-        const failures = results.filter((item) => !item.success);
-        const failCount = failures.length;
-        if (failCount > 0) {
-          const reason = failures[0]?.error || '원인을 확인해 주세요.';
-          console.error('[mail] 일부 발송 실패', failures);
-          showStatusMessage(`발송 완료: 성공 ${successCount}건 / 실패 ${failCount}건 (예: ${reason})`, { type: 'warning' });
-        } else {
-          showStatusMessage(`발송 완료: 성공 ${successCount}건`, { type: 'success' });
+        try {
+          const response = await mailClient.sendBatch({
+            connection: smtpConfig.connection,
+            messages: [message],
+            delayMs: 0,
+          });
+          const result = Array.isArray(response?.results) && response.results.length
+            ? response.results[0]
+            : { success: Boolean(response?.success), recipientId: recipient.id };
+          results.push(result);
+          processed += 1;
+          setRecipients((prev) => prev.map((item) => (
+            item.id === recipient.id ? { ...item, status: result.success ? '완료' : '실패' } : item
+          )));
+          setProgressModal((prev) => ({ ...prev, processed, complete: false }));
+          showStatusMessage(
+            result.success
+              ? `${processed}/${ready.length}건 완료: ${recipient.vendorName || recipient.email || '업체'}`
+              : `${processed}/${ready.length}건 실패: ${recipient.vendorName || recipient.email || '업체'} (${result.error || '발송 실패'})`,
+            { type: result.success ? 'success' : 'warning' },
+          );
+        } catch (error) {
+          console.error('[mail] send item failed', error);
+          const failed = {
+            success: false,
+            recipientId: recipient.id,
+            to: recipientAddress,
+            error: error?.message || '발송 실패',
+          };
+          results.push(failed);
+          processed += 1;
+          setRecipients((prev) => prev.map((item) => (
+            item.id === recipient.id ? { ...item, status: '실패' } : item
+          )));
+          setProgressModal((prev) => ({ ...prev, processed, complete: false }));
+          showStatusMessage(`${processed}/${ready.length}건 실패: ${recipient.vendorName || recipient.email || '업체'} (${failed.error})`, { type: 'warning' });
         }
+
+        if (delayMs > 0 && processed < ready.length) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+      }
+
+      setProgressModal((prev) => ({ ...prev, processed, complete: true }));
+      const successCount = results.filter((item) => item.success).length;
+      const failures = results.filter((item) => !item.success);
+      const failCount = failures.length;
+      if (failCount > 0) {
+        const reason = failures[0]?.error || '원인을 확인해 주세요.';
+        console.error('[mail] 일부 발송 실패', failures);
+        showStatusMessage(`발송 완료: 성공 ${successCount}건 / 실패 ${failCount}건 (예: ${reason})`, { type: 'warning' });
       } else {
-        setRecipients((prev) => prev.map((item) => (readyIds.has(item.id) ? { ...item, status: '실패' } : item)));
-        setProgressModal((prev) => ({ ...prev, complete: true }));
-        showStatusMessage(response?.message || '메일 발송에 실패했습니다.', { type: 'error' });
+        showStatusMessage(`발송 완료: 성공 ${successCount}건`, { type: 'success' });
       }
     } catch (error) {
       console.error('[mail] send batch failed', error);
@@ -1231,9 +1248,6 @@ function MailAutomationPageInner() {
     } finally {
       setSending(false);
       setTimeout(() => setProgressModal({ open: false, total: 0, processed: 0, complete: false }), 800);
-      if (unsubscribeProgress) {
-        try { unsubscribeProgress(); } catch {}
-      }
     }
   }, [sending, ensureOwnerSelected, recipients, resolveSmtpConfig, subjectTemplate, bodyTemplate, buildRecipientContext, buildFallbackText, sendDelay, buildRecipientHeader, notify, showStatusMessage]);
 
