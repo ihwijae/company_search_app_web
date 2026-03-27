@@ -160,18 +160,21 @@ const attachmentToPayload = async (attachment) => {
       filename: attachment.name || attachment.path.split(/[/\\]/).pop(),
     };
   }
-  if (attachment.file && typeof attachment.file.arrayBuffer === 'function') {
-    const arrayBuffer = await attachment.file.arrayBuffer();
-    let binary = '';
-    const bytes = new Uint8Array(arrayBuffer);
-    const chunkSize = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-    }
+  if (attachment.blobPathname) {
     return {
+      blobPathname: attachment.blobPathname,
+      filename: attachment.name || attachment.blobPathname.split(/[/\\]/).pop(),
+      contentType: attachment.contentType || undefined,
+    };
+  }
+  if (attachment.file && typeof attachment.file.arrayBuffer === 'function') {
+    const uploaded = await mailClient.uploadAttachment(attachment.file, {
+      pathname: `company-search/mail-attachments/${Date.now()}-${attachment.name || attachment.file.name || 'attachment'}`,
+    });
+    return {
+      blobPathname: uploaded.pathname,
       filename: attachment.name || attachment.file.name || 'attachment',
       contentType: attachment.file.type || undefined,
-      contentBase64: btoa(binary),
     };
   }
   return null;

@@ -1,6 +1,7 @@
 const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
+const { get, del } = require('@vercel/blob');
 
 const sanitizeString = (value) => (typeof value === 'string' ? value.trim() : '');
 
@@ -16,6 +17,55 @@ const normalizePort = (value, fallback = 465) => {
   if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
   return numeric;
 };
+
+const resolveBlobToken = () => process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL_BLOB_READ_WRITE_TOKEN || '';
+
+async function streamToBuffer(stream) {
+  if (!stream) return Buffer.alloc(0);
+  const response = new Response(stream);
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
+async function resolveBlobAttachment(item) {
+  const pathname = sanitizeString(item.blobPathname || item.pathname);
+  if (!pathname) return null;
+  const token = resolveBlobToken();
+  if (!token) throw new Error('Blob 토큰이 설정되지 않아 첨부를 읽을 수 없습니다.');
+  const result = await get(pathname, { access: 'private', token, useCache: false });
+  if (!result || result.statusCode !== 200) {
+    throw new Error(`첨부를 읽을 수 없습니다: ${pathname}`);
+  }
+  const content = await streamToBuffer(result.stream);
+  return {
+    filename: item.filename || path.basename(pathname),
+    content,
+    contentType: item.contentType || undefined,
+  };
+}
+
+function collectBlobAttachmentPaths(messages = []) {
+  const paths = new Set();
+  messages.forEach((message) => {
+    (message?.attachments || []).forEach((attachment) => {
+      const pathname = sanitizeString(attachment?.blobPathname || attachment?.pathname);
+      if (pathname) paths.add(pathname);
+    });
+  });
+  return Array.from(paths);
+}
+
+async function cleanupBlobAttachments(pathnames = []) {
+  const token = resolveBlobToken();
+  if (!token || !Array.isArray(pathnames) || pathnames.length === 0) return;
+  await Promise.all(pathnames.map(async (pathname) => {
+    try {
+      await del(pathname, { token });
+    } catch (error) {
+      console.warn('[mail] failed to delete temp attachment:', pathname, error?.message || error);
+    }
+  }));
+}
 
 const createTransporter = (connection = {}) => {
   const auth = connection.auth || {};
@@ -37,8 +87,8 @@ const createTransporter = (connection = {}) => {
   });
 };
 
-const sanitizeAttachments = (attachments = []) => attachments
-  .map((item) => {
+const sanitizeAttachments = async (attachments = []) => {
+  const resolved = await Promise.all(attachments.map(async (item) => {
     if (!item) return null;
     if (item.path) {
       const resolved = sanitizeString(item.path);
@@ -52,6 +102,9 @@ const sanitizeAttachments = (attachments = []) => attachments
         filename: item.filename || path.basename(resolved),
         path: resolved,
       };
+    }
+    if (item.blobPathname || item.pathname) {
+      return resolveBlobAttachment(item);
     }
     if (item.content && item.filename) {
       return {
@@ -72,8 +125,9 @@ const sanitizeAttachments = (attachments = []) => attachments
       }
     }
     return null;
-  })
-  .filter(Boolean);
+  }));
+  return resolved.filter(Boolean);
+};
 
 const sendWithTransporter = async (transporter, message = {}) => {
   const fromAddress = sanitizeString(message.from);
@@ -88,7 +142,7 @@ const sendWithTransporter = async (transporter, message = {}) => {
     text: message.text ? String(message.text) : '',
     html: message.html ? String(message.html) : undefined,
   };
-  const attachments = sanitizeAttachments(message.attachments);
+  const attachments = await sanitizeAttachments(message.attachments);
   if (attachments.length) {
     payload.attachments = attachments;
   }
@@ -121,6 +175,7 @@ async function sendBulkMail(payload = {}) {
   }
   const transporter = createTransporter(connection || {});
   const results = [];
+  const tempBlobAttachments = collectBlobAttachmentPaths(messages);
   try {
     let processed = 0;
     for (const message of messages) {
@@ -150,6 +205,7 @@ async function sendBulkMail(payload = {}) {
     }
   } finally {
     try { await transporter.close?.(); } catch {}
+    await cleanupBlobAttachments(tempBlobAttachments);
   }
   return results;
 }
