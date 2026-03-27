@@ -317,6 +317,22 @@ function AdminUpload({ fileStatuses, onUploadSuccess }) {
   );
 }
 
+function BundledDatasetNotice() {
+  return (
+    <div className="admin-upload-section is-open">
+      <div className="admin-header">
+        <h2 className="sub-title">정적 데이터셋 사용 중</h2>
+      </div>
+      <div className="uploaders-grid" style={{ display: 'block', padding: 16 }}>
+        <p style={{ margin: 0, lineHeight: 1.6 }}>
+          웹 버전은 프로젝트에 포함된 전기/통신/소방 데이터셋을 사용합니다.
+          데이터 변경은 `db/` 폴더의 엑셀 파일을 교체한 뒤 다시 빌드/배포하면 반영됩니다.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 const DISPLAY_ORDER = [ "검색된 회사", "대표자", "사업자번호", "지역", "시평", "3년 실적", "5년 실적", "부채비율", "유동비율", "영업기간", "신용평가", "여성기업", "중소기업", "일자리창출", "품질평가", "비고" ];
 
 function RegionSelector({
@@ -462,6 +478,7 @@ function App() {
   const currentSmppResult = selectedBizNumber ? smppResults[selectedBizNumber] : null;
   const smppBusyForSelected = smppStatus.busy && smppStatus.bizNo === selectedBizNumber;
   const smppSupported = searchClient.supportsSmppLookup();
+  const bundledDatasets = searchClient.usesBundledDatasets();
 
   useEffect(() => {
     selectedCompanyKeyRef.current = selectedCompanyKey;
@@ -1183,7 +1200,13 @@ function App() {
         active={activeMenu}
         onSelect={(k) => {
           setActiveMenu(k);
-          if (k === 'upload') setUploadOpen(true);
+          if (k === 'upload') {
+            if (searchClient.supportsDatasetUpload()) {
+              setUploadOpen(true);
+            } else {
+              setDialog({ isOpen: true, message: '웹 버전은 프로젝트에 포함된 정적 업체 데이터셋을 사용합니다.' });
+            }
+          }
           if (k === 'agreements') window.location.hash = '#/agreement-board';
           if (k === 'region-search') window.location.hash = '#/region-search';
           if (k === 'agreements-sms') window.location.hash = '#/agreements';
@@ -1581,7 +1604,9 @@ function App() {
         onClose={() => setDialog({ isOpen: false, message: '' })}
       />
       <Drawer open={uploadOpen} onClose={() => setUploadOpen(false)}>
-        <AdminUpload fileStatuses={fileStatuses} onUploadSuccess={handleUploadSuccess} />
+        {bundledDatasets
+          ? <BundledDatasetNotice />
+          : <AdminUpload fileStatuses={fileStatuses} onUploadSuccess={handleUploadSuccess} />}
       </Drawer>
     </div>
   );

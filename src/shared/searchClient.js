@@ -28,6 +28,7 @@ const fetchJson = async (url, init = {}) => {
 const DATASET_TYPES = ['eung', 'tongsin', 'sobang'];
 const STATUS_CACHE_TTL_MS = 30 * 1000;
 let sharedStatusCache = { payload: null, storedAt: 0, promise: null };
+let staticManifestCache = { payload: null, storedAt: 0, promise: null };
 
 const normalizeFileType = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -40,6 +41,31 @@ const normalizeFileType = (value) => {
 };
 
 const shouldUseWebStore = () => !getElectronApi() && webSearchStore.isAvailable();
+
+const getStaticManifest = async ({ force = false } = {}) => {
+  const now = Date.now();
+  if (!force && staticManifestCache.payload && (now - staticManifestCache.storedAt) < STATUS_CACHE_TTL_MS) {
+    return staticManifestCache.payload;
+  }
+  if (!force && staticManifestCache.promise) {
+    return staticManifestCache.promise;
+  }
+  const request = fetchJson('/datasets/manifest.json')
+    .then((payload) => {
+      staticManifestCache = {
+        payload,
+        storedAt: Date.now(),
+        promise: null,
+      };
+      return payload;
+    })
+    .catch((error) => {
+      staticManifestCache.promise = null;
+      throw error;
+    });
+  staticManifestCache.promise = request;
+  return request;
+};
 
 const getSharedStatus = async ({ force = false } = {}) => {
   const now = Date.now();
@@ -68,10 +94,10 @@ const getSharedStatus = async ({ force = false } = {}) => {
 
 const syncSharedDatasetsIfNeeded = async (fileType) => {
   if (!shouldUseWebStore()) return null;
-  const payload = await getSharedStatus();
+  const payload = await getStaticManifest();
   const normalized = normalizeFileType(fileType || 'eung');
   const types = normalized === 'all' ? DATASET_TYPES : [normalized];
-  await webSearchStore.syncSharedDatasets(payload, { types });
+  await webSearchStore.syncStaticDatasets(payload, { types });
   return payload;
 };
 
@@ -113,16 +139,7 @@ export const searchClient = {
       throw new Error('Electron 환경에서는 기존 파일 선택 흐름을 사용하세요.');
     }
     const fileBase64 = await readFileAsBase64(file);
-    return fetchJson('/api/datasets/upload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fileType,
-        fileName: file.name,
-        contentType: file.type,
-        fileBase64,
-      }),
-    });
+    return webSearchStore.uploadFile(fileType, file);
   },
 
   async searchCompanies(criteria, fileType, options) {
@@ -150,13 +167,16 @@ export const searchClient = {
     const api = getElectronApi();
     if (!api || typeof api.checkFiles !== 'function') {
       try {
-        const payload = await getSharedStatus();
+        const payload = await getStaticManifest();
         if (shouldUseWebStore()) {
-          await webSearchStore.syncSharedDatasets(payload);
+          await webSearchStore.syncStaticDatasets(payload);
         }
-        return payload?.data || { eung: false, tongsin: false, sobang: false };
+        return DATASET_TYPES.reduce((acc, type) => {
+          acc[type] = Boolean(payload?.datasets?.[type]);
+          return acc;
+        }, {});
       } catch (error) {
-        console.warn('[searchClient] shared status failed, fallback to local store:', error);
+        console.warn('[searchClient] static status failed, fallback to local store:', error);
         return webSearchStore.checkFiles();
       }
     }
@@ -211,7 +231,16 @@ export const searchClient = {
   },
 
   supportsBrowserUpload() {
-    return !getElectronApi() && webSearchStore.isAvailable();
+    return false;
+  },
+
+  supportsDatasetUpload() {
+    const api = getElectronApi();
+    return Boolean(api && typeof api.selectFile === 'function');
+  },
+
+  usesBundledDatasets() {
+    return !getElectronApi();
   },
 };
 

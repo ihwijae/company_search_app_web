@@ -141,6 +141,15 @@ const fetchJson = async (url, init = {}) => {
   return payload;
 };
 
+const fetchStaticDataset = async (type) => {
+  const response = await fetch(`/datasets/${encodeURIComponent(type)}.json`);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.message || `Static dataset request failed: ${response.status}`);
+  }
+  return payload;
+};
+
 const normalizeDataset = (dataset, fileType, fallbackVersion = '') => {
   const nextType = String(dataset?.type || fileType || '').trim().toLowerCase();
   return {
@@ -688,6 +697,60 @@ export const webSearchStore = {
     }));
 
     await Promise.all(availableTypes.map((type) => this.syncSharedDataset(type, metaMap[type])));
+    return {
+      success: true,
+      data: normalizedTypes.reduce((acc, type) => {
+        acc[type] = Array.isArray(datasets.get(type)?.companies) && datasets.get(type).companies.length > 0;
+        return acc;
+      }, {}),
+    };
+  },
+
+  async syncStaticDataset(fileType, meta = null) {
+    if (!DATASET_TYPES.includes(fileType)) {
+      throw new Error('지원하지 않는 파일 유형입니다.');
+    }
+    await this.ensureLoaded();
+
+    const current = datasets.get(fileType);
+    const targetVersion = String(meta?.version || meta?.updatedAt || '');
+    if (current?.companies?.length && current.version && targetVersion && current.version === targetVersion) {
+      return { updated: false, dataset: current };
+    }
+
+    const payload = await fetchStaticDataset(fileType);
+    const normalizedDataset = normalizeDataset(payload || {}, fileType, targetVersion);
+    datasets.set(fileType, normalizedDataset);
+    try {
+      await persistDataset(normalizedDataset);
+    } catch (error) {
+      console.warn('[webSearchStore] static dataset persistence failed:', error);
+    }
+    notifyListeners({ type: fileType, source: 'static-sync' });
+    return { updated: true, dataset: normalizedDataset };
+  },
+
+  async syncStaticDatasets(manifestPayload, { types = DATASET_TYPES } = {}) {
+    await this.ensureLoaded();
+    const normalizedTypes = Array.isArray(types)
+      ? types.filter((type) => DATASET_TYPES.includes(type))
+      : DATASET_TYPES;
+    const metaMap = manifestPayload?.datasets || {};
+    const availableTypes = normalizedTypes.filter((type) => metaMap[type]);
+    const missingTypes = normalizedTypes.filter((type) => !metaMap[type]);
+
+    missingTypes.forEach((type) => {
+      if (datasets.has(type)) datasets.delete(type);
+    });
+    await Promise.all(missingTypes.map(async (type) => {
+      try {
+        await removePersistedDataset(type);
+      } catch (error) {
+        console.warn('[webSearchStore] static dataset removal failed:', error);
+      }
+    }));
+
+    await Promise.all(availableTypes.map((type) => this.syncStaticDataset(type, metaMap[type])));
     return {
       success: true,
       data: normalizedTypes.reduce((acc, type) => {
