@@ -1,4 +1,25 @@
+import * as evaluatorModule from './evaluator.js';
+import industryAverages from './industryAverages.json';
+
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+const resolveEvaluateScores = () => {
+  if (typeof evaluatorModule === 'function') return evaluatorModule;
+  if (typeof evaluatorModule?.evaluateScores === 'function') return evaluatorModule.evaluateScores;
+  if (typeof evaluatorModule?.default?.evaluateScores === 'function') return evaluatorModule.default.evaluateScores;
+  return null;
+};
+
+const normalizeFileType = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return '';
+  if (normalized === '전기') return 'eung';
+  if (normalized === '통신') return 'tongsin';
+  if (normalized === '소방') return 'sobang';
+  return normalized;
+};
+
+const deepClone = (value) => JSON.parse(JSON.stringify(value));
 
 async function fetchJson(url, init = {}) {
   const response = await fetch(url, init);
@@ -31,14 +52,26 @@ const formulasClient = {
   },
 
   async evaluate(payload = {}, { useDefaultsOnly = false } = {}) {
-    return fetchJson('/api/formulas', {
-      method: 'POST',
-      headers: JSON_HEADERS,
-      body: JSON.stringify({
-        action: useDefaultsOnly ? 'evaluate-defaults' : 'evaluate',
-        payload: payload || {},
-      }),
+    const evaluateScores = resolveEvaluateScores();
+    if (typeof evaluateScores !== 'function') {
+      throw new Error('Local formulas evaluator is not available');
+    }
+
+    const sanitized = payload && typeof payload === 'object' ? deepClone(payload) : {};
+    if (!sanitized.industryAvg) {
+      const key = normalizeFileType(sanitized.fileType || sanitized?.inputs?.fileType);
+      if (key) {
+        const avg = industryAverages[key] || null;
+        if (avg) sanitized.industryAvg = avg;
+      }
+    }
+
+    const data = evaluateScores({
+      ...sanitized,
+      useDefaultsOnly,
     });
+
+    return { success: true, data };
   },
 };
 
