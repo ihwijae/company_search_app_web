@@ -6,6 +6,7 @@ import { useFeedback } from '../../../../components/FeedbackProvider.jsx';
 import Modal from '../../../../components/Modal.jsx';
 import { extractManagerNames, getCandidateTextField } from '../../../../utils/companyIndicators.js';
 import { loadPersisted, savePersisted } from '../../../../shared/persistence.js';
+import searchClient from '../../../../shared/searchClient.js';
 
 const MENU_ROUTES = {
   search: '#/search',
@@ -241,7 +242,6 @@ export default function KakaoSendPage() {
   }, [managerBuckets, selectedManagerId]);
 
   const autoMatchManagers = async (entries, overrideFileType, selections = {}) => {
-    if (!window?.electronAPI?.searchManyCompanies) return { entries, conflictEntries: [] };
     const nameSet = new Set();
     entries.forEach((entry) => {
       if (!entry.companyName) return;
@@ -251,7 +251,7 @@ export default function KakaoSendPage() {
     console.log('[kakao-auto-match] query names:', Array.from(nameSet));
     const searchFileType = overrideFileType || 'all';
     console.log('[kakao-auto-match] fileType:', searchFileType);
-    const response = await window.electronAPI.searchManyCompanies(Array.from(nameSet), searchFileType);
+    const response = await searchClient.searchManyCompanies(Array.from(nameSet), searchFileType);
     if (!response?.success) {
       notify({ type: 'warning', message: '업체 담당자 자동 매칭에 실패했습니다.' });
       return { entries, conflictEntries: [] };

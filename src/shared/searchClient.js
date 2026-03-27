@@ -163,6 +163,51 @@ export const searchClient = {
     }
   },
 
+  async searchManyCompanies(names = [], fileType, options = {}) {
+    const api = getElectronApi();
+    if (api && typeof api.searchManyCompanies === 'function') {
+      return api.searchManyCompanies(names, fileType, options);
+    }
+
+    const normalizedNames = Array.from(new Set(
+      (Array.isArray(names) ? names : [])
+        .map((name) => String(name || '').trim())
+        .filter(Boolean),
+    ));
+
+    if (normalizedNames.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    const normalizedType = normalizeFileType(fileType || 'all');
+    const collected = [];
+    for (const name of normalizedNames) {
+      const response = await this.searchCompanies({ name }, normalizedType, {
+        pagination: null,
+        ...(options || {}),
+      });
+      const items = Array.isArray(response?.items)
+        ? response.items
+        : (Array.isArray(response) ? response : []);
+      collected.push(...items);
+    }
+
+    const deduped = [];
+    const seen = new Set();
+    collected.forEach((item) => {
+      const key = [
+        String(item?._file_type || ''),
+        String(item?.['사업자번호'] || ''),
+        String(item?.['검색된 회사'] || ''),
+      ].join('|');
+      if (seen.has(key)) return;
+      seen.add(key);
+      deduped.push(item);
+    });
+
+    return { success: true, data: deduped };
+  },
+
   async checkFiles() {
     const api = getElectronApi();
     if (!api || typeof api.checkFiles !== 'function') {
