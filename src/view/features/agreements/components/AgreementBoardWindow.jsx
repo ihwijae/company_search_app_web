@@ -1178,7 +1178,6 @@ export default function AgreementBoardWindow({
   const [exportTargetFileHandle, setExportTargetFileHandle] = React.useState(null);
   const [exportTargetName, setExportTargetName] = React.useState('');
   const [exportSheetName, setExportSheetName] = React.useState('');
-  const exportFileInputRef = React.useRef(null);
   const regionSearchSessionRef = React.useRef(null);
   const [technicianModalOpen, setTechnicianModalOpen] = React.useState(false);
   const technicianWindowRef = React.useRef(null);
@@ -5232,18 +5231,9 @@ export default function AgreementBoardWindow({
     setExportModalOpen(true);
   }, [noticeTitle, noticeNo, resolveSheetName]);
 
-  const handleExportFilePick = React.useCallback((event) => {
-    const file = event.target.files && event.target.files[0];
-    if (!file) return;
-    setExportTargetFile(file);
-    setExportTargetFileHandle(null);
-    setExportTargetName(file.name || '');
-    if (event.target) event.target.value = '';
-  }, []);
-
   const handlePickExportFileHandle = React.useCallback(async () => {
     if (typeof window === 'undefined' || typeof window.showOpenFilePicker !== 'function') {
-      exportFileInputRef.current?.click();
+      showHeaderAlert('이 브라우저에서는 기존 엑셀 파일 직접 선택을 지원하지 않습니다.');
       return;
     }
     try {
@@ -6616,9 +6606,6 @@ export default function AgreementBoardWindow({
           <div className="export-sheet-field">
             <span className="export-sheet-label">대상 파일</span>
             <div className="export-sheet-file">
-              <button type="button" className="excel-btn" onClick={() => exportFileInputRef.current?.click()}>
-                파일 선택
-              </button>
               <button type="button" className="excel-btn" onClick={handlePickExportFileHandle}>
                 기존 파일 선택
               </button>
@@ -6631,13 +6618,6 @@ export default function AgreementBoardWindow({
                 </button>
               )}
             </div>
-            <input
-              ref={exportFileInputRef}
-              type="file"
-              accept=".xlsx"
-              style={{ display: 'none' }}
-              onChange={handleExportFilePick}
-            />
             <p className="export-sheet-hint">지원 브라우저에서는 기존 파일을 직접 선택하면 같은 파일에 바로 저장합니다. 선택하지 않으면 새 파일을 다운로드합니다.</p>
           </div>
           <div className="export-sheet-field">
