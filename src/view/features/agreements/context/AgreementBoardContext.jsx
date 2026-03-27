@@ -249,7 +249,6 @@ export function AgreementBoardProvider({ children }) {
   const [boardState, setBoardState] = React.useState(initialBoardState);
   const persistTimerRef = React.useRef(null);
   const persistReadyRef = React.useRef(false);
-  const latestPersistedStateRef = React.useRef(initialBoardState);
 
   const openBoardTab = React.useCallback(() => {
     if (typeof window === 'undefined') return false;
@@ -517,14 +516,12 @@ const appendCandidates = React.useCallback((entries = []) => {
   React.useEffect(() => {
     if (!persistReadyRef.current) {
       persistReadyRef.current = true;
-      latestPersistedStateRef.current = boardState;
       return;
     }
     if (persistTimerRef.current) {
       clearTimeout(persistTimerRef.current);
     }
     const payload = buildPersistedBoardState(boardState);
-    latestPersistedStateRef.current = boardState;
     persistTimerRef.current = setTimeout(() => {
       savePersisted(AGREEMENT_BOARD_DRAFT_KEY, payload);
     }, 400);
@@ -534,15 +531,6 @@ const appendCandidates = React.useCallback((entries = []) => {
       }
     };
   }, [boardState]);
-
-  React.useEffect(() => () => {
-    try {
-      const latest = latestPersistedStateRef.current;
-      if (latest && typeof latest === 'object') {
-        savePersisted(AGREEMENT_BOARD_DRAFT_KEY, buildPersistedBoardState(latest));
-      }
-    } catch {}
-  }, []);
 
   React.useEffect(() => {
     if (!boardState.open) return;

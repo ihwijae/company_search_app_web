@@ -20,6 +20,16 @@ export default function AgreementBoardPage() {
     }
   }, [boardState.inlineMode, boardState.open, updateBoard]);
 
+  React.useEffect(() => {
+    const handleBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+      return '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
   React.useEffect(() => () => {
     updateBoard({ open: false, inlineMode: false });
   }, [updateBoard]);
