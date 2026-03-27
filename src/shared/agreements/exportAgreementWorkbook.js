@@ -851,18 +851,45 @@ async function exportAgreementExcel({
   return { buffer, sheetName: worksheet.name };
 }
 
-function downloadAgreementWorkbook(buffer, fileName) {
+async function downloadAgreementWorkbook(buffer, fileName) {
+  const resolvedFileName = fileName || '협정보드.xlsx';
   const blob = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
+
+  if (typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function') {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: resolvedFileName,
+        types: [{
+          description: 'Excel Workbook',
+          accept: {
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+          },
+        }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return { savedWithPicker: true };
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        console.warn('[exportAgreementWorkbook] save picker failed, fallback to download:', error);
+      } else {
+        return { canceled: true };
+      }
+    }
+  }
+
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = fileName || '협정보드.xlsx';
+  anchor.download = resolvedFileName;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+  return { savedWithPicker: false };
 }
 
 export {

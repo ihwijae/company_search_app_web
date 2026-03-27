@@ -3737,8 +3737,16 @@ export default function AgreementBoardWindow({
       });
       const downloadName = exportTargetName
         || `${sanitizeExportFileName([noticeNo, templateConfig.label, '협정보드'].filter(Boolean).join('_')) || '협정보드'}.xlsx`;
-      downloadAgreementWorkbook(result.buffer, downloadName);
-      showHeaderAlert('엑셀 파일을 다운로드했습니다.');
+      const saveResult = await downloadAgreementWorkbook(result.buffer, downloadName);
+      if (saveResult?.canceled) {
+        showHeaderAlert('엑셀 저장이 취소되었습니다.');
+        return false;
+      }
+      showHeaderAlert(
+        saveResult?.savedWithPicker
+          ? '엑셀 파일을 저장했습니다.'
+          : '엑셀 파일을 다운로드했습니다.'
+      );
       return true;
     } catch (error) {
       console.error('[AgreementBoard] Excel export failed:', error);
