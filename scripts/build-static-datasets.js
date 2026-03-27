@@ -2,10 +2,12 @@ const fs = require('fs');
 const path = require('path');
 const ExcelJS = require('exceljs');
 const XLSX = require('xlsx');
+const { sanitizeXlsx } = require('../utils/sanitizeXlsx');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const DB_DIR = path.join(ROOT_DIR, 'db');
 const OUTPUT_DIR = path.join(ROOT_DIR, 'public', 'datasets');
+const DATASET_SCHEMA_VERSION = '2';
 
 const DATASET_RULES = [
   { type: 'eung', matcher: /전기/ },
@@ -110,13 +112,14 @@ const buildDatasetMeta = (filePath, type) => {
     fileName,
     type,
     updatedAt: stat.mtime.toISOString(),
-    version: `${fileName}:${Math.trunc(stat.mtimeMs)}`,
+    version: `${DATASET_SCHEMA_VERSION}:${fileName}:${Math.trunc(stat.mtimeMs)}`,
   };
 };
 
 const extractCompaniesFromWorkbook = async (filePath, type, meta) => {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(filePath);
+  const { sanitizedPath } = sanitizeXlsx(filePath);
+  await workbook.xlsx.readFile(sanitizedPath || filePath);
   const companies = [];
   const sheetNames = [];
 
