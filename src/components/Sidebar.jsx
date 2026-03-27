@@ -126,7 +126,7 @@ export default function Sidebar({ active, onSelect, fileStatuses, collapsed = tr
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSelect(key); }}
     >
-      <span style={{ width: 28, fontSize: 22 }}>{icon}</span>
+      <span className="nav-icon">{icon}</span>
       <span className="nav-label">{label}</span>
       {key === 'upload' && (
         <span className={`dot ${anyLoaded ? 'on' : ''}`} />
@@ -135,13 +135,10 @@ export default function Sidebar({ active, onSelect, fileStatuses, collapsed = tr
   );
 
   return (
-    <>
-      <div className="nav-reveal-zone" aria-hidden="true" />
-      <aside className={`sidebar top-nav ${collapsed ? 'collapsed' : 'expanded'}`}>
-        <nav className="nav">
-          {navItems.map(({ key, label, icon }) => item(key, label, icon))}
-        </nav>
-      </aside>
-    </>
+    <aside className={`sidebar top-nav ${collapsed ? 'collapsed' : 'expanded'}`}>
+      <nav className="nav">
+        {navItems.map(({ key, label, icon }) => item(key, label, icon))}
+      </nav>
+    </aside>
   );
 }
