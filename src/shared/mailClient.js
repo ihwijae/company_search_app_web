@@ -35,7 +35,7 @@ const mailClient = {
     if (typeof api?.sendTest === 'function') {
       return api.sendTest(payload);
     }
-    return requestJson('/api/mail/send-test', {
+    return requestJson('/api/mail?action=send-test', {
       method: 'POST',
       headers: JSON_HEADERS,
       body: JSON.stringify({ payload: payload || {} }),
@@ -47,7 +47,7 @@ const mailClient = {
     if (typeof api?.sendBatch === 'function') {
       return api.sendBatch(payload);
     }
-    return requestJson('/api/mail/send-batch', {
+    return requestJson('/api/mail?action=send-batch', {
       method: 'POST',
       headers: JSON_HEADERS,
       body: JSON.stringify({ payload: payload || {} }),

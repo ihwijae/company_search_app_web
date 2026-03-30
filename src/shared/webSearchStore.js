@@ -662,7 +662,7 @@ export const webSearchStore = {
       return { updated: false, dataset: current };
     }
 
-    const payload = await fetchJson(`/api/datasets/snapshot?fileType=${encodeURIComponent(fileType)}`);
+    const payload = await fetchJson(`/api/datasets?action=snapshot&fileType=${encodeURIComponent(fileType)}`);
     const normalizedDataset = normalizeDataset(payload?.data || {}, fileType, targetVersion);
     datasets.set(fileType, normalizedDataset);
     try {

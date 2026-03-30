@@ -75,7 +75,7 @@ const getSharedStatus = async ({ force = false } = {}) => {
   if (!force && sharedStatusCache.promise) {
     return sharedStatusCache.promise;
   }
-  const request = fetchJson('/api/datasets/status')
+  const request = fetchJson('/api/datasets?action=status')
     .then((payload) => {
       sharedStatusCache = {
         payload,
