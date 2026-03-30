@@ -10,6 +10,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "migrate:records": "node scripts/migrate-records-export.js",
+    "repair:records": "node scripts/repair-records-attachments.js",
     "start": "npm run build && electron .",
     "start:dev": "concurrently \"vite\" \"electron .\"",
     "migrate:agreement-boards": "node scripts/migrate-agreement-boards.js",
