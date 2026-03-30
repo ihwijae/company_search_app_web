@@ -325,6 +325,7 @@ const buildImportedStateFromDatabase = async (db, directoryHandle) => {
   const projects = queryRows(db, 'SELECT * FROM projects ORDER BY id');
   const projectCategories = queryRows(db, 'SELECT * FROM project_categories');
   const attachments = queryRows(db, 'SELECT * FROM attachments ORDER BY id');
+  const warnings = [];
 
   const projectCategoryMap = new Map();
   projectCategories.forEach((row) => {
@@ -346,25 +347,43 @@ const buildImportedStateFromDatabase = async (db, directoryHandle) => {
     const projectId = Number(project.id);
     const projectAttachments = [];
     for (const attachment of attachmentMap.get(projectId) || []) {
-      const parts = filePathToParts(attachment.file_path);
-      const file = await readNestedFile(directoryHandle, ['attachments', ...parts]);
-      const normalizedId = Number(attachment.id) || nextAttachmentId++;
-      const uploaded = await uploadAttachmentFile(file, {
-        projectId,
-        attachmentId: normalizedId,
-        fileName: file.name,
-      });
-      projectAttachments.push({
-        id: normalizedId,
-        displayName: normalizeText(attachment.display_name || file.name),
-        fileName: normalizeText(file.name),
-        mimeType: attachment.mime_type || file.type || 'application/octet-stream',
-        fileSize: Number.isFinite(Number(attachment.file_size)) ? Number(attachment.file_size) : file.size,
-        uploadedAt: attachment.uploaded_at || toIsoNow(),
-        blobPathname: uploaded.pathname || '',
-        url: uploaded.url || '',
-        downloadUrl: uploaded.downloadUrl || uploaded.url || '',
-      });
+      try {
+        const parts = filePathToParts(attachment.file_path);
+        const file = await readNestedFile(directoryHandle, ['attachments', ...parts]);
+        const normalizedId = Number(attachment.id) || nextAttachmentId++;
+        const uploaded = await uploadAttachmentFile(file, {
+          projectId,
+          attachmentId: normalizedId,
+          fileName: file.name,
+        });
+        projectAttachments.push({
+          id: normalizedId,
+          displayName: normalizeText(attachment.display_name || file.name),
+          fileName: normalizeText(file.name),
+          mimeType: attachment.mime_type || file.type || 'application/octet-stream',
+          fileSize: Number.isFinite(Number(attachment.file_size)) ? Number(attachment.file_size) : file.size,
+          uploadedAt: attachment.uploaded_at || toIsoNow(),
+          blobPathname: uploaded.pathname || '',
+          url: uploaded.url || '',
+          downloadUrl: uploaded.downloadUrl || uploaded.url || '',
+        });
+      } catch (error) {
+        const displayName = normalizeText(attachment.display_name || attachment.file_path || '첨부 파일');
+        warnings.push({
+          type: 'attachment',
+          projectId,
+          attachmentId: Number(attachment.id) || null,
+          displayName,
+          filePath: String(attachment.file_path || ''),
+          message: error?.message || '첨부를 가져오지 못했습니다.',
+        });
+        console.warn('[records import] attachment skipped:', {
+          projectId,
+          attachmentId: attachment.id,
+          filePath: attachment.file_path,
+          error: error?.message || error,
+        });
+      }
     }
 
     importedProjects.push({
@@ -395,10 +414,11 @@ const buildImportedStateFromDatabase = async (db, directoryHandle) => {
     attachment: Math.max(1, ...attachments.map((row) => Number(row.id) || 0)) + 1,
   };
 
-  return normalizeState({
-    version: 2,
-    nextIds,
-    companies: companies.map((row) => ({
+  return {
+    state: normalizeState({
+      version: 2,
+      nextIds,
+      companies: companies.map((row) => ({
       id: Number(row.id),
       name: normalizeText(row.name),
       alias: normalizeText(row.alias),
@@ -417,9 +437,19 @@ const buildImportedStateFromDatabase = async (db, directoryHandle) => {
       sortOrder: Number.isFinite(Number(row.sort_order)) ? Number(row.sort_order) : 0,
       createdAt: row.created_at || toIsoNow(),
       updatedAt: row.updated_at || row.created_at || toIsoNow(),
-    })),
-    projects: importedProjects,
-  });
+      })),
+      projects: importedProjects,
+    }),
+    stats: {
+      companies: companies.length,
+      categories: categories.length,
+      projects: importedProjects.length,
+      attachments: attachments.length,
+      importedAttachments: importedProjects.reduce((sum, item) => sum + item.attachments.length, 0),
+      skippedAttachments: warnings.length,
+    },
+    warnings,
+  };
 };
 
 export const recordsWebStore = {
@@ -817,13 +847,15 @@ export const recordsWebStore = {
     const SQL = await getSqlJs();
     const db = new SQL.Database(new Uint8Array(dbBuffer));
     try {
-      const importedState = await buildImportedStateFromDatabase(db, directoryHandle);
-      await persistState(importedState);
+      const importedResult = await buildImportedStateFromDatabase(db, directoryHandle);
+      await persistState(importedResult.state);
       emitProjectSaved({ projectId: null, mode: 'import' });
       return {
         canceled: false,
         fileName: dbFile.name,
-        attachmentsImported: importedState.projects.some((item) => Array.isArray(item.attachments) && item.attachments.length > 0),
+        attachmentsImported: importedResult.stats.importedAttachments > 0,
+        stats: importedResult.stats,
+        warnings: importedResult.warnings,
       };
     } finally {
       db.close();

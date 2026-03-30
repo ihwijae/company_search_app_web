@@ -742,8 +742,20 @@ export default function RecordsPage() {
       if (!result || result.canceled) return;
       await fetchTaxonomies();
       await fetchProjects();
-      const importedNote = result.attachmentsImported ? ' (첨부 포함)' : '';
-      notify({ type: 'success', message: `실적 데이터를 가져왔습니다.${importedNote}` });
+      const stats = result.stats || {};
+      const importedProjects = Number.isFinite(stats.projects) ? stats.projects : null;
+      const importedAttachments = Number.isFinite(stats.importedAttachments) ? stats.importedAttachments : null;
+      const skippedAttachments = Number.isFinite(stats.skippedAttachments) ? stats.skippedAttachments : 0;
+      const summaryParts = [];
+      if (importedProjects !== null) summaryParts.push(`실적 ${importedProjects}건`);
+      if (importedAttachments !== null) summaryParts.push(`첨부 ${importedAttachments}건`);
+      const summaryText = summaryParts.length ? ` (${summaryParts.join(', ')})` : '';
+      const warningText = skippedAttachments > 0 ? ` 첨부 ${skippedAttachments}건은 건너뛰었습니다.` : '';
+      notify({
+        type: skippedAttachments > 0 ? 'warning' : 'success',
+        message: `실적 데이터를 가져왔습니다.${summaryText}${warningText}`,
+        duration: skippedAttachments > 0 ? 5200 : 2600,
+      });
     } catch (err) {
       notify({ type: 'error', message: err?.message || 'DB 파일을 가져올 수 없습니다.' });
     }
