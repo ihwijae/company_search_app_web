@@ -209,7 +209,9 @@ const hydrateAttachment = (attachment) => ({
   id: attachment.id,
   displayName: attachment.displayName,
   fileName: attachment.fileName || attachment.displayName,
-  filePath: attachment.downloadUrl || attachment.url || attachment.dataUrl || '',
+  filePath: attachment.blobPathname
+    ? `/api/records?action=file&pathname=${encodeURIComponent(attachment.blobPathname)}`
+    : (attachment.downloadUrl || attachment.url || attachment.dataUrl || ''),
   relativePath: attachment.blobPathname || attachment.fileName || attachment.displayName,
   mimeType: attachment.mimeType || 'application/octet-stream',
   fileSize: attachment.fileSize ?? null,
@@ -808,7 +810,9 @@ export const recordsWebStore = {
     const target = Array.isArray(project?.attachments)
       ? project.attachments.find((item) => item.id === Number(attachmentId))
       : project?.attachment || null;
-    const href = target?.downloadUrl || target?.url || target?.filePath || '';
+    const href = target?.blobPathname
+      ? `/api/records?action=file&pathname=${encodeURIComponent(target.blobPathname)}`
+      : (target?.filePath || target?.downloadUrl || target?.url || '');
     if (!href) {
       throw new Error('첨부 파일을 찾을 수 없습니다.');
     }
