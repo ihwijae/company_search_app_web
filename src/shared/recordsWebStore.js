@@ -561,6 +561,40 @@ export const recordsWebStore = {
     return clone(next);
   },
 
+  async reorderCategories(parentId, orderedIds = []) {
+    const state = await fetchState();
+    const normalizedParentId = Number.isInteger(parentId) && parentId > 0 ? parentId : null;
+    const siblings = state.categories.filter((item) => (
+      (item.parentId ?? null) === normalizedParentId
+    ));
+    if (siblings.length === 0) return [];
+
+    const siblingIds = new Set(siblings.map((item) => item.id));
+    const requestedIds = orderedIds
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && siblingIds.has(value));
+    if (requestedIds.length !== siblings.length) {
+      throw new Error('공사 종류 순서를 변경할 수 없습니다.');
+    }
+
+    const now = toIsoNow();
+    const orderLookup = new Map(requestedIds.map((id, index) => [id, index]));
+    state.categories = state.categories.map((item) => {
+      if (!siblingIds.has(item.id)) return item;
+      return {
+        ...item,
+        sortOrder: orderLookup.get(item.id) ?? item.sortOrder,
+        updatedAt: now,
+      };
+    });
+
+    await persistState(state);
+
+    return sortByOrderThenName(
+      state.categories.filter((item) => (item.parentId ?? null) === normalizedParentId)
+    ).map((item) => clone(item));
+  },
+
   async deleteCategory(id) {
     const state = await fetchState();
     const targetId = Number(id);

@@ -564,13 +564,10 @@ export default function RecordsPage() {
       const [moved] = reordered.splice(currentIndex, 1);
       reordered.splice(targetIndex, 0, moved);
 
-      await Promise.all(reordered.map((category, index) => recordsClient.saveCategory({
-        id: category.id,
-        name: category.name,
-        parentId: category.parentId ?? undefined,
-        active: category.active,
-        sortOrder: index,
-      })));
+      await recordsClient.reorderCategories(
+        selectedCategory.parentId ?? null,
+        reordered.map((category) => category.id),
+      );
       await fetchTaxonomies();
       notify({
         type: 'success',

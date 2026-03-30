@@ -32,6 +32,7 @@ export const recordsClient = {
   deleteCompany: (id) => wrapInvoke('deleteCompany', id),
   listCategories: (options) => wrapInvoke('listCategories', options),
   saveCategory: (payload) => wrapInvoke('saveCategory', payload),
+  reorderCategories: (parentId, orderedIds) => wrapInvoke('reorderCategories', parentId, orderedIds),
   deleteCategory: (id) => wrapInvoke('deleteCategory', id),
   openAttachment: (projectId, attachmentId) => wrapInvoke('openAttachment', projectId, attachmentId),
   exportDatabase: () => wrapInvoke('exportDatabase'),
