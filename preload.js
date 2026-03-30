@@ -83,32 +83,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     applyOrdering: (payload) => ipcRenderer.invoke('bid-result:apply-ordering', payload),
   },
 
-  records: {
-    listProjects: (filters) => ipcRenderer.invoke('records:list-projects', filters),
-    getProject: (id) => ipcRenderer.invoke('records:get-project', { id }),
-    createProject: (payload) => ipcRenderer.invoke('records:create-project', payload),
-    updateProject: (id, data) => ipcRenderer.invoke('records:update-project', { id, data }),
-    deleteProject: (id) => ipcRenderer.invoke('records:delete-project', { id }),
-    openEditorWindow: (payload) => ipcRenderer.invoke('records:open-editor-window', payload),
-    notifyProjectSaved: (payload) => ipcRenderer.send('records:project-saved', payload),
-    onProjectSaved: (callback) => {
-      if (typeof callback !== 'function') return () => {};
-      const listener = (_event, payload) => callback(payload);
-      ipcRenderer.on('records:project-saved', listener);
-      return () => ipcRenderer.removeListener('records:project-saved', listener);
-    },
-    removeAttachment: (projectId, attachmentId) => ipcRenderer.invoke('records:remove-attachment', { projectId, attachmentId }),
-    addAttachments: (projectId, attachments) => ipcRenderer.invoke('records:add-attachments', { projectId, attachments }),
-    listCompanies: (options) => ipcRenderer.invoke('records:list-companies', options),
-    saveCompany: (payload) => ipcRenderer.invoke('records:save-company', payload),
-    deleteCompany: (id) => ipcRenderer.invoke('records:delete-company', { id }),
-    listCategories: (options) => ipcRenderer.invoke('records:list-categories', options),
-    saveCategory: (payload) => ipcRenderer.invoke('records:save-category', payload),
-    deleteCategory: (id) => ipcRenderer.invoke('records:delete-category', { id }),
-    openAttachment: (projectId, attachmentId) => ipcRenderer.invoke('records:open-attachment', { projectId, attachmentId }),
-    exportDatabase: () => ipcRenderer.invoke('records:export-database'),
-    importDatabase: () => ipcRenderer.invoke('records:import-database'),
-  },
   tempCompanies: {
     list: (filters) => ipcRenderer.invoke('temp-companies:list', filters),
     get: (id) => ipcRenderer.invoke('temp-companies:get', { id }),

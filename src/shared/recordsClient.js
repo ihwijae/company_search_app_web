@@ -1,31 +1,19 @@
-const ensureApi = () => {
-  if (typeof window === 'undefined') return null;
-  const api = window.electronAPI?.records;
-  if (!api) {
-    console.warn('[Renderer] records API is not available on window.electronAPI.records');
-  }
-  return api;
-};
+import recordsWebStore from './recordsWebStore.js';
 
 const wrapInvoke = async (method, ...args) => {
-  const api = ensureApi();
-  if (!api || typeof api[method] !== 'function') {
-    throw new Error(`records API method ${method} is not available`);
+  const webMethod = recordsWebStore[method];
+  if (typeof webMethod !== 'function') {
+    throw new Error(`records web method ${method} is not available`);
   }
-  const response = await api[method](...args);
-  if (!response || response.success === undefined) return response;
-  if (response.success) return response.data;
-  const error = new Error(response.error || 'Records API call failed');
-  error.payload = response;
-  throw error;
+  return webMethod.apply(recordsWebStore, args);
 };
 
 const wrapEvent = (method, ...args) => {
-  const api = ensureApi();
-  if (!api || typeof api[method] !== 'function') {
-    throw new Error(`records API method ${method} is not available`);
+  const webMethod = recordsWebStore[method];
+  if (typeof webMethod !== 'function') {
+    throw new Error(`records web method ${method} is not available`);
   }
-  return api[method](...args);
+  return webMethod.apply(recordsWebStore, args);
 };
 
 export const recordsClient = {
