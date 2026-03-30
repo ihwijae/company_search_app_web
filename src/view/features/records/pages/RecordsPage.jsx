@@ -92,6 +92,7 @@ const highlightSanitizedHtml = (html, keyword) => {
 };
 
 const ITEMS_PER_PAGE = 3;
+const PAGE_WINDOW_SIZE = 20;
 const TEN_YEARS_MS = 10 * 365 * 24 * 60 * 60 * 1000;
 
 const formatDateToken = (value) => {
@@ -651,6 +652,17 @@ export default function RecordsPage() {
       : 1
   ), [projects]);
 
+  const paginationWindow = React.useMemo(() => {
+    const windowIndex = Math.floor((currentPage - 1) / PAGE_WINDOW_SIZE);
+    const startPage = windowIndex * PAGE_WINDOW_SIZE + 1;
+    const endPage = Math.min(totalPages, startPage + PAGE_WINDOW_SIZE - 1);
+    return {
+      startPage,
+      endPage,
+      pages: Array.from({ length: endPage - startPage + 1 }, (_, index) => startPage + index),
+    };
+  }, [currentPage, totalPages]);
+
   const paginatedProjects = React.useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
     return projects.slice(start, start + ITEMS_PER_PAGE);
@@ -866,7 +878,7 @@ export default function RecordsPage() {
                             <span className="records-grid__company-text">{highlightPlainText(companyName, keyword)}</span>
                           </div>
                           <div className="records-grid__cell records-grid__cell--info">
-                            <div className="records-grid__project-name">공사명: {highlightPlainText(project.projectName, keyword)}</div>
+                            <div className="records-grid__project-name">{highlightPlainText(project.projectName, keyword)}</div>
                             <div className="records-grid__info">
                               <div className="records-grid__info-item">
                                 <span className="records-grid__info-label">발주처</span>
@@ -960,7 +972,7 @@ export default function RecordsPage() {
                   >
                     이전
                   </button>
-                  {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                  {paginationWindow.pages.map((page) => (
                     <button
                       key={page}
                       type="button"
