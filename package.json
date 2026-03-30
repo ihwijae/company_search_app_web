@@ -9,6 +9,7 @@
     "prebuild": "node scripts/build-static-datasets.js",
     "build": "vite build",
     "preview": "vite preview",
+    "migrate:records": "node scripts/migrate-records-export.js",
     "start": "npm run build && electron .",
     "start:dev": "concurrently \"vite\" \"electron .\"",
     "migrate:agreement-boards": "node scripts/migrate-agreement-boards.js",
