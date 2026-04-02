@@ -7,6 +7,28 @@ const AGREEMENT_BOARD_ROOT_LABEL = 'Local File / agreement-board';
 const AGREEMENT_BOARD_ROOT_PATH = ROOTS.agreementBoards;
 const AGREEMENT_BOARD_MANIFEST_PATH = path.join(ROOTS.agreementBoards, 'manifest.json');
 
+async function listJsonFilesRecursive(rootPath, relativeDir = '') {
+  const dirPath = resolveWithinRoot(rootPath, relativeDir);
+  const entries = await fs.promises.readdir(dirPath, { withFileTypes: true }).catch(() => []);
+  const files = [];
+
+  for (const entry of entries) {
+    if (!entry) continue;
+    const childRelative = relativeDir ? path.join(relativeDir, entry.name) : entry.name;
+    if (entry.isDirectory()) {
+      const nested = await listJsonFilesRecursive(rootPath, childRelative);
+      files.push(...nested);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    if (!entry.name.endsWith('.json')) continue;
+    if (entry.name === 'manifest.json' && !relativeDir) continue;
+    files.push(childRelative.split(path.sep).join('/'));
+  }
+
+  return files;
+}
+
 function sanitizeSegment(value, fallback = 'agreement') {
   return sanitizeFileName(String(value || '').trim().replace(/\s+/g, '-').slice(0, 48), fallback);
 }
@@ -147,11 +169,8 @@ async function saveAgreementBoard(snapshot = {}, options = {}) {
 async function listAgreementBoards() {
   const manifest = await readAgreementManifest();
   const manifestItems = getAgreementBoardItems(manifest).filter((item) => item && item.path);
-  const files = await fs.promises.readdir(ROOTS.agreementBoards, { withFileTypes: true }).catch(() => []);
-  const fileItems = await Promise.all(files
-    .filter((entry) => entry && entry.isFile() && entry.name.endsWith('.json') && entry.name !== 'manifest.json')
-    .map(async (entry) => {
-      const pathname = entry.name;
+  const jsonFiles = await listJsonFilesRecursive(ROOTS.agreementBoards);
+  const fileItems = await Promise.all(jsonFiles.map(async (pathname) => {
       const filePath = resolveWithinRoot(ROOTS.agreementBoards, pathname);
       const parsed = await readJsonFile(filePath, null);
       const payload = parsed && typeof parsed === 'object'
