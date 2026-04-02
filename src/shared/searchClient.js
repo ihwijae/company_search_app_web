@@ -121,7 +121,11 @@ export const searchClient = {
         body: JSON.stringify({ criteria, fileType, options }),
       });
     } catch (error) {
-      console.warn('[searchClient] shared search failed, fallback to local store:', error);
+      console.warn('[searchClient] shared search failed, clearing local datasets:', error);
+      if (shouldUseWebStore()) {
+        await webSearchStore.clearDatasets(normalizeFileType(fileType) === 'all' ? DATASET_TYPES : [normalizeFileType(fileType)]);
+        return { success: false, data: [], meta: { totalCount: 0 }, message: '업로드된 데이터셋이 없습니다.' };
+      }
       return webSearchStore.searchCompanies(criteria, fileType, options);
     }
   },
@@ -186,7 +190,11 @@ export const searchClient = {
           return acc;
         }, {});
       } catch (error) {
-        console.warn('[searchClient] shared status failed, fallback to local store:', error);
+        console.warn('[searchClient] shared status failed, clearing local datasets:', error);
+        if (shouldUseWebStore()) {
+          await webSearchStore.clearDatasets();
+          return { eung: false, tongsin: false, sobang: false };
+        }
         return webSearchStore.checkFiles();
       }
     }
@@ -206,7 +214,11 @@ export const searchClient = {
         const payload = await fetchJson(`/api/regions?${query}`);
         return normalizeRegionsResponse(payload);
       } catch (error) {
-        console.warn('[searchClient] shared regions failed, fallback to local store:', error);
+        console.warn('[searchClient] shared regions failed, clearing local datasets:', error);
+        if (shouldUseWebStore()) {
+          await webSearchStore.clearDatasets(normalizeFileType(fileType) === 'all' ? DATASET_TYPES : [normalizeFileType(fileType)]);
+          return ['전체'];
+        }
         const fallback = await webSearchStore.getRegions(fileType);
         return normalizeRegionsResponse(fallback);
       }
@@ -249,9 +261,6 @@ export const searchClient = {
     return Boolean((api && typeof api.selectFile === 'function') || !api);
   },
 
-  usesBundledDatasets() {
-    return false;
-  },
 };
 
 export default searchClient;
