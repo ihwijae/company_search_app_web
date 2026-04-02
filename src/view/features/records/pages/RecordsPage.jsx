@@ -222,13 +222,13 @@ const DEFAULT_EDITOR_STATE = {
 };
 
 export default function RecordsPage() {
-  const { notify, confirm } = useFeedback();
+  const { notify, confirm, showLoading, hideLoading } = useFeedback();
   const [activeMenu, setActiveMenu] = React.useState('records');
   const [projects, setProjects] = React.useState([]);
   const [categories, setCategories] = React.useState([]);
   const [companies, setCompanies] = React.useState([]);
   const [flatCategories, setFlatCategories] = React.useState([]);
-  const [filters, setFilters] = React.useState({ keyword: '', companyType: 'our', companyId: '', categoryId: null });
+  const [filters, setFilters] = React.useState({ keyword: '', companyType: 'all', companyId: '', categoryId: null });
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
   const [editorState, setEditorState] = React.useState(DEFAULT_EDITOR_STATE);
@@ -285,7 +285,9 @@ export default function RecordsPage() {
 
   const visibleCompanies = React.useMemo(() => {
     if (!Array.isArray(companies)) return [];
-    return companies.filter((company) => (filters.companyType === 'misc' ? company.isMisc : !company.isMisc));
+    if (filters.companyType === 'misc') return companies.filter((company) => company.isMisc);
+    if (filters.companyType === 'our') return companies.filter((company) => !company.isMisc);
+    return companies;
   }, [companies, filters.companyType]);
 
   const fetchProjects = React.useCallback(async () => {
@@ -296,7 +298,7 @@ export default function RecordsPage() {
         keyword: filters.keyword || undefined,
         companyIds: filters.companyId ? [Number(filters.companyId)] : undefined,
         categoryIds: filters.categoryId ? [filters.categoryId] : undefined,
-        companyType: filters.companyType || undefined,
+        companyType: filters.companyType === 'all' ? undefined : (filters.companyType || undefined),
       };
       const list = await recordsClient.listProjects(payload);
       setProjects(list);
@@ -403,7 +405,7 @@ export default function RecordsPage() {
   };
 
   const clearFilters = () => {
-    setFilters({ keyword: '', companyType: 'our', companyId: '', categoryId: null });
+    setFilters({ keyword: '', companyType: 'all', companyId: '', categoryId: null });
   };
 
   const handleCompanyTypeChange = (event) => {
@@ -687,12 +689,13 @@ export default function RecordsPage() {
   }, []);
 
   const openCreateModal = React.useCallback(() => {
+    const defaultCompanyType = filters.companyType === 'misc' ? 'misc' : 'our';
     setEditorState({
       open: true,
       mode: 'create',
       project: null,
       defaultCompanyId: filters.companyId || '',
-      defaultCompanyType: filters.companyType || 'our',
+      defaultCompanyType,
     });
   }, [filters.companyId, filters.companyType]);
 
@@ -735,6 +738,10 @@ export default function RecordsPage() {
     });
     if (!confirmed) return;
     try {
+      showLoading({
+        title: 'DB 가져오는 중',
+        message: '파일과 첨부를 읽는 동안 잠시만 기다려 주세요.',
+      });
       const result = await recordsClient.importDatabase();
       if (!result || result.canceled) return;
       await fetchTaxonomies();
@@ -755,8 +762,10 @@ export default function RecordsPage() {
       });
     } catch (err) {
       notify({ type: 'error', message: err?.message || 'DB 파일을 가져올 수 없습니다.' });
+    } finally {
+      hideLoading();
     }
-  }, [confirm, fetchProjects, fetchTaxonomies, notify]);
+  }, [confirm, fetchProjects, fetchTaxonomies, hideLoading, notify, showLoading]);
 
   return (
     <div className="app-shell">
@@ -812,6 +821,7 @@ export default function RecordsPage() {
                     value={filters.companyType}
                     onChange={handleCompanyTypeChange}
                   >
+                    <option value="all">전체</option>
                     <option value="our">우리법인</option>
                     <option value="misc">기타</option>
                   </select>
@@ -819,7 +829,11 @@ export default function RecordsPage() {
                     value={filters.companyId}
                     onChange={(event) => setFilters((prev) => ({ ...prev, companyId: event.target.value }))}
                   >
-                    <option value="">{filters.companyType === 'misc' ? '전체 기타 법인' : '전체 우리 법인'}</option>
+                    <option value="">
+                      {filters.companyType === 'misc'
+                        ? '전체 기타 법인'
+                        : (filters.companyType === 'our' ? '전체 우리 법인' : '전체 법인')}
+                    </option>
                     {visibleCompanies.map((company) => (
                       <option key={company.id} value={company.id}>{company.name}</option>
                     ))}

@@ -1573,6 +1573,9 @@ body {
   font-weight: 700;
   color: #111827;
   line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 
@@ -1586,6 +1589,9 @@ body {
   color: #111827;
   font-size: 18px;
   padding-left: 0;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .records-grid__info {
@@ -1617,6 +1623,7 @@ body {
 .records-grid__info-value {
   color: #1f2937;
   word-break: break-word;
+  overflow-wrap: anywhere;
   font-size: 15px;
 }
 
@@ -1638,6 +1645,14 @@ body {
   font-size: 13px;
   color: #1f2937;
   line-height: 1.5;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.records-grid__cell--notes .records-grid__notes * {
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .records-grid__cell--notes .records-grid__notes p,
@@ -2494,7 +2509,11 @@ body {
   cursor: not-allowed;
 }
 
-.records-grid__attachment-name { word-break: break-word; }
+.records-grid__attachment-name {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
 .records-grid__no-attachment { font-size: 13px; color: #9ca3af; }
 
 .records-grid__actions {
