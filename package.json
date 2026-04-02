@@ -9,6 +9,8 @@
     "prebuild": "node scripts/build-static-datasets.js",
     "build": "vite build",
     "preview": "vite preview",
+    "serve:webapi": "npx vercel dev --listen 0.0.0.0:4173",
+    "serve:webapi:prod": "npm run build && npm run serve:webapi",
     "migrate:records": "node scripts/migrate-records-export.js",
     "repair:records": "node scripts/repair-records-attachments.js",
     "start": "npm run build && electron .",
