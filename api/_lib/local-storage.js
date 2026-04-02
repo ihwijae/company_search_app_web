@@ -14,6 +14,7 @@ const ROOTS = {
   config: path.join(APP_DATA_ROOT, 'config'),
   records: path.join(APP_DATA_ROOT, 'records'),
   recordAttachments: path.join(APP_DATA_ROOT, 'records', 'attachments'),
+  tempCompanies: path.join(APP_DATA_ROOT, 'temp-companies'),
   agreementBoards: path.join(APP_DATA_ROOT, 'agreement-board'),
   mailAttachments: path.join(APP_DATA_ROOT, 'mail-attachments'),
 };

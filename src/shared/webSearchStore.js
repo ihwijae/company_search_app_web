@@ -27,6 +27,8 @@ const DATASET_TYPES = ['eung', 'tongsin', 'sobang'];
 const datasets = new Map();
 const listeners = new Set();
 let loadPromise = null;
+const TEMP_COMPANIES_CACHE_TTL_MS = 15 * 1000;
+let tempCompaniesCache = { items: [], storedAt: 0, promise: null };
 
 const CREDIT_GRADE_RANK = Array.isArray(CREDIT_GRADE_ORDER)
   ? CREDIT_GRADE_ORDER
@@ -233,6 +235,76 @@ const getCreditGradeRank = (gradeToken) => {
   return CREDIT_GRADE_RANK.has(normalized)
     ? CREDIT_GRADE_RANK.get(normalized)
     : Number.POSITIVE_INFINITY;
+};
+
+const normalizeIndustry = (value) => {
+  const token = String(value || '').trim().toLowerCase();
+  if (token === '전기' || token === 'eung') return 'eung';
+  if (token === '통신' || token === 'tongsin') return 'tongsin';
+  if (token === '소방' || token === 'sobang') return 'sobang';
+  return '';
+};
+
+const normalizeTempCompanyToSearchRow = (company = {}) => {
+  const manager = String(company.managerName || '').trim();
+  const notes = String(company.notes || '').trim();
+  const mergedNotes = [manager, notes].filter(Boolean).join(' | ');
+  const credit = String(company.creditGrade || '').trim();
+  const creditToken = extractCreditGradeToken(credit);
+  return {
+    '검색된 회사': String(company.name || '').trim(),
+    대표자: String(company.representative || '').trim(),
+    사업자번호: String(company.bizNo || '').replace(/\D/g, ''),
+    대표지역: String(company.region || '').trim(),
+    지역: String(company.region || '').trim(),
+    시평: String(company.sipyung || '').trim(),
+    '3년 실적': String(company.performance3y || '').trim(),
+    '5년 실적': String(company.performance5y || '').trim(),
+    부채비율: String(company.debtRatio || '').trim(),
+    유동비율: String(company.currentRatio || '').trim(),
+    영업기간: String(company.bizYears || '').trim(),
+    신용평가: credit,
+    여성기업: String(company.womenOwned || '').trim(),
+    중소기업: String(company.smallBusiness || '').trim(),
+    일자리창출: String(company.jobCreation || '').trim(),
+    품질평가: String(company.qualityEval || '').trim(),
+    비고: mergedNotes,
+    담당자명: manager,
+    데이터상태: {},
+    요약상태: '임시',
+    _file_type: normalizeIndustry(company.industry) || 'temp',
+    _creditGrade: creditToken,
+    _creditGradeRank: getCreditGradeRank(creditToken),
+    _is_temp_company: true,
+    _temp_company_id: company.id,
+  };
+};
+
+const loadTempCompanies = async ({ force = false } = {}) => {
+  const now = Date.now();
+  if (!force && tempCompaniesCache.items.length && (now - tempCompaniesCache.storedAt) < TEMP_COMPANIES_CACHE_TTL_MS) {
+    return tempCompaniesCache.items;
+  }
+  if (!force && tempCompaniesCache.promise) {
+    return tempCompaniesCache.promise;
+  }
+  const request = fetchJson('/api/temp-companies?action=list')
+    .then((payload) => {
+      const items = Array.isArray(payload?.data) ? payload.data.map(normalizeTempCompanyToSearchRow) : [];
+      tempCompaniesCache = {
+        items,
+        storedAt: Date.now(),
+        promise: null,
+      };
+      return items;
+    })
+    .catch((error) => {
+      tempCompaniesCache.promise = null;
+      console.warn('[webSearchStore] temp companies load failed:', error);
+      return [];
+    });
+  tempCompaniesCache.promise = request;
+  return request;
 };
 
 const extractManagerName = (notes) => {
@@ -736,21 +808,34 @@ export const webSearchStore = {
 
   async getRegions(fileType) {
     await this.ensureLoaded();
+    const tempRows = await loadTempCompanies();
     if (fileType === 'all') {
       const set = new Set(['전체']);
       DATASET_TYPES.forEach((type) => {
         (datasets.get(type)?.sheetNames || []).forEach((name) => set.add(name));
       });
+      tempRows.forEach((item) => {
+        const region = String(item?.대표지역 || item?.지역 || '').trim();
+        if (region) set.add(region);
+      });
       return { success: true, data: Array.from(set) };
     }
     const dataset = datasets.get(fileType);
-    return { success: true, data: dataset ? ['전체', ...(dataset.sheetNames || [])] : ['전체'] };
+    const set = new Set(dataset ? ['전체', ...(dataset.sheetNames || [])] : ['전체']);
+    const normalizedType = normalizeIndustry(fileType);
+    tempRows.forEach((item) => {
+      if (normalizedType && item?._file_type !== normalizedType) return;
+      const region = String(item?.대표지역 || item?.지역 || '').trim();
+      if (region) set.add(region);
+    });
+    return { success: true, data: Array.from(set) };
   },
 
   async searchCompanies(criteria, fileType, options) {
     await this.ensureLoaded();
     const normalizedCriteria = parseMaybeJson(criteria) || {};
     const normalizedOptions = parseMaybeJson(options) || {};
+    const tempRows = await loadTempCompanies();
 
     if (fileType === 'all') {
       const merged = [];
@@ -759,16 +844,22 @@ export const webSearchStore = {
         if (!dataset?.companies?.length) return;
         dataset.companies.forEach((item) => merged.push({ ...item, _file_type: type }));
       });
+      tempRows.forEach((item) => merged.push(item));
       const processed = searchCompaniesInDataset(merged, normalizedCriteria, normalizedOptions || {});
       return { success: true, data: processed.items, meta: processed.meta };
     }
 
     const dataset = datasets.get(fileType);
-    if (!dataset?.companies?.length) {
+    const normalizedType = normalizeIndustry(fileType);
+    const filteredTempRows = normalizedType
+      ? tempRows.filter((item) => item?._file_type === normalizedType)
+      : tempRows;
+    if (!dataset?.companies?.length && filteredTempRows.length === 0) {
       return { success: false, message: `${fileType} 파일이 로드되지 않았습니다` };
     }
 
-    const processed = searchCompaniesInDataset(dataset.companies, normalizedCriteria, normalizedOptions || {});
+    const merged = [...(dataset?.companies || []), ...filteredTempRows];
+    const processed = searchCompaniesInDataset(merged, normalizedCriteria, normalizedOptions || {});
     return { success: true, data: processed.items, meta: processed.meta };
   },
 };

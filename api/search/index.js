@@ -1,6 +1,7 @@
 const { sendJson, allowMethods, readJsonBody } = require('../_lib/http');
 const { DATASET_TYPES, parseSharedDataset, getDatasetMeta, getDatasetVersion } = require('../_lib/blob-store');
 const { searchCompaniesInDataset } = require('../_lib/dataset-parser');
+const { readTempCompaniesDocument, listTempCompanySearchRows } = require('../_lib/temp-companies-store');
 
 const SEARCH_CACHE_TTL_MS = 60 * 1000;
 const searchCache = new Map();
@@ -37,7 +38,9 @@ module.exports = async function handler(req, res) {
     if (fileType === 'all') {
       const metas = await Promise.all(DATASET_TYPES.map((type) => getDatasetMeta(type).catch(() => null)));
       const versionKey = metas.map((meta, index) => `${DATASET_TYPES[index]}:${getDatasetVersion(meta)}`).join('|');
-      const cacheKey = JSON.stringify({ fileType, criteria, options, versionKey });
+      const tempDoc = await readTempCompaniesDocument();
+      const tempVersion = String(tempDoc?.updatedAt || '');
+      const cacheKey = JSON.stringify({ fileType, criteria, options, versionKey, tempVersion });
       const cached = readSearchCache(cacheKey);
       if (cached) {
         return sendJson(res, 200, cached);
@@ -50,6 +53,8 @@ module.exports = async function handler(req, res) {
         if (!dataset || !Array.isArray(dataset.companies)) return;
         dataset.companies.forEach((item) => merged.push({ ...item, _file_type: currentType }));
       });
+      const tempRows = await listTempCompanySearchRows('all');
+      tempRows.forEach((item) => merged.push(item));
       const filtered = searchCompaniesInDataset(merged, criteria, options || {});
       const response = { success: true, data: filtered.items, meta: filtered.meta };
       writeSearchCache(cacheKey, response);
@@ -58,7 +63,9 @@ module.exports = async function handler(req, res) {
 
     const meta = await getDatasetMeta(fileType);
     const versionKey = getDatasetVersion(meta);
-    const cacheKey = JSON.stringify({ fileType, criteria, options, versionKey });
+    const tempDoc = await readTempCompaniesDocument();
+    const tempVersion = String(tempDoc?.updatedAt || '');
+    const cacheKey = JSON.stringify({ fileType, criteria, options, versionKey, tempVersion });
     const cached = readSearchCache(cacheKey);
     if (cached) {
       return sendJson(res, 200, cached);
@@ -68,7 +75,10 @@ module.exports = async function handler(req, res) {
     if (!dataset || !Array.isArray(dataset.companies) || dataset.companies.length === 0) {
       return sendJson(res, 200, { success: false, message: `${fileType} 파일이 로드되지 않았습니다` });
     }
-    const processed = searchCompaniesInDataset(dataset.companies, criteria, options || {});
+    const merged = [...dataset.companies];
+    const tempRows = await listTempCompanySearchRows(fileType);
+    tempRows.forEach((item) => merged.push(item));
+    const processed = searchCompaniesInDataset(merged, criteria, options || {});
     const response = { success: true, data: processed.items, meta: processed.meta };
     writeSearchCache(cacheKey, response);
     return sendJson(res, 200, response);
