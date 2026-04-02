@@ -1475,6 +1475,8 @@ body {
 .records-grid {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
   min-width: 1080px;
   overflow-x: hidden;
