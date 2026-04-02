@@ -803,6 +803,7 @@ body {
 /* Records feature layout */
 .records-stage {
   background: #f9fafb;
+  min-height: 0;
 }
 
 .records-layout {
@@ -811,6 +812,7 @@ body {
   gap: 16px;
   padding: 16px;
   height: 100%;
+  min-height: 0;
 }
 
 .records-panel {
@@ -831,7 +833,9 @@ body {
 .records-panel--workspace {
   gap: 12px;
   flex: 1 1 auto;
+  min-height: 0;
   min-width: 0;
+  overflow: hidden;
 }
 
 .records-workspace {
