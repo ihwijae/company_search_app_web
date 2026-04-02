@@ -13,4 +13,9 @@ export default defineConfig({
     port: 5173,        // 개발 서버 포트를 Electron dev URL과 통일
     strictPort: true,  // 이미 사용 중이면 에러 내고 종료 (다른 포트로 자동 변경 방지)
   },
+  preview: {
+    port: 4173,
+    strictPort: true,
+    allowedHosts: ['app.jium.store'],
+  },
 })
