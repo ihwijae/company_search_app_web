@@ -1,5 +1,6 @@
-const { handleUpload } = require('@vercel/blob/client');
-const { resolveToken } = require('../_lib/blob-store');
+const path = require('path');
+const { readJsonBody } = require('../_lib/http');
+const { ROOTS, ensureDir, sanitizeFileName, resolveWithinRoot, writeBinaryFile } = require('../_lib/local-storage');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -10,33 +11,31 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const token = resolveToken();
-  if (!token) {
-    res.statusCode = 500;
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.end(JSON.stringify({ error: 'BLOB_READ_WRITE_TOKEN is not configured' }));
-    return;
-  }
-
   try {
-    const chunks = [];
-    for await (const chunk of req) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const body = await readJsonBody(req);
+    const projectId = String(body?.projectId || '').trim();
+    const attachmentId = String(body?.attachmentId || '').trim();
+    const fileName = sanitizeFileName(body?.fileName || 'attachment');
+    const fileBase64 = String(body?.fileBase64 || '').trim();
+    const contentType = String(body?.contentType || 'application/octet-stream').trim();
+
+    if (!projectId || !attachmentId || !fileBase64) {
+      throw new Error('projectId, attachmentId, file payload are required');
     }
-    const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
-    const jsonResponse = await handleUpload({
-      token,
-      request: req,
-      body,
-      onBeforeGenerateToken: async () => ({
-        addRandomSuffix: true,
-        allowOverwrite: false,
-        access: 'private',
-      }),
-    });
+
+    await ensureDir(ROOTS.recordAttachments);
+    const relativePath = path.join(projectId, `${attachmentId}-${fileName}`);
+    const absolutePath = await writeBinaryFile(ROOTS.recordAttachments, relativePath, Buffer.from(fileBase64, 'base64'));
+    const pathname = path.relative(ROOTS.recordAttachments, absolutePath).split(path.sep).join('/');
+
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.end(JSON.stringify(jsonResponse));
+    res.end(JSON.stringify({
+      success: true,
+      pathname,
+      filePath: `/api/records?action=file&pathname=${encodeURIComponent(pathname)}`,
+      contentType,
+    }));
   } catch (error) {
     console.error('[api/records/upload] failed:', error);
     res.statusCode = 400;

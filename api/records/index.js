@@ -1,7 +1,8 @@
-const { get } = require('@vercel/blob');
+const fs = require('fs');
+const path = require('path');
 const { sendJson, allowMethods, readJsonBody } = require('../_lib/http');
 const { readRecordsDocument, writeRecordsDocument } = require('../_lib/records-store');
-const { resolveToken } = require('../_lib/blob-store');
+const { ROOTS, resolveWithinRoot } = require('../_lib/local-storage');
 
 function getActionFromRequest(req) {
   const url = new URL(req.url, 'http://localhost');
@@ -25,49 +26,18 @@ module.exports = async function handler(req, res) {
       if (!pathname) {
         return sendJson(res, 400, { success: false, message: 'pathname is required' });
       }
-      const token = resolveToken();
-      if (!token) {
-        return sendJson(res, 500, { success: false, message: 'BLOB_READ_WRITE_TOKEN is not configured' });
-      }
       try {
-        const result = await get(pathname, {
-          access: 'private',
-          token,
-          ifNoneMatch: req.headers['if-none-match'] || undefined,
-        });
-        if (!result || result.statusCode === 404) {
+        const filePath = resolveWithinRoot(ROOTS.recordAttachments, pathname);
+        const stat = await fs.promises.stat(filePath).catch(() => null);
+        if (!stat || !stat.isFile()) {
           return sendJson(res, 404, { success: false, message: 'File not found' });
-        }
-        if (result.statusCode === 304) {
-          res.statusCode = 304;
-          if (result.blob?.etag) res.setHeader('ETag', result.blob.etag);
-          res.setHeader('Cache-Control', 'private, no-cache');
-          res.end();
-          return;
         }
 
         res.statusCode = 200;
-        if (result.contentType) res.setHeader('Content-Type', result.contentType);
-        if (result.contentDisposition) {
-          res.setHeader('Content-Disposition', result.contentDisposition);
-        } else if (result.blob?.pathname) {
-          const fileName = result.blob.pathname.split('/').pop();
-          if (fileName) {
-            res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`);
-          }
-        }
-        if (result.cacheControl) res.setHeader('Cache-Control', result.cacheControl);
-        if (result.blob?.etag) res.setHeader('ETag', result.blob.etag);
-        if (result.blob?.size) res.setHeader('Content-Length', String(result.blob.size));
-
-        if (!result.stream) {
-          res.end();
-          return;
-        }
-        for await (const chunk of result.stream) {
-          res.write(chunk);
-        }
-        res.end();
+        res.setHeader('Content-Type', 'application/octet-stream');
+        res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(path.basename(filePath))}`);
+        res.setHeader('Content-Length', String(stat.size));
+        fs.createReadStream(filePath).pipe(res);
         return;
       } catch (error) {
         console.error('[api/records:file] failed:', error);

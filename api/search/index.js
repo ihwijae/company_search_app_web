@@ -1,5 +1,5 @@
 const { sendJson, allowMethods, readJsonBody } = require('../_lib/http');
-const { DATASET_TYPES, parseSharedDataset, resolveToken, getDatasetMeta, getDatasetVersion } = require('../_lib/blob-store');
+const { DATASET_TYPES, parseSharedDataset, getDatasetMeta, getDatasetVersion } = require('../_lib/blob-store');
 const { searchCompaniesInDataset } = require('../_lib/dataset-parser');
 
 const SEARCH_CACHE_TTL_MS = 60 * 1000;
@@ -26,10 +26,6 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     allowMethods(res, ['POST']);
     return sendJson(res, 405, { success: false, message: 'Method not allowed' });
-  }
-
-  if (!resolveToken()) {
-    return sendJson(res, 500, { success: false, message: 'BLOB_READ_WRITE_TOKEN is not configured' });
   }
 
   try {

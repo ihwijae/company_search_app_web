@@ -1,5 +1,5 @@
 const { sendJson, allowMethods } = require('../_lib/http');
-const { DATASET_TYPES, parseSharedDataset, resolveToken, getDatasetMeta, getDatasetVersion } = require('../_lib/blob-store');
+const { DATASET_TYPES, parseSharedDataset, getDatasetMeta, getDatasetVersion } = require('../_lib/blob-store');
 
 const REGIONS_CACHE_TTL_MS = 5 * 60 * 1000;
 const regionsCache = new Map();
@@ -25,10 +25,6 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {
     allowMethods(res, ['GET']);
     return sendJson(res, 405, { success: false, message: 'Method not allowed' });
-  }
-
-  if (!resolveToken()) {
-    return sendJson(res, 200, { success: true, data: ['전체'] });
   }
 
   try {

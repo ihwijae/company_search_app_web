@@ -1,5 +1,5 @@
-const { handleUpload } = require('@vercel/blob/client');
-const { resolveToken } = require('../_lib/blob-store');
+const { readJsonBody } = require('../_lib/http');
+const { ROOTS, ensureDir, sanitizeFileName, writeBinaryFile } = require('../_lib/local-storage');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -10,33 +10,27 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const token = resolveToken();
-  if (!token) {
-    res.statusCode = 500;
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.end(JSON.stringify({ error: 'BLOB_READ_WRITE_TOKEN is not configured' }));
-    return;
-  }
-
   try {
-    const chunks = [];
-    for await (const chunk of req) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const body = await readJsonBody(req);
+    const fileName = sanitizeFileName(body?.fileName || 'attachment');
+    const fileBase64 = String(body?.fileBase64 || '').trim();
+    const contentType = String(body?.contentType || 'application/octet-stream').trim();
+    const pathname = `${Date.now()}-${fileName}`;
+
+    if (!fileBase64) {
+      throw new Error('file payload is required');
     }
-    const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
-    const jsonResponse = await handleUpload({
-      token,
-      request: req,
-      body,
-      onBeforeGenerateToken: async (pathname) => ({
-        addRandomSuffix: true,
-        allowOverwrite: false,
-        access: 'private',
-      }),
-    });
+
+    await ensureDir(ROOTS.mailAttachments);
+    await writeBinaryFile(ROOTS.mailAttachments, pathname, Buffer.from(fileBase64, 'base64'));
+
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.end(JSON.stringify(jsonResponse));
+    res.end(JSON.stringify({
+      success: true,
+      pathname,
+      contentType,
+    }));
   } catch (error) {
     console.error('[api/mail/upload] failed:', error);
     res.statusCode = 400;

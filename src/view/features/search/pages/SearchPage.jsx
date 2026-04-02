@@ -1183,11 +1183,7 @@ function App() {
         onSelect={(k) => {
           setActiveMenu(k);
           if (k === 'upload') {
-            if (searchClient.supportsDatasetUpload()) {
-              setUploadOpen(true);
-            } else {
-              setDialog({ isOpen: true, message: '웹 버전은 프로젝트에 포함된 정적 업체 데이터셋을 사용합니다.' });
-            }
+            setUploadOpen(true);
           }
           if (k === 'agreements') window.location.hash = '#/agreement-board';
           if (k === 'region-search') window.location.hash = '#/region-search';

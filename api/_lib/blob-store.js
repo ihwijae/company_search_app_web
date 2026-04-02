@@ -1,10 +1,9 @@
-const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { parseDatasetBuffer } = require('./dataset-parser');
+const { ROOTS, ensureDir, readJsonFile, writeJsonFile } = require('./local-storage');
 
 const DATASET_TYPES = ['eung', 'tongsin', 'sobang'];
-const DEFAULT_DATASET_ROOT = path.join(os.homedir(), 'app-data', 'company-search', 'uploads', 'master-files');
+const DEFAULT_DATASET_ROOT = ROOTS.datasets;
 const MANIFEST_PATH = 'manifest.json';
 const datasetCache = new Map();
 let manifestCache = { value: null, storedAt: 0 };
@@ -14,11 +13,7 @@ const resolveDatasetRoot = () => {
   return configured || DEFAULT_DATASET_ROOT;
 };
 
-const ensureDatasetRoot = async () => {
-  const root = resolveDatasetRoot();
-  await fs.promises.mkdir(root, { recursive: true });
-  return root;
-};
+const ensureDatasetRoot = async () => ensureDir(resolveDatasetRoot());
 
 const toPosixRelative = (targetPath) => path.relative(resolveDatasetRoot(), targetPath).split(path.sep).join('/');
 
@@ -27,28 +22,12 @@ const toAbsolutePath = (relativePath) => {
   return path.join(resolveDatasetRoot(), relativePath);
 };
 
-const readJsonFile = async (filePath) => {
-  try {
-    const raw = await fs.promises.readFile(filePath, 'utf8');
-    return JSON.parse(raw);
-  } catch (error) {
-    if (error && error.code === 'ENOENT') return null;
-    console.warn('[dataset-store] readJsonFile failed:', filePath, error && error.message ? error.message : error);
-    return null;
-  }
-};
-
-const writeJsonFile = async (filePath, value) => {
-  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.promises.writeFile(filePath, JSON.stringify(value, null, 2), 'utf8');
-};
-
 async function readManifest() {
   if (manifestCache.value) {
     return manifestCache.value;
   }
   const manifestPath = path.join(await ensureDatasetRoot(), MANIFEST_PATH);
-  const manifest = await readJsonFile(manifestPath);
+  const manifest = await readJsonFile(manifestPath, null);
   const resolved = manifest && typeof manifest === 'object' ? manifest : {
     updatedAt: null,
     datasets: {},

@@ -160,19 +160,19 @@ const attachmentToPayload = async (attachment) => {
       filename: attachment.name || attachment.path.split(/[/\\]/).pop(),
     };
   }
-  if (attachment.blobPathname) {
+  if (attachment.pathname) {
     return {
-      blobPathname: attachment.blobPathname,
-      filename: attachment.name || attachment.blobPathname.split(/[/\\]/).pop(),
+      pathname: attachment.pathname,
+      filename: attachment.name || attachment.pathname.split(/[/\\]/).pop(),
       contentType: attachment.contentType || undefined,
     };
   }
   if (attachment.file && typeof attachment.file.arrayBuffer === 'function') {
     const uploaded = await mailClient.uploadAttachment(attachment.file, {
-      pathname: `company-search/mail-attachments/${Date.now()}-${attachment.name || attachment.file.name || 'attachment'}`,
+      fileName: attachment.name || attachment.file.name || 'attachment',
     });
     return {
-      blobPathname: uploaded.pathname,
+      pathname: uploaded.pathname,
       filename: attachment.name || attachment.file.name || 'attachment',
       contentType: attachment.file.type || undefined,
     };

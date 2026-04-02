@@ -1,23 +1,13 @@
-const { put, del, list, get } = require('@vercel/blob');
-const { readManifest, writeManifest, resolveToken } = require('./blob-store');
+const fs = require('fs');
+const path = require('path');
+const { ROOTS, ensureDir, readJsonFile, writeJsonFile, sanitizeFileName, resolveWithinRoot } = require('./local-storage');
 
 const AGREEMENT_BOARD_MANIFEST_KEY = 'agreementBoardItems';
-const AGREEMENT_BOARD_ROOT_LABEL = 'Vercel Blob / agreement-board';
-const AGREEMENT_BOARD_PREFIX = 'company-search/agreement-board/';
-
-function ensureToken() {
-  const token = resolveToken();
-  if (!token) throw new Error('BLOB_READ_WRITE_TOKEN is not configured');
-  return token;
-}
+const AGREEMENT_BOARD_ROOT_LABEL = 'Local File / agreement-board';
+const AGREEMENT_BOARD_MANIFEST_PATH = path.join(ROOTS.agreementBoards, 'manifest.json');
 
 function sanitizeSegment(value, fallback = 'agreement') {
-  const normalized = String(value || '')
-    .trim()
-    .replace(/\s+/g, '-')
-    .replace(/[^0-9A-Za-z가-힣_-]/g, '')
-    .slice(0, 48);
-  return normalized || fallback;
+  return sanitizeFileName(String(value || '').trim().replace(/\s+/g, '-').slice(0, 48), fallback);
 }
 
 function normalizeIdentityValue(value) {
@@ -100,17 +90,32 @@ function buildAgreementBoardPath(meta = {}) {
   const industry = sanitizeSegment(meta.industryLabel, '');
   const identity = noticeNo || title || 'board';
   const suffix = industry ? `-${industry}` : '';
-  return `company-search/agreement-board/${owner}-${range}-${identity}${suffix}.json`;
+  return `${owner}-${range}-${identity}${suffix}.json`;
+}
+
+async function readAgreementManifest() {
+  await ensureDir(ROOTS.agreementBoards);
+  const manifest = await readJsonFile(AGREEMENT_BOARD_MANIFEST_PATH, { updatedAt: null, agreementBoardItems: [] });
+  return normalizeManifest(manifest);
+}
+
+async function writeAgreementManifest(manifest) {
+  const next = {
+    ...normalizeManifest(manifest),
+    updatedAt: new Date().toISOString(),
+  };
+  await ensureDir(ROOTS.agreementBoards);
+  await writeJsonFile(AGREEMENT_BOARD_MANIFEST_PATH, next);
+  return next;
 }
 
 async function saveAgreementBoard(snapshot = {}, options = {}) {
-  const token = ensureToken();
   const rawMeta = snapshot && typeof snapshot.meta === 'object' ? snapshot.meta : {};
   const payload = snapshot && typeof snapshot.payload === 'object'
     ? snapshot.payload
     : (snapshot && typeof snapshot === 'object' ? snapshot : {});
   const meta = deriveMetaFromPayload(payload, rawMeta);
-  const manifest = normalizeManifest(await readManifest());
+  const manifest = await readAgreementManifest();
   const existingItem = getAgreementBoardItems(manifest)
     .find((item) => item && item.meta && isSameAgreementIdentity(item.meta, meta));
   const pathname = options.pathname || meta.path || existingItem?.path || buildAgreementBoardPath(meta);
@@ -123,13 +128,8 @@ async function saveAgreementBoard(snapshot = {}, options = {}) {
     payload,
   };
 
-  await put(pathname, Buffer.from(JSON.stringify(document), 'utf8'), {
-    access: 'private',
-    contentType: 'application/json; charset=utf-8',
-    allowOverwrite: true,
-    addRandomSuffix: false,
-    token,
-  });
+  const filePath = resolveWithinRoot(ROOTS.agreementBoards, pathname);
+  await writeJsonFile(filePath, document);
 
   const nextItems = getAgreementBoardItems(manifest)
     .filter((item) => item && item.path !== pathname)
@@ -139,46 +139,12 @@ async function saveAgreementBoard(snapshot = {}, options = {}) {
     meta: document.meta,
   });
   manifest[AGREEMENT_BOARD_MANIFEST_KEY] = nextItems;
-  await writeManifest(manifest);
+  await writeAgreementManifest(manifest);
   return { path: pathname, meta: document.meta };
 }
 
-async function listAllAgreementBoardBlobPaths(token) {
-  const pathnames = [];
-  let cursor;
-  do {
-    const result = await list({
-      prefix: AGREEMENT_BOARD_PREFIX,
-      limit: 1000,
-      cursor,
-      token,
-    });
-    (result?.blobs || []).forEach((blob) => {
-      if (blob?.pathname) pathnames.push(blob.pathname);
-    });
-    cursor = result?.cursor;
-    if (!result?.hasMore) break;
-  } while (cursor);
-  return pathnames;
-}
-
-async function readAgreementMetaFromBlob(pathname, token) {
-  const result = await get(pathname, { access: 'private', token, useCache: false });
-  if (!result || result.statusCode !== 200) return null;
-  const response = new Response(result.stream);
-  const arrayBuffer = await response.arrayBuffer();
-  const parsed = JSON.parse(Buffer.from(arrayBuffer).toString('utf8'));
-  const payload = parsed && typeof parsed === 'object'
-    ? (parsed.payload && typeof parsed.payload === 'object' ? parsed.payload : parsed)
-    : {};
-  const rawMeta = parsed && typeof parsed === 'object' && parsed.meta && typeof parsed.meta === 'object'
-    ? parsed.meta
-    : {};
-  return deriveMetaFromPayload(payload, rawMeta);
-}
-
 async function listAgreementBoards() {
-  const manifest = normalizeManifest(await readManifest());
+  const manifest = await readAgreementManifest();
   const manifestItems = getAgreementBoardItems(manifest);
   const compactItems = manifestItems.filter((item) => item && item.path);
   const deduped = [];
@@ -205,24 +171,25 @@ async function listAgreementBoards() {
 }
 
 async function loadAgreementBoard(pathname) {
-  const token = ensureToken();
-  const result = await get(pathname, { access: 'private', token, useCache: false });
-  if (!result || result.statusCode !== 200) {
+  const filePath = resolveWithinRoot(ROOTS.agreementBoards, pathname);
+  const parsed = await readJsonFile(filePath, null);
+  if (!parsed) {
     throw new Error('협정을 불러오지 못했습니다.');
   }
-  const response = new Response(result.stream);
-  const arrayBuffer = await response.arrayBuffer();
-  const parsed = JSON.parse(Buffer.from(arrayBuffer).toString('utf8'));
   return parsed && parsed.payload ? parsed.payload : {};
 }
 
 async function deleteAgreementBoard(pathname) {
-  const token = ensureToken();
-  await del(pathname, { token });
-  const manifest = normalizeManifest(await readManifest());
+  const filePath = resolveWithinRoot(ROOTS.agreementBoards, pathname);
+  try {
+    await fs.promises.unlink(filePath);
+  } catch (error) {
+    if (!error || error.code !== 'ENOENT') throw error;
+  }
+  const manifest = await readAgreementManifest();
   manifest[AGREEMENT_BOARD_MANIFEST_KEY] = getAgreementBoardItems(manifest)
     .filter((item) => item && item.path !== pathname);
-  await writeManifest(manifest);
+  await writeAgreementManifest(manifest);
 }
 
 module.exports = {

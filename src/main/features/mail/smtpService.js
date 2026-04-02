@@ -1,7 +1,7 @@
 const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
-const { get, del } = require('@vercel/blob');
+const { ROOTS, resolveWithinRoot } = require('../../../../api/_lib/local-storage');
 
 const sanitizeString = (value) => (typeof value === 'string' ? value.trim() : '');
 
@@ -18,25 +18,13 @@ const normalizePort = (value, fallback = 465) => {
   return numeric;
 };
 
-const resolveBlobToken = () => process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL_BLOB_READ_WRITE_TOKEN || '';
-
-async function streamToBuffer(stream) {
-  if (!stream) return Buffer.alloc(0);
-  const response = new Response(stream);
-  const arrayBuffer = await response.arrayBuffer();
-  return Buffer.from(arrayBuffer);
-}
-
-async function resolveBlobAttachment(item) {
-  const pathname = sanitizeString(item.blobPathname || item.pathname);
+async function resolveStoredAttachment(item) {
+  const pathname = sanitizeString(item.pathname || item.filePath);
   if (!pathname) return null;
-  const token = resolveBlobToken();
-  if (!token) throw new Error('Blob 토큰이 설정되지 않아 첨부를 읽을 수 없습니다.');
-  const result = await get(pathname, { access: 'private', token, useCache: false });
-  if (!result || result.statusCode !== 200) {
-    throw new Error(`첨부를 읽을 수 없습니다: ${pathname}`);
-  }
-  const content = await streamToBuffer(result.stream);
+  const filePath = path.isAbsolute(pathname)
+    ? pathname
+    : resolveWithinRoot(ROOTS.mailAttachments, pathname);
+  const content = await fs.promises.readFile(filePath);
   return {
     filename: item.filename || path.basename(pathname),
     content,
@@ -44,25 +32,29 @@ async function resolveBlobAttachment(item) {
   };
 }
 
-function collectBlobAttachmentPaths(messages = []) {
+function collectStoredAttachmentPaths(messages = []) {
   const paths = new Set();
   messages.forEach((message) => {
     (message?.attachments || []).forEach((attachment) => {
-      const pathname = sanitizeString(attachment?.blobPathname || attachment?.pathname);
+      const pathname = sanitizeString(attachment?.pathname || attachment?.filePath);
       if (pathname) paths.add(pathname);
     });
   });
   return Array.from(paths);
 }
 
-async function cleanupBlobAttachments(pathnames = []) {
-  const token = resolveBlobToken();
-  if (!token || !Array.isArray(pathnames) || pathnames.length === 0) return;
+async function cleanupStoredAttachments(pathnames = []) {
+  if (!Array.isArray(pathnames) || pathnames.length === 0) return;
   await Promise.all(pathnames.map(async (pathname) => {
     try {
-      await del(pathname, { token });
+      const filePath = path.isAbsolute(pathname)
+        ? pathname
+        : resolveWithinRoot(ROOTS.mailAttachments, pathname);
+      await fs.promises.unlink(filePath);
     } catch (error) {
-      console.warn('[mail] failed to delete temp attachment:', pathname, error?.message || error);
+      if (error?.code !== 'ENOENT') {
+        console.warn('[mail] failed to delete temp attachment:', pathname, error?.message || error);
+      }
     }
   }));
 }
@@ -103,8 +95,8 @@ const sanitizeAttachments = async (attachments = []) => {
         path: resolved,
       };
     }
-    if (item.blobPathname || item.pathname) {
-      return resolveBlobAttachment(item);
+    if (item.pathname || item.filePath) {
+      return resolveStoredAttachment(item);
     }
     if (item.content && item.filename) {
       return {
@@ -175,7 +167,7 @@ async function sendBulkMail(payload = {}) {
   }
   const transporter = createTransporter(connection || {});
   const results = [];
-  const tempBlobAttachments = collectBlobAttachmentPaths(messages);
+  const tempBlobAttachments = collectStoredAttachmentPaths(messages);
   try {
     let processed = 0;
     for (const message of messages) {
@@ -205,7 +197,7 @@ async function sendBulkMail(payload = {}) {
     }
   } finally {
     try { await transporter.close?.(); } catch {}
-    await cleanupBlobAttachments(tempBlobAttachments);
+    await cleanupStoredAttachments(tempBlobAttachments);
   }
   return results;
 }

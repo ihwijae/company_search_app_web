@@ -1,4 +1,3 @@
-import { upload as uploadToBlob } from '@vercel/blob/client';
 import initSqlJs from 'sql.js';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import defaults from '../main/features/records/defaults.json';
@@ -107,9 +106,7 @@ const normalizeAttachment = (attachment) => ({
   mimeType: attachment.mimeType || 'application/octet-stream',
   fileSize: Number.isFinite(attachment.fileSize) ? attachment.fileSize : null,
   uploadedAt: attachment.uploadedAt || toIsoNow(),
-  blobPathname: attachment.blobPathname || '',
-  url: attachment.url || '',
-  downloadUrl: attachment.downloadUrl || '',
+  pathname: attachment.pathname || '',
   dataUrl: attachment.dataUrl || '',
 });
 
@@ -209,16 +206,14 @@ const hydrateAttachment = (attachment) => ({
   id: attachment.id,
   displayName: attachment.displayName,
   fileName: attachment.fileName || attachment.displayName,
-  filePath: attachment.blobPathname
-    ? `/api/records?action=file&pathname=${encodeURIComponent(attachment.blobPathname)}`
-    : (attachment.downloadUrl || attachment.url || attachment.dataUrl || ''),
-  relativePath: attachment.blobPathname || attachment.fileName || attachment.displayName,
+  filePath: attachment.pathname
+    ? `/api/records?action=file&pathname=${encodeURIComponent(attachment.pathname)}`
+    : (attachment.dataUrl || ''),
+  relativePath: attachment.pathname || attachment.fileName || attachment.displayName,
   mimeType: attachment.mimeType || 'application/octet-stream',
   fileSize: attachment.fileSize ?? null,
   uploadedAt: attachment.uploadedAt,
-  blobPathname: attachment.blobPathname || '',
-  url: attachment.url || '',
-  downloadUrl: attachment.downloadUrl || '',
+  pathname: attachment.pathname || '',
 });
 
 const hydrateProject = (project, state) => {
@@ -278,12 +273,23 @@ const getSqlJs = async () => {
 };
 
 const uploadAttachmentFile = async (file, { projectId, attachmentId, fileName }) => {
-  const pathname = `company-search/records/attachments/${projectId}/${attachmentId}-${fileName}`;
-  return uploadToBlob(pathname, file, {
-    access: 'private',
-    handleUploadUrl: '/api/records/upload',
-    multipart: file.size >= 5 * 1024 * 1024,
-    contentType: file.type || undefined,
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return requestJson('/api/records/upload', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      projectId,
+      attachmentId,
+      fileName,
+      contentType: file.type || 'application/octet-stream',
+      fileBase64: btoa(binary),
+    }),
   });
 };
 
@@ -365,9 +371,7 @@ const buildImportedStateFromDatabase = async (db, directoryHandle) => {
           mimeType: attachment.mime_type || file.type || 'application/octet-stream',
           fileSize: Number.isFinite(Number(attachment.file_size)) ? Number(attachment.file_size) : file.size,
           uploadedAt: attachment.uploaded_at || toIsoNow(),
-          blobPathname: uploaded.pathname || '',
-          url: uploaded.url || '',
-          downloadUrl: uploaded.downloadUrl || uploaded.url || '',
+          pathname: uploaded.pathname || '',
         });
       } catch (error) {
         const displayName = normalizeText(attachment.display_name || attachment.file_path || '첨부 파일');
@@ -672,9 +676,7 @@ export const recordsWebStore = {
           mimeType: attachment.mimeType || 'application/octet-stream',
           fileSize: attachment.buffer?.byteLength ?? file.size,
           uploadedAt: now,
-          blobPathname: uploaded.pathname || '',
-          url: uploaded.url || '',
-          downloadUrl: uploaded.downloadUrl || uploaded.url || '',
+          pathname: uploaded.pathname || '',
         };
       }),
     );
@@ -724,9 +726,7 @@ export const recordsWebStore = {
           mimeType: attachment.mimeType || 'application/octet-stream',
           fileSize: attachment.buffer?.byteLength ?? file.size,
           uploadedAt: now,
-          blobPathname: uploaded.pathname || '',
-          url: uploaded.url || '',
-          downloadUrl: uploaded.downloadUrl || uploaded.url || '',
+          pathname: uploaded.pathname || '',
         };
       }),
     );
@@ -789,9 +789,7 @@ export const recordsWebStore = {
           mimeType: attachment.mimeType || 'application/octet-stream',
           fileSize: attachment.buffer?.byteLength ?? file.size,
           uploadedAt: now,
-          blobPathname: uploaded.pathname || '',
-          url: uploaded.url || '',
-          downloadUrl: uploaded.downloadUrl || uploaded.url || '',
+          pathname: uploaded.pathname || '',
         };
       }),
     );
@@ -844,9 +842,9 @@ export const recordsWebStore = {
     const target = Array.isArray(project?.attachments)
       ? project.attachments.find((item) => item.id === Number(attachmentId))
       : project?.attachment || null;
-    const href = target?.blobPathname
-      ? `/api/records?action=file&pathname=${encodeURIComponent(target.blobPathname)}`
-      : (target?.filePath || target?.downloadUrl || target?.url || '');
+    const href = target?.pathname
+      ? `/api/records?action=file&pathname=${encodeURIComponent(target.pathname)}`
+      : (target?.filePath || '');
     if (!href) {
       throw new Error('첨부 파일을 찾을 수 없습니다.');
     }

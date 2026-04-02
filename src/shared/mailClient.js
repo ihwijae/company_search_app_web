@@ -1,5 +1,3 @@
-import { upload as uploadToBlob } from '@vercel/blob/client';
-
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 function getElectronMailApi() {
@@ -58,13 +56,23 @@ const mailClient = {
     if (!(file instanceof File)) {
       throw new Error('업로드할 파일이 올바르지 않습니다.');
     }
-    const pathname = options.pathname || `company-search/mail-attachments/${Date.now()}-${file.name}`;
-    return uploadToBlob(pathname, file, {
-      access: 'private',
-      handleUploadUrl: '/api/mail/upload',
-      multipart: file.size >= 5 * 1024 * 1024,
-      contentType: file.type || undefined,
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let index = 0; index < bytes.length; index += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+    }
+    const data = await requestJson('/api/mail/upload', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        fileName: options.fileName || file.name,
+        contentType: file.type || 'application/octet-stream',
+        fileBase64: btoa(binary),
+      }),
     });
+    return data;
   },
 };
 
