@@ -5,6 +5,7 @@ const {
   loadAgreementBoard,
   deleteAgreementBoard,
   AGREEMENT_BOARD_ROOT_LABEL,
+  AGREEMENT_BOARD_ROOT_PATH,
 } = require('../_lib/agreement-board-store');
 
 function getGetAction(req) {
@@ -18,7 +19,12 @@ module.exports = async function handler(req, res) {
     if (!action || action === 'list') {
       try {
         const data = await listAgreementBoards();
-        return sendJson(res, 200, { success: true, data, path: AGREEMENT_BOARD_ROOT_LABEL });
+        return sendJson(res, 200, {
+          success: true,
+          data,
+          path: AGREEMENT_BOARD_ROOT_PATH,
+          label: AGREEMENT_BOARD_ROOT_LABEL,
+        });
       } catch (error) {
         console.error('[api/agreement-board:index:list] failed:', error);
         return sendJson(res, 500, { success: false, message: error?.message || 'List failed' });
@@ -27,7 +33,8 @@ module.exports = async function handler(req, res) {
     if (action === 'root') {
       return sendJson(res, 200, {
         success: true,
-        path: AGREEMENT_BOARD_ROOT_LABEL,
+        path: AGREEMENT_BOARD_ROOT_PATH,
+        label: AGREEMENT_BOARD_ROOT_LABEL,
         message: '웹에서는 서버 저장소를 사용합니다.',
       });
     }
@@ -63,7 +70,8 @@ module.exports = async function handler(req, res) {
       if (action === 'root') {
         return sendJson(res, 200, {
           success: true,
-          path: AGREEMENT_BOARD_ROOT_LABEL,
+          path: AGREEMENT_BOARD_ROOT_PATH,
+          label: AGREEMENT_BOARD_ROOT_LABEL,
           message: '웹에서는 서버 저장소를 사용합니다.',
         });
       }

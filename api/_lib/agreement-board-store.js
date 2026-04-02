@@ -4,6 +4,7 @@ const { ROOTS, ensureDir, readJsonFile, writeJsonFile, sanitizeFileName, resolve
 
 const AGREEMENT_BOARD_MANIFEST_KEY = 'agreementBoardItems';
 const AGREEMENT_BOARD_ROOT_LABEL = 'Local File / agreement-board';
+const AGREEMENT_BOARD_ROOT_PATH = ROOTS.agreementBoards;
 const AGREEMENT_BOARD_MANIFEST_PATH = path.join(ROOTS.agreementBoards, 'manifest.json');
 
 function sanitizeSegment(value, fallback = 'agreement') {
@@ -145,8 +146,30 @@ async function saveAgreementBoard(snapshot = {}, options = {}) {
 
 async function listAgreementBoards() {
   const manifest = await readAgreementManifest();
-  const manifestItems = getAgreementBoardItems(manifest);
-  const compactItems = manifestItems.filter((item) => item && item.path);
+  const manifestItems = getAgreementBoardItems(manifest).filter((item) => item && item.path);
+  const files = await fs.promises.readdir(ROOTS.agreementBoards, { withFileTypes: true }).catch(() => []);
+  const fileItems = await Promise.all(files
+    .filter((entry) => entry && entry.isFile() && entry.name.endsWith('.json') && entry.name !== 'manifest.json')
+    .map(async (entry) => {
+      const pathname = entry.name;
+      const filePath = resolveWithinRoot(ROOTS.agreementBoards, pathname);
+      const parsed = await readJsonFile(filePath, null);
+      const payload = parsed && typeof parsed === 'object'
+        ? (parsed.payload && typeof parsed.payload === 'object' ? parsed.payload : parsed)
+        : {};
+      const fromFileMeta = parsed && typeof parsed === 'object' && parsed.meta && typeof parsed.meta === 'object'
+        ? parsed.meta
+        : {};
+      const stat = await fs.promises.stat(filePath).catch(() => null);
+      const fallbackSavedAt = stat && stat.mtime ? stat.mtime.toISOString() : new Date().toISOString();
+      const meta = {
+        ...deriveMetaFromPayload(payload, fromFileMeta),
+        savedAt: fromFileMeta.savedAt || fallbackSavedAt,
+      };
+      return { path: pathname, meta };
+    }));
+
+  const compactItems = [...fileItems, ...manifestItems];
   const deduped = [];
   for (const item of compactItems) {
     const duplicateIndex = deduped.findIndex((existing) => isSameAgreementIdentity(existing?.meta || {}, item?.meta || {}));
@@ -167,6 +190,9 @@ async function listAgreementBoards() {
     return bTs - aTs;
   });
 
+  manifest[AGREEMENT_BOARD_MANIFEST_KEY] = deduped;
+  await writeAgreementManifest(manifest);
+
   return deduped;
 }
 
@@ -176,7 +202,10 @@ async function loadAgreementBoard(pathname) {
   if (!parsed) {
     throw new Error('협정을 불러오지 못했습니다.');
   }
-  return parsed && parsed.payload ? parsed.payload : {};
+  if (parsed && typeof parsed === 'object' && parsed.payload && typeof parsed.payload === 'object') {
+    return parsed.payload;
+  }
+  return parsed && typeof parsed === 'object' ? parsed : {};
 }
 
 async function deleteAgreementBoard(pathname) {
@@ -194,6 +223,7 @@ async function deleteAgreementBoard(pathname) {
 
 module.exports = {
   AGREEMENT_BOARD_ROOT_LABEL,
+  AGREEMENT_BOARD_ROOT_PATH,
   saveAgreementBoard,
   listAgreementBoards,
   loadAgreementBoard,
