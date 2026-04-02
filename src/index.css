@@ -1467,8 +1467,7 @@ body {
 .records-grid-wrapper {
   flex: 1 1 auto;
   min-height: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: auto;
   border-radius: 12px;
   background: linear-gradient(#fff4d4 0 64px, #fff 64px 100%);
   border: 1px solid #d4d4d8;
@@ -1479,12 +1478,10 @@ body {
 .records-grid {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
   width: 100%;
   min-width: 1080px;
-  overflow-x: hidden;
-  overflow-y: auto;
+  min-height: min-content;
+  overflow: visible;
 }
 
 .records-grid__header {
@@ -1497,6 +1494,9 @@ body {
   border-top-left-radius: 12px;
   border-top-right-radius: 12px;
   overflow: hidden;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .records-grid__header-cell {
