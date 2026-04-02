@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 const { parseDatasetBuffer } = require('./dataset-parser');
 const { ROOTS, ensureDir, readJsonFile, writeJsonFile } = require('./local-storage');
