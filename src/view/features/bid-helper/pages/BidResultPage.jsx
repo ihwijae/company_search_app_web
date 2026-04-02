@@ -5,7 +5,9 @@ import Sidebar from '../../../../components/Sidebar';
 import { useFeedback } from '../../../../components/FeedbackProvider.jsx';
 import { extractManagerNames } from '../../../../utils/companyIndicators.js';
 import { BASE_ROUTES } from '../../../../shared/navigation.js';
+import { searchClient } from '../../../../shared/searchClient.js';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 const FILE_TYPE_OPTIONS = [
   { value: 'eung', label: '전기' },
@@ -177,6 +179,98 @@ const summarizeMissingEntries = (entries, candidatesMap) => {
   };
 };
 
+const cloneFont = (font) => {
+  if (!font) return font;
+  try { return JSON.parse(JSON.stringify(font)); } catch { return font; }
+};
+
+const getCellText = (cell) => {
+  if (!cell) return '';
+  if (cell.text !== undefined && cell.text !== null && String(cell.text).length) {
+    return String(cell.text);
+  }
+  const value = cell.value;
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object') {
+    if (Array.isArray(value.richText)) {
+      return value.richText.map((part) => part.text || '').join('');
+    }
+    if (value.formula) {
+      return value.result !== undefined && value.result !== null ? String(value.result) : '';
+    }
+    if (value.text) return String(value.text);
+    if (value.hyperlink) return String(value.text || value.hyperlink);
+    return '';
+  }
+  return String(value);
+};
+
+const setFontSize = (cell, size) => {
+  if (!cell) return;
+  const target = cell.isMerged && cell.master ? cell.master : cell;
+  if (!target) return;
+  const nextFont = { ...(target.font || {}), size };
+  target.font = nextFont;
+  target.style = { ...(target.style || {}), font: { ...(target.style?.font || {}), size } };
+  if (target.value && Array.isArray(target.value.richText)) {
+    target.value = {
+      ...target.value,
+      richText: target.value.richText.map((part) => ({
+        ...part,
+        font: { ...(part.font || {}), size },
+      })),
+    };
+  }
+};
+
+const findLastDataRow = (worksheet) => {
+  const maxRow = Math.max(worksheet.rowCount, 14);
+  let lastRow = 0;
+  for (let row = 14; row <= maxRow; row += 1) {
+    const text = getCellText(worksheet.getCell(row, 2)).trim();
+    if (text) lastRow = row;
+  }
+  return lastRow || 13;
+};
+
+const autoFitDiffColumn = (worksheet, maxRow, { minWidth = 8, maxWidth = 20 } = {}) => {
+  let maxLen = 0;
+  for (let row = 15; row <= maxRow; row += 1) {
+    const current = worksheet.getCell(row, 5).value;
+    const prev = worksheet.getCell(row - 1, 5).value;
+    const currentNum = typeof current === 'number' ? current : Number(String(current || '').replace(/[^0-9.\-]/g, ''));
+    const prevNum = typeof prev === 'number' ? prev : Number(String(prev || '').replace(/[^0-9.\-]/g, ''));
+    if (!Number.isFinite(currentNum) || !Number.isFinite(prevNum)) continue;
+    const diff = currentNum - prevNum;
+    const text = diff.toLocaleString('en-US');
+    if (text.length > maxLen) maxLen = text.length;
+  }
+  const width = Math.min(maxWidth, Math.max(minWidth, maxLen + 2));
+  worksheet.getColumn(16).width = width;
+};
+
+const sanitizeDownloadName = (value, fallback = 'output.xlsx') => {
+  const cleaned = String(value || '').trim().replace(/[\\/:*?"<>|]/g, '');
+  return cleaned || fallback;
+};
+
+const downloadBlob = (blob, fileName) => {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = sanitizeDownloadName(fileName);
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+};
+
+const QUALITY_FILL = {
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FFFFFF00' },
+};
+
 export default function BidResultPage() {
   const { notify } = useFeedback();
   const [ownerId, setOwnerId] = React.useState('');
@@ -186,10 +280,12 @@ export default function BidResultPage() {
   const [formatFile, setFormatFile] = React.useState(null);
   const [isFormatting, setIsFormatting] = React.useState(false);
   const [templatePath, setTemplatePath] = React.useState('');
+  const [templateFile, setTemplateFile] = React.useState(null);
   const [agreementFile, setAgreementFile] = React.useState(null);
   const [bidAmountAgreementFile, setBidAmountAgreementFile] = React.useState(null);
   const [orderingResultFile, setOrderingResultFile] = React.useState(null);
   const [bidAmountTemplatePath, setBidAmountTemplatePath] = React.useState('');
+  const [bidAmountTemplateFile, setBidAmountTemplateFile] = React.useState(null);
   const [isAgreementProcessing, setIsAgreementProcessing] = React.useState(false);
   const [isOrderingProcessing, setIsOrderingProcessing] = React.useState(false);
   const [isBidAmountProcessing, setIsBidAmountProcessing] = React.useState(false);
@@ -224,6 +320,7 @@ export default function BidResultPage() {
   const bidAmountOwnerLabel = React.useMemo(() => (
     OWNER_OPTIONS.find((option) => option.value === bidAmountOwnerId)?.label || '한국토지주택공사'
   ), [bidAmountOwnerId]);
+  const isElectron = Boolean(window?.electronAPI);
 
   const strongLabelStyle = React.useMemo(() => ({
     display: 'block',
@@ -267,12 +364,198 @@ export default function BidResultPage() {
     if (key === 'upload') { window.location.hash = BASE_ROUTES.agreementBoard; }
   }, []);
 
+  const findCompaniesForEntries = React.useCallback(async (entries, targetFileType) => {
+    const candidatesMap = new Map();
+    for (const entry of entries) {
+      if (!entry?.normalizedName) continue;
+      if (candidatesMap.has(entry.normalizedName)) continue;
+      try {
+        const response = await searchClient.searchCompanies({ name: entry.cleanedName }, targetFileType, { pagination: null });
+        const data = Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response?.items)
+            ? response.items
+            : [];
+        candidatesMap.set(entry.normalizedName, data);
+      } catch (error) {
+        console.warn('[bid-result] search failed:', error);
+        candidatesMap.set(entry.normalizedName, []);
+      }
+    }
+    return candidatesMap;
+  }, []);
+
+  const formatWorkbookInBrowser = React.useCallback(async (file) => {
+    const workbook = new ExcelJS.Workbook();
+    const buffer = await file.arrayBuffer();
+    await workbook.xlsx.load(buffer);
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) throw new Error('엑셀 시트를 찾을 수 없습니다.');
+
+    const lastDataRow = findLastDataRow(worksheet);
+    const preservedFonts = new Map();
+    if (lastDataRow >= 14) {
+      for (let row = 14; row <= lastDataRow; row += 1) {
+        for (let col = 1; col <= 16; col += 1) {
+          if (col === 4 || col === 5 || col === 16) continue;
+          const font = worksheet.getCell(row, col).font;
+          if (font) preservedFonts.set(`${row}:${col}`, cloneFont(font));
+        }
+      }
+    }
+
+    for (let row = 5; row <= 10; row += 1) {
+      for (let col = 2; col <= 13; col += 1) {
+        setFontSize(worksheet.getCell(row, col), 11);
+      }
+    }
+    setFontSize(worksheet.getCell('B3'), 12);
+    setFontSize(worksheet.getCell('K3'), 12);
+
+    if (lastDataRow >= 14) {
+      for (let row = 14; row <= lastDataRow; row += 1) {
+        setFontSize(worksheet.getCell(row, 4), 12);
+        setFontSize(worksheet.getCell(row, 5), 12);
+        worksheet.getRow(row).height = 25;
+      }
+    }
+
+    worksheet.getColumn('N').hidden = true;
+
+    if (lastDataRow >= 15) {
+      for (let row = 15; row <= lastDataRow; row += 1) {
+        const cell = worksheet.getCell(row, 16);
+        cell.value = { formula: `E${row}-E${row - 1}` };
+        cell.numFmt = '#,##0';
+        cell.font = { ...(cell.font || {}), size: 12, bold: true };
+      }
+    }
+
+    autoFitDiffColumn(worksheet, Math.max(lastDataRow, worksheet.rowCount));
+    worksheet.getColumn(15).width = 1.88;
+
+    preservedFonts.forEach((font, key) => {
+      const [row, col] = key.split(':').map(Number);
+      worksheet.getCell(row, col).font = font;
+    });
+
+    workbook.calcProperties = {
+      ...(workbook.calcProperties || {}),
+      fullCalcOnLoad: true,
+    };
+
+    return workbook.xlsx.writeBuffer();
+  }, []);
+
+  const applyBidAmountTemplateInBrowser = React.useCallback(async ({ templateFile: file, entries, header }) => {
+    const workbook = new ExcelJS.Workbook();
+    const buffer = await file.arrayBuffer();
+    await workbook.xlsx.load(buffer);
+    const sheet = workbook.worksheets[0];
+    if (!sheet) throw new Error('투찰금액 템플릿 시트를 찾을 수 없습니다.');
+
+    const qualityEntries = [];
+    const tieEntries = [];
+    const normalEntries = [];
+    (entries || []).forEach((entry) => {
+      if (entry.isTie) tieEntries.push(entry);
+      else if (entry.isQuality) qualityEntries.push(entry);
+      else normalEntries.push(entry);
+    });
+    const totalCount = entries.length;
+    const slots = Array(totalCount).fill(null);
+    const qualityCount = qualityEntries.length;
+    const qualityStart = qualityCount > 0 ? Math.floor((totalCount - qualityCount) / 2) : 0;
+    for (let i = 0; i < qualityCount; i += 1) {
+      const slotIndex = qualityStart + i;
+      if (slotIndex >= 0 && slotIndex < totalCount) slots[slotIndex] = qualityEntries[i];
+    }
+    let tieIndex = 0;
+    for (let index = totalCount; index >= 1; index -= 1) {
+      if (tieIndex >= tieEntries.length) break;
+      const slotIndex = index - 1;
+      if (!slots[slotIndex]) {
+        slots[slotIndex] = tieEntries[tieIndex];
+        tieIndex += 1;
+      }
+    }
+    let normalIndex = 0;
+    for (let index = 1; index <= totalCount; index += 1) {
+      if (normalIndex >= normalEntries.length) break;
+      const slotIndex = index - 1;
+      if (!slots[slotIndex]) {
+        slots[slotIndex] = normalEntries[normalIndex];
+        normalIndex += 1;
+      }
+    }
+    const ordered = slots.filter(Boolean);
+
+    const lastRow = Math.max(
+      findLastDataRow(sheet),
+      (() => {
+        const maxRow = Math.max(sheet.rowCount || 0, 8);
+        let row = 7;
+        for (let i = 8; i <= maxRow; i += 1) {
+          if (getCellText(sheet.getCell(i, 3)).trim()) row = i;
+        }
+        return row;
+      })(),
+    );
+    for (let row = 8; row <= lastRow; row += 1) {
+      sheet.getCell(row, 2).value = null;
+      sheet.getCell(row, 3).value = null;
+      sheet.getCell(row, 7).value = null;
+      sheet.getCell(row, 2).fill = { type: 'pattern', pattern: 'none' };
+    }
+
+    const noticeNo = header.noticeNo ? String(header.noticeNo).trim() : '';
+    const noticeTitle = header.noticeTitle ? String(header.noticeTitle).trim() : '';
+    const ownerLabel = header.ownerLabel ? String(header.ownerLabel).trim() : '';
+    const bidDeadline = header.bidDeadline ? String(header.bidDeadline).trim() : '';
+    const baseAmount = header.baseAmount ? String(header.baseAmount).trim() : '';
+    if (noticeNo) sheet.getCell('C1').value = noticeNo;
+    if (noticeTitle) sheet.getCell('C2').value = noticeTitle;
+    if (ownerLabel) sheet.getCell('C3').value = ownerLabel;
+    if (bidDeadline) sheet.getCell('C4').value = bidDeadline;
+    if (baseAmount) sheet.getCell('C5').value = baseAmount;
+
+    ordered.forEach((entry, index) => {
+      const row = 8 + index;
+      sheet.getCell(row, 2).value = index + 1;
+      sheet.getCell(row, 3).value = entry.name;
+      if (entry.isQuality) {
+        sheet.getCell(row, 7).value = '품질만점';
+        sheet.getCell(row, 2).fill = QUALITY_FILL;
+      } else if (entry.isTie) {
+        sheet.getCell(row, 7).value = '동가주의';
+      }
+    });
+
+    const trimStartRow = 8 + ordered.length;
+    if (sheet.rowCount >= trimStartRow) {
+      const deleteCount = sheet.rowCount - trimStartRow + 1;
+      if (deleteCount > 0) {
+        sheet.spliceRows(trimStartRow, deleteCount);
+      }
+    }
+
+    const output = await workbook.xlsx.writeBuffer();
+    return {
+      buffer: output,
+      totalCount,
+      qualityCount: qualityEntries.length,
+      tieCount: tieEntries.length,
+    };
+  }, []);
+
   const handleTemplateFileUpload = (event) => {
     const file = event.target.files[0];
     if (file) {
-      setTemplatePath(file.path || '');
+      setTemplateFile(file);
+      setTemplatePath(file.path || file.name || '');
       notify({ type: 'info', message: '개찰결과파일이 변경되었습니다.' });
     } else {
+      setTemplateFile(null);
       setTemplatePath('');
     }
   };
@@ -287,6 +570,7 @@ export default function BidResultPage() {
     if (templateFileInputRef.current) {
       templateFileInputRef.current.value = '';
     }
+    setTemplateFile(null);
     setTemplatePath('');
     notify({ type: 'info', message: '개찰결과파일 선택이 해제되었습니다.' });
   };
@@ -294,9 +578,11 @@ export default function BidResultPage() {
   const handleBidAmountTemplateUpload = (event) => {
     const file = event.target.files[0];
     if (file) {
-      setBidAmountTemplatePath(file.path || '');
+      setBidAmountTemplateFile(file);
+      setBidAmountTemplatePath(file.path || file.name || '');
       notify({ type: 'info', message: '투찰금액 템플릿 파일이 변경되었습니다.' });
     } else {
+      setBidAmountTemplateFile(null);
       setBidAmountTemplatePath('');
     }
   };
@@ -311,6 +597,7 @@ export default function BidResultPage() {
     if (bidAmountTemplateInputRef.current) {
       bidAmountTemplateInputRef.current.value = '';
     }
+    setBidAmountTemplateFile(null);
     setBidAmountTemplatePath('');
     notify({ type: 'info', message: '투찰금액 템플릿 선택이 해제되었습니다.' });
   };
@@ -344,7 +631,7 @@ export default function BidResultPage() {
       notify({ type: 'info', message: '공종(전기/통신/소방)을 선택하세요.' });
       return;
     }
-    if (!bidAmountAgreementFile?.path) {
+    if (!bidAmountAgreementFile) {
       notify({ type: 'info', message: '협정파일을 선택하세요.' });
       return;
     }
@@ -352,30 +639,15 @@ export default function BidResultPage() {
       notify({ type: 'info', message: '협정파일 시트를 선택하세요.' });
       return;
     }
-    if (!window.electronAPI?.bidResult?.applyBidAmountTemplate) {
+    if (isElectron && !window.electronAPI?.bidResult?.applyBidAmountTemplate) {
       notify({ type: 'error', message: '투찰금액 템플릿 기능을 사용할 수 없습니다.' });
-      return;
-    }
-    if (!window.electronAPI?.searchCompanies) {
-      notify({ type: 'error', message: '업체 조회 기능을 사용할 수 없습니다.' });
       return;
     }
     setIsBidAmountProcessing(true);
     try {
       const { entries, excludedNames } = extractBidAmountEntries();
       if (!entries.length) throw new Error('협정파일에서 업체명을 찾지 못했습니다.');
-      const candidatesMap = new Map();
-      for (const entry of entries) {
-        if (!entry.normalizedName) continue;
-        if (candidatesMap.has(entry.normalizedName)) continue;
-        const response = await window.electronAPI.searchCompanies({ name: entry.cleanedName }, bidAmountFileType);
-        if (!response?.success) {
-          candidatesMap.set(entry.normalizedName, []);
-          continue;
-        }
-        const data = Array.isArray(response.data) ? response.data : [];
-        candidatesMap.set(entry.normalizedName, data);
-      }
+      const candidatesMap = await findCompaniesForEntries(entries, bidAmountFileType);
 
       const conflictEntries = [];
       entries.forEach((entry) => {
@@ -412,24 +684,53 @@ export default function BidResultPage() {
         deadlineParts.push(bidAmountDeadlinePeriod === 'PM' ? '오후' : '오전');
         deadlineParts.push(bidAmountDeadlineTime);
       }
-      const response = await window.electronAPI.bidResult.applyBidAmountTemplate({
-        templatePath: bidAmountTemplatePath,
-        entries: bidEntries,
-        header: {
-          noticeNo: bidAmountNoticeNo,
-          noticeTitle: bidAmountNoticeTitle,
-          ownerLabel: bidAmountOwnerLabel,
-          bidDeadline: deadlineParts.filter(Boolean).join(' '),
-          baseAmount: bidAmountBaseAmount,
-        },
-      });
-      if (!response?.success) {
-        if (response?.canceled) return;
-        throw new Error(response?.message || '투찰금액 템플릿 처리에 실패했습니다.');
+      let total = null;
+      let quality = null;
+      let tie = null;
+      if (isElectron) {
+        const response = await window.electronAPI.bidResult.applyBidAmountTemplate({
+          templatePath: bidAmountTemplatePath,
+          entries: bidEntries,
+          header: {
+            noticeNo: bidAmountNoticeNo,
+            noticeTitle: bidAmountNoticeTitle,
+            ownerLabel: bidAmountOwnerLabel,
+            bidDeadline: deadlineParts.filter(Boolean).join(' '),
+            baseAmount: bidAmountBaseAmount,
+          },
+        });
+        if (!response?.success) {
+          if (response?.canceled) return;
+          throw new Error(response?.message || '투찰금액 템플릿 처리에 실패했습니다.');
+        }
+        total = Number.isFinite(response?.totalCount) ? response.totalCount : null;
+        quality = Number.isFinite(response?.qualityCount) ? response.qualityCount : null;
+        tie = Number.isFinite(response?.tieCount) ? response.tieCount : null;
+      } else {
+        if (!bidAmountTemplateFile) {
+          throw new Error('투찰금액 템플릿 파일을 다시 선택하세요.');
+        }
+        const result = await applyBidAmountTemplateInBrowser({
+          templateFile: bidAmountTemplateFile,
+          entries: bidEntries,
+          header: {
+            noticeNo: bidAmountNoticeNo,
+            noticeTitle: bidAmountNoticeTitle,
+            ownerLabel: bidAmountOwnerLabel,
+            bidDeadline: deadlineParts.filter(Boolean).join(' '),
+            baseAmount: bidAmountBaseAmount,
+          },
+        });
+        total = result.totalCount;
+        quality = result.qualityCount;
+        tie = result.tieCount;
+        const baseName = sanitizeDownloadName(bidAmountTemplateFile.name || '투찰금액_템플릿.xlsx', '투찰금액_템플릿.xlsx').replace(/\.xlsx$/i, '');
+        const fileName = `${baseName}_배치완료.xlsx`;
+        downloadBlob(
+          new Blob([result.buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+          fileName,
+        );
       }
-      const total = Number.isFinite(response?.totalCount) ? response.totalCount : null;
-      const quality = Number.isFinite(response?.qualityCount) ? response.qualityCount : null;
-      const tie = Number.isFinite(response?.tieCount) ? response.tieCount : null;
       const parts = [];
       if (total !== null) parts.push(`총 ${total}개`);
       if (quality !== null) parts.push(`품질만점 ${quality}개`);
@@ -459,23 +760,35 @@ export default function BidResultPage() {
   };
 
   const handleFormatWorkbook = async () => {
-    if (!formatFile?.path) {
+    if (!formatFile) {
       notify({ type: 'info', message: '엑셀 파일을 선택하세요.' });
       return;
     }
-    if (!window.electronAPI?.excelHelper?.formatUploaded) {
+    if (isElectron && !window.electronAPI?.excelHelper?.formatUploaded) {
       notify({ type: 'error', message: '엑셀 서식 변환 기능을 사용할 수 없습니다.' });
       return;
     }
     setIsFormatting(true);
     try {
-      const response = await window.electronAPI.excelHelper.formatUploaded({ path: formatFile.path });
-      if (!response?.success) throw new Error(response?.message || '엑셀 서식 변환에 실패했습니다.');
-      if (response?.path) setTemplatePath(response.path);
-      notify({
-        type: 'success',
-        message: response?.path ? `변환이 완료되었습니다. (${response.path})` : '변환이 완료되었습니다.',
-      });
+      if (isElectron) {
+        const response = await window.electronAPI.excelHelper.formatUploaded({ path: formatFile.path });
+        if (!response?.success) throw new Error(response?.message || '엑셀 서식 변환에 실패했습니다.');
+        if (response?.path) setTemplatePath(response.path);
+        notify({
+          type: 'success',
+          message: response?.path ? `변환이 완료되었습니다. (${response.path})` : '변환이 완료되었습니다.',
+        });
+      } else {
+        const outputBuffer = await formatWorkbookInBrowser(formatFile);
+        const baseName = sanitizeDownloadName(formatFile.name || '개찰결과파일.xlsx', '개찰결과파일.xlsx').replace(/\.xlsx$/i, '');
+        const outputName = `${baseName}_서식변환.xlsx`;
+        const outputBlob = new Blob([outputBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const nextTemplateFile = new File([outputBlob], outputName, { type: outputBlob.type });
+        setTemplateFile(nextTemplateFile);
+        setTemplatePath(outputName);
+        downloadBlob(outputBlob, outputName);
+        notify({ type: 'success', message: `변환이 완료되었습니다. (${outputName})` });
+      }
     } catch (err) {
       notify({ type: 'error', message: err.message || '엑셀 서식 변환에 실패했습니다.' });
     } finally {
@@ -809,27 +1122,56 @@ export default function BidResultPage() {
           deadlineParts.push(bidAmountDeadlinePeriod === 'PM' ? '오후' : '오전');
           deadlineParts.push(bidAmountDeadlineTime);
         }
-        const response = await window.electronAPI.bidResult.applyBidAmountTemplate({
-          templatePath: bidAmountTemplatePath,
-          entries: bidEntries,
-          header: {
-            noticeNo: bidAmountNoticeNo,
-            noticeTitle: bidAmountNoticeTitle,
-            ownerLabel: bidAmountOwnerLabel,
-            bidDeadline: deadlineParts.filter(Boolean).join(' '),
-            baseAmount: bidAmountBaseAmount,
-          },
-        });
-        if (!response?.success) {
-          if (response?.canceled) {
-            handleCompanyConflictCancel();
-            return;
+        let total = null;
+        let quality = null;
+        let tie = null;
+        if (isElectron) {
+          const response = await window.electronAPI.bidResult.applyBidAmountTemplate({
+            templatePath: bidAmountTemplatePath,
+            entries: bidEntries,
+            header: {
+              noticeNo: bidAmountNoticeNo,
+              noticeTitle: bidAmountNoticeTitle,
+              ownerLabel: bidAmountOwnerLabel,
+              bidDeadline: deadlineParts.filter(Boolean).join(' '),
+              baseAmount: bidAmountBaseAmount,
+            },
+          });
+          if (!response?.success) {
+            if (response?.canceled) {
+              handleCompanyConflictCancel();
+              return;
+            }
+            throw new Error(response?.message || '투찰금액 템플릿 처리에 실패했습니다.');
           }
-          throw new Error(response?.message || '투찰금액 템플릿 처리에 실패했습니다.');
+          total = Number.isFinite(response?.totalCount) ? response.totalCount : null;
+          quality = Number.isFinite(response?.qualityCount) ? response.qualityCount : null;
+          tie = Number.isFinite(response?.tieCount) ? response.tieCount : null;
+        } else {
+          if (!bidAmountTemplateFile) {
+            throw new Error('투찰금액 템플릿 파일을 다시 선택하세요.');
+          }
+          const result = await applyBidAmountTemplateInBrowser({
+            templateFile: bidAmountTemplateFile,
+            entries: bidEntries,
+            header: {
+              noticeNo: bidAmountNoticeNo,
+              noticeTitle: bidAmountNoticeTitle,
+              ownerLabel: bidAmountOwnerLabel,
+              bidDeadline: deadlineParts.filter(Boolean).join(' '),
+              baseAmount: bidAmountBaseAmount,
+            },
+          });
+          total = result.totalCount;
+          quality = result.qualityCount;
+          tie = result.tieCount;
+          const baseName = sanitizeDownloadName(bidAmountTemplateFile.name || '투찰금액_템플릿.xlsx', '투찰금액_템플릿.xlsx').replace(/\.xlsx$/i, '');
+          const fileName = `${baseName}_배치완료.xlsx`;
+          downloadBlob(
+            new Blob([result.buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+            fileName,
+          );
         }
-        const total = Number.isFinite(response?.totalCount) ? response.totalCount : null;
-        const quality = Number.isFinite(response?.qualityCount) ? response.qualityCount : null;
-        const tie = Number.isFinite(response?.tieCount) ? response.tieCount : null;
         const parts = [];
         if (total !== null) parts.push(`총 ${total}개`);
         if (quality !== null) parts.push(`품질만점 ${quality}개`);
