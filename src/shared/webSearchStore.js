@@ -620,14 +620,24 @@ export const webSearchStore = {
     }
     await this.ensureLoaded();
     const buffer = await file.arrayBuffer();
-    let dataset;
-    try {
-      dataset = await extractCompaniesFromWorkbook(buffer, fileType, file.name);
-    } catch (error) {
-      console.warn('[webSearchStore] exceljs parse failed, falling back to xlsx:', error);
-      dataset = extractCompaniesWithXlsxFallback(buffer, fileType, file.name);
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let index = 0; index < bytes.length; index += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
     }
-    const normalizedDataset = normalizeDataset(dataset, fileType, dataset?.updatedAt || '');
+    const payload = await fetchJson('/api/datasets?action=upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileType,
+        fileName: file.name,
+        contentType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        fileBase64: btoa(binary),
+      }),
+    });
+    const sharedDataset = await fetchJson(`/api/datasets?action=snapshot&fileType=${encodeURIComponent(fileType)}`);
+    const normalizedDataset = normalizeDataset(sharedDataset?.data || {}, fileType, payload?.data?.uploadedAt || '');
     datasets.set(fileType, normalizedDataset);
     try {
       await persistDataset(normalizedDataset);
@@ -637,11 +647,11 @@ export const webSearchStore = {
     notifyListeners({ type: fileType, source: 'web-upload' });
     return {
       success: true,
-      path: file.name,
+      path: payload?.data?.pathname || file.name,
       data: {
         type: fileType,
         fileName: file.name,
-        count: dataset.companies.length,
+        count: normalizedDataset.companies.length,
       },
     };
   },

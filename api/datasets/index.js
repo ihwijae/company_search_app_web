@@ -2,7 +2,6 @@ const { sendJson, allowMethods, readJsonBody } = require('../_lib/http');
 const {
   getStatuses,
   readManifest,
-  resolveToken,
   DATASET_TYPES,
   parseSharedDataset,
   getDatasetMeta,
@@ -20,14 +19,6 @@ module.exports = async function handler(req, res) {
     const action = getAction(req);
 
     if (!action || action === 'status') {
-      if (!resolveToken()) {
-        return sendJson(res, 200, {
-          success: true,
-          data: { eung: false, tongsin: false, sobang: false },
-          meta: { configured: false, datasets: {} },
-        });
-      }
-
       try {
         const [statuses, manifest] = await Promise.all([getStatuses(), readManifest()]);
         return sendJson(res, 200, {
@@ -46,10 +37,6 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === 'snapshot') {
-      if (!resolveToken()) {
-        return sendJson(res, 500, { success: false, message: 'BLOB_READ_WRITE_TOKEN is not configured' });
-      }
-
       try {
         const url = new URL(req.url, 'http://localhost');
         const fileType = String(url.searchParams.get('fileType') || '').trim().toLowerCase();
@@ -88,10 +75,6 @@ module.exports = async function handler(req, res) {
     if (action !== 'upload') {
       allowMethods(res, ['GET', 'POST']);
       return sendJson(res, 400, { success: false, message: 'Invalid action' });
-    }
-
-    if (!resolveToken()) {
-      return sendJson(res, 500, { success: false, message: 'BLOB_READ_WRITE_TOKEN is not configured' });
     }
 
     try {

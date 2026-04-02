@@ -265,7 +265,7 @@ const extractCompaniesWithXlsxFallback = (filePath, type, meta) => {
 
 const resolveSourceFiles = () => {
   if (!fs.existsSync(DB_DIR)) {
-    throw new Error(`db directory not found: ${DB_DIR}`);
+    return null;
   }
   const entries = fs.readdirSync(DB_DIR).filter((name) => /\.xlsx$/i.test(name));
   const resolved = {};
@@ -281,6 +281,10 @@ const resolveSourceFiles = () => {
 
 async function main() {
   const sourceFiles = resolveSourceFiles();
+  if (!sourceFiles) {
+    console.log('[build-static-datasets] skipped: db directory not found');
+    return;
+  }
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const manifest = {
     generatedAt: new Date().toISOString(),

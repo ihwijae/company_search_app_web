@@ -1,52 +1,54 @@
-const { put, head, get } = require('@vercel/blob');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { parseDatasetBuffer } = require('./dataset-parser');
 
 const DATASET_TYPES = ['eung', 'tongsin', 'sobang'];
-const MANIFEST_PATH = 'company-search/datasets/manifest.json';
+const DEFAULT_DATASET_ROOT = path.join(os.homedir(), 'app-data', 'company-search', 'uploads', 'master-files');
+const MANIFEST_PATH = 'manifest.json';
 const datasetCache = new Map();
-const MANIFEST_CACHE_TTL_MS = 30 * 1000;
 let manifestCache = { value: null, storedAt: 0 };
 
-const resolveToken = () => process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL_BLOB_READ_WRITE_TOKEN || '';
+const resolveDatasetRoot = () => {
+  const configured = String(process.env.DATASET_UPLOAD_DIR || process.env.COMPANY_SEARCH_DATASET_DIR || '').trim();
+  return configured || DEFAULT_DATASET_ROOT;
+};
 
-async function streamToBuffer(stream) {
-  if (!stream) return Buffer.alloc(0);
-  const response = new Response(stream);
-  const arrayBuffer = await response.arrayBuffer();
-  return Buffer.from(arrayBuffer);
-}
+const ensureDatasetRoot = async () => {
+  const root = resolveDatasetRoot();
+  await fs.promises.mkdir(root, { recursive: true });
+  return root;
+};
 
-async function readJsonBlob(pathname) {
-  const token = resolveToken();
-  if (!token) return null;
+const toPosixRelative = (targetPath) => path.relative(resolveDatasetRoot(), targetPath).split(path.sep).join('/');
+
+const toAbsolutePath = (relativePath) => {
+  if (!relativePath) return '';
+  return path.join(resolveDatasetRoot(), relativePath);
+};
+
+const readJsonFile = async (filePath) => {
   try {
-    const result = await get(pathname, { access: 'private', token, useCache: false });
-    if (!result || result.statusCode !== 200) return null;
-    const buffer = await streamToBuffer(result.stream);
-    return JSON.parse(buffer.toString('utf8'));
+    const raw = await fs.promises.readFile(filePath, 'utf8');
+    return JSON.parse(raw);
   } catch (error) {
-    console.warn('[blob-store] readJsonBlob failed:', pathname, error && error.message ? error.message : error);
+    if (error && error.code === 'ENOENT') return null;
+    console.warn('[dataset-store] readJsonFile failed:', filePath, error && error.message ? error.message : error);
     return null;
   }
-}
+};
 
-async function writeJsonBlob(pathname, value) {
-  const token = resolveToken();
-  if (!token) throw new Error('BLOB_READ_WRITE_TOKEN is not configured');
-  return put(pathname, Buffer.from(JSON.stringify(value), 'utf8'), {
-    access: 'private',
-    contentType: 'application/json; charset=utf-8',
-    allowOverwrite: true,
-    addRandomSuffix: false,
-    token,
-  });
-}
+const writeJsonFile = async (filePath, value) => {
+  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.promises.writeFile(filePath, JSON.stringify(value, null, 2), 'utf8');
+};
 
 async function readManifest() {
-  if (manifestCache.value && (Date.now() - manifestCache.storedAt) < MANIFEST_CACHE_TTL_MS) {
+  if (manifestCache.value) {
     return manifestCache.value;
   }
-  const manifest = await readJsonBlob(MANIFEST_PATH);
+  const manifestPath = path.join(await ensureDatasetRoot(), MANIFEST_PATH);
+  const manifest = await readJsonFile(manifestPath);
   const resolved = manifest && typeof manifest === 'object' ? manifest : {
     updatedAt: null,
     datasets: {},
@@ -64,7 +66,8 @@ async function writeManifest(manifest) {
     updatedAt: new Date().toISOString(),
     datasets: (manifest && manifest.datasets) || {},
   };
-  await writeJsonBlob(MANIFEST_PATH, next);
+  const manifestPath = path.join(await ensureDatasetRoot(), MANIFEST_PATH);
+  await writeJsonFile(manifestPath, next);
   manifestCache = {
     value: next,
     storedAt: Date.now(),
@@ -72,52 +75,43 @@ async function writeManifest(manifest) {
   return next;
 }
 
-async function storeParsedDataset(fileType, dataset, token) {
-  const pathname = `company-search/datasets/${fileType}.parsed.json`;
-  const uploaded = await put(pathname, Buffer.from(JSON.stringify(dataset), 'utf8'), {
-    access: 'private',
-    contentType: 'application/json; charset=utf-8',
-    allowOverwrite: true,
-    addRandomSuffix: false,
-    token,
-  });
+async function storeParsedDataset(fileType, dataset) {
+  const root = await ensureDatasetRoot();
+  const relativePath = `${fileType}.parsed.json`;
+  const filePath = path.join(root, relativePath);
+  await writeJsonFile(filePath, dataset);
   return {
-    pathname: uploaded.pathname,
-    url: uploaded.url,
-    downloadUrl: uploaded.downloadUrl,
-    contentType: uploaded.contentType,
+    pathname: relativePath,
+    filePath,
+    contentType: 'application/json; charset=utf-8',
   };
 }
 
 async function uploadDataset({ fileType, fileName, buffer, contentType }) {
-  const token = resolveToken();
-  if (!token) throw new Error('BLOB_READ_WRITE_TOKEN is not configured');
   if (!DATASET_TYPES.includes(fileType)) throw new Error('Invalid dataset type');
 
-  const extension = fileName && fileName.includes('.') ? fileName.split('.').pop() : 'xlsx';
-  const pathname = `company-search/datasets/${fileType}.${extension || 'xlsx'}`;
-  const parsedDataset = await parseDatasetBuffer(buffer, fileType, fileName || pathname);
-  const uploaded = await put(pathname, buffer, {
-    access: 'private',
-    contentType: contentType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    allowOverwrite: true,
-    addRandomSuffix: false,
-    token,
+  const root = await ensureDatasetRoot();
+  const extname = path.extname(fileName || '').toLowerCase() || '.xlsx';
+  const originalFileName = `${fileType}${extname}`;
+  const originalPath = path.join(root, originalFileName);
+  const parsedDataset = await parseDatasetBuffer(buffer, fileType, fileName || originalFileName);
+  await fs.promises.writeFile(originalPath, buffer);
+  const parsedMeta = await storeParsedDataset(fileType, {
+    ...parsedDataset,
+    updatedAt: new Date().toISOString(),
   });
-  const parsedMeta = await storeParsedDataset(fileType, parsedDataset, token);
 
   const manifest = await readManifest();
+  const uploadedAt = new Date().toISOString();
   manifest.datasets[fileType] = {
     fileType,
     fileName,
-    pathname: uploaded.pathname,
-    url: uploaded.url,
-    downloadUrl: uploaded.downloadUrl,
-    contentType: uploaded.contentType,
-    uploadedAt: new Date().toISOString(),
+    pathname: toPosixRelative(originalPath),
+    filePath: originalPath,
+    contentType: contentType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    uploadedAt,
     parsedPathname: parsedMeta.pathname,
-    parsedUrl: parsedMeta.url,
-    parsedDownloadUrl: parsedMeta.downloadUrl,
+    parsedFilePath: parsedMeta.filePath,
     parsedContentType: parsedMeta.contentType,
     companyCount: Array.isArray(parsedDataset.companies) ? parsedDataset.companies.length : 0,
     sheetCount: Array.isArray(parsedDataset.sheetNames) ? parsedDataset.sheetNames.length : 0,
@@ -125,9 +119,20 @@ async function uploadDataset({ fileType, fileName, buffer, contentType }) {
   const nextManifest = await writeManifest(manifest);
   datasetCache.set(fileType, {
     version: nextManifest.datasets[fileType]?.uploadedAt || nextManifest.updatedAt || new Date().toISOString(),
-    dataset: parsedDataset,
+    dataset: {
+      ...parsedDataset,
+      updatedAt: uploadedAt,
+    },
   });
-  return { uploaded, parsed: parsedMeta, manifest: nextManifest };
+  return {
+    uploaded: {
+      pathname: toPosixRelative(originalPath),
+      filePath: originalPath,
+      contentType: contentType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    },
+    parsed: parsedMeta,
+    manifest: nextManifest,
+  };
 }
 
 async function getDatasetMeta(fileType) {
@@ -145,8 +150,6 @@ async function getStatuses() {
 
 async function parseSharedDataset(fileType) {
   if (!DATASET_TYPES.includes(fileType)) throw new Error('Invalid dataset type');
-  const token = resolveToken();
-  if (!token) throw new Error('BLOB_READ_WRITE_TOKEN is not configured');
 
   const meta = await getDatasetMeta(fileType);
   if (!meta || !meta.pathname) return null;
@@ -156,37 +159,31 @@ async function parseSharedDataset(fileType) {
 
   if (meta.parsedPathname) {
     try {
-      const parsedBlobMeta = await head(meta.parsedPathname, { token });
-      const parsedCached = datasetCache.get(fileType);
-      if (parsedCached && parsedCached.version === parsedBlobMeta.etag) return parsedCached.dataset;
-      const parsed = await readJsonBlob(meta.parsedPathname);
+      const parsed = await readJsonFile(toAbsolutePath(meta.parsedPathname));
       if (parsed && typeof parsed === 'object') {
         datasetCache.set(fileType, {
-          version: parsedBlobMeta.etag || version,
+          version,
           dataset: parsed,
         });
         return parsed;
       }
     } catch (error) {
-      console.warn('[blob-store] parsed dataset lookup failed:', fileType, error && error.message ? error.message : error);
+      console.warn('[dataset-store] parsed dataset lookup failed:', fileType, error && error.message ? error.message : error);
     }
   }
 
   try {
-    const result = await get(meta.pathname, { access: 'private', token, useCache: false });
-    if (!result || result.statusCode !== 200) return null;
-    const buffer = await streamToBuffer(result.stream);
+    const buffer = await fs.promises.readFile(toAbsolutePath(meta.pathname));
     const parsed = await parseDatasetBuffer(buffer, fileType, meta.fileName || meta.pathname);
     try {
-      const parsedMeta = await storeParsedDataset(fileType, parsed, token);
+      const parsedMeta = await storeParsedDataset(fileType, parsed);
       if (!meta.parsedPathname || meta.parsedPathname !== parsedMeta.pathname) {
         const manifest = await readManifest();
         manifest.datasets[fileType] = {
           ...(manifest.datasets[fileType] || {}),
           ...meta,
           parsedPathname: parsedMeta.pathname,
-          parsedUrl: parsedMeta.url,
-          parsedDownloadUrl: parsedMeta.downloadUrl,
+          parsedFilePath: parsedMeta.filePath,
           parsedContentType: parsedMeta.contentType,
           companyCount: Array.isArray(parsed.companies) ? parsed.companies.length : 0,
           sheetCount: Array.isArray(parsed.sheetNames) ? parsed.sheetNames.length : 0,
@@ -199,7 +196,7 @@ async function parseSharedDataset(fileType) {
     datasetCache.set(fileType, { version, dataset: parsed });
     return parsed;
   } catch (error) {
-    console.error('[blob-store] parseSharedDataset failed:', fileType, error);
+    console.error('[dataset-store] parseSharedDataset failed:', fileType, error);
     return null;
   }
 }
@@ -211,7 +208,8 @@ function getDatasetVersion(meta) {
 
 module.exports = {
   DATASET_TYPES,
-  resolveToken,
+  resolveToken: () => resolveDatasetRoot(),
+  resolveDatasetRoot,
   readManifest,
   writeManifest,
   uploadDataset,

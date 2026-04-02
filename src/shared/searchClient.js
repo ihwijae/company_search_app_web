@@ -28,7 +28,6 @@ const fetchJson = async (url, init = {}) => {
 const DATASET_TYPES = ['eung', 'tongsin', 'sobang'];
 const STATUS_CACHE_TTL_MS = 30 * 1000;
 let sharedStatusCache = { payload: null, storedAt: 0, promise: null };
-let staticManifestCache = { payload: null, storedAt: 0, promise: null };
 
 const normalizeFileType = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -41,31 +40,6 @@ const normalizeFileType = (value) => {
 };
 
 const shouldUseWebStore = () => !getElectronApi() && webSearchStore.isAvailable();
-
-const getStaticManifest = async ({ force = false } = {}) => {
-  const now = Date.now();
-  if (!force && staticManifestCache.payload && (now - staticManifestCache.storedAt) < STATUS_CACHE_TTL_MS) {
-    return staticManifestCache.payload;
-  }
-  if (!force && staticManifestCache.promise) {
-    return staticManifestCache.promise;
-  }
-  const request = fetchJson('/datasets/manifest.json')
-    .then((payload) => {
-      staticManifestCache = {
-        payload,
-        storedAt: Date.now(),
-        promise: null,
-      };
-      return payload;
-    })
-    .catch((error) => {
-      staticManifestCache.promise = null;
-      throw error;
-    });
-  staticManifestCache.promise = request;
-  return request;
-};
 
 const getSharedStatus = async ({ force = false } = {}) => {
   const now = Date.now();
@@ -94,10 +68,10 @@ const getSharedStatus = async ({ force = false } = {}) => {
 
 const syncSharedDatasetsIfNeeded = async (fileType) => {
   if (!shouldUseWebStore()) return null;
-  const payload = await getStaticManifest();
+  const payload = await getSharedStatus();
   const normalized = normalizeFileType(fileType || 'eung');
   const types = normalized === 'all' ? DATASET_TYPES : [normalized];
-  await webSearchStore.syncStaticDatasets(payload, { types });
+  await webSearchStore.syncSharedDatasets(payload, { types });
   return payload;
 };
 
@@ -105,18 +79,6 @@ const normalizeRegionsResponse = (payload) => {
   if (Array.isArray(payload)) return payload;
   if (payload && Array.isArray(payload.data)) return payload.data;
   return ['전체'];
-};
-
-const readFileAsBase64 = async (file) => {
-  const arrayBuffer = await file.arrayBuffer();
-  let binary = '';
-  const bytes = new Uint8Array(arrayBuffer);
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  return btoa(binary);
 };
 
 const copyRowsToClipboard = async (rows) => {
@@ -138,8 +100,9 @@ export const searchClient = {
     if (api && typeof api.selectFile === 'function') {
       throw new Error('Electron 환경에서는 기존 파일 선택 흐름을 사용하세요.');
     }
-    const fileBase64 = await readFileAsBase64(file);
-    return webSearchStore.uploadFile(fileType, file);
+    const result = await webSearchStore.uploadFile(fileType, file);
+    sharedStatusCache = { payload: null, storedAt: 0, promise: null };
+    return result;
   },
 
   async searchCompanies(criteria, fileType, options) {
@@ -214,16 +177,16 @@ export const searchClient = {
     const api = getElectronApi();
     if (!api || typeof api.checkFiles !== 'function') {
       try {
-        const payload = await getStaticManifest();
+        const payload = await getSharedStatus();
         if (shouldUseWebStore()) {
-          await webSearchStore.syncStaticDatasets(payload);
+          await webSearchStore.syncSharedDatasets(payload);
         }
         return DATASET_TYPES.reduce((acc, type) => {
-          acc[type] = Boolean(payload?.datasets?.[type]);
+          acc[type] = Boolean(payload?.meta?.datasets?.[type]);
           return acc;
         }, {});
       } catch (error) {
-        console.warn('[searchClient] static status failed, fallback to local store:', error);
+        console.warn('[searchClient] shared status failed, fallback to local store:', error);
         return webSearchStore.checkFiles();
       }
     }
@@ -278,16 +241,16 @@ export const searchClient = {
   },
 
   supportsBrowserUpload() {
-    return false;
+    return !getElectronApi();
   },
 
   supportsDatasetUpload() {
     const api = getElectronApi();
-    return Boolean(api && typeof api.selectFile === 'function');
+    return Boolean((api && typeof api.selectFile === 'function') || !api);
   },
 
   usesBundledDatasets() {
-    return !getElectronApi();
+    return false;
   },
 };
 
