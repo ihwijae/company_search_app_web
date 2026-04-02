@@ -1,11 +1,11 @@
 const { sendJson, allowMethods, readJsonBody } = require('../_lib/http');
-const { loadMailAddressBook, saveMailAddressBook } = require('../_lib/mail-address-book-store');
+const { MAIL_ADDRESS_BOOK_PATH, loadMailAddressBook, saveMailAddressBook } = require('../_lib/mail-address-book-store');
 
 module.exports = async function handler(req, res) {
   if (req.method === 'GET') {
     try {
       const data = await loadMailAddressBook([]);
-      return sendJson(res, 200, { success: true, data });
+      return sendJson(res, 200, { success: true, data, path: MAIL_ADDRESS_BOOK_PATH });
     } catch (error) {
       console.error('[api/mail-address-book:get] failed:', error);
       return sendJson(res, 500, { success: false, message: error?.message || 'Address book load failed' });
@@ -16,7 +16,7 @@ module.exports = async function handler(req, res) {
     try {
       const body = await readJsonBody(req);
       const data = await saveMailAddressBook(body?.payload || []);
-      return sendJson(res, 200, { success: true, data });
+      return sendJson(res, 200, { success: true, data, path: MAIL_ADDRESS_BOOK_PATH });
     } catch (error) {
       console.error('[api/mail-address-book:post] failed:', error);
       return sendJson(res, 500, { success: false, message: error?.message || 'Address book save failed' });

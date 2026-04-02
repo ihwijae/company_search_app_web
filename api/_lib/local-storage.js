@@ -2,7 +2,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const APP_DATA_ROOT = path.join(os.homedir(), 'app-data', 'company-search');
+const resolveAppDataRoot = () => {
+  const fromEnv = String(process.env.COMPANY_SEARCH_APP_DATA_ROOT || '').trim();
+  if (fromEnv) return path.resolve(fromEnv);
+  return path.join(os.homedir(), 'app-data', 'company-search');
+};
+
+const APP_DATA_ROOT = resolveAppDataRoot();
 const ROOTS = {
   datasets: path.join(APP_DATA_ROOT, 'uploads', 'master-files'),
   config: path.join(APP_DATA_ROOT, 'config'),

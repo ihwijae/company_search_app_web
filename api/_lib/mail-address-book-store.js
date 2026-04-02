@@ -1,6 +1,10 @@
+const fs = require('fs');
+const path = require('path');
+const { ROOTS } = require('./local-storage');
 const { readConfigJson, writeConfigJson } = require('./config-store');
 
-const MAIL_ADDRESS_BOOK_PATH = 'company-search/config/mail.address-book.json';
+const MAIL_ADDRESS_BOOK_PATH = path.join(ROOTS.config, 'mail.address-book.json');
+const LEGACY_MAIL_ADDRESS_BOOK_PATH = path.join(process.cwd(), 'company-search', 'config', 'mail.address-book.json');
 
 function normalizeEntry(entry, index) {
   if (!entry || typeof entry !== 'object') return null;
@@ -34,7 +38,26 @@ function normalizeList(list = []) {
 
 async function loadMailAddressBook(fallback = []) {
   const stored = await readConfigJson(MAIL_ADDRESS_BOOK_PATH, fallback);
-  return normalizeList(stored);
+  const normalized = normalizeList(stored);
+  if (normalized.length > 0) return normalized;
+
+  try {
+    const hasLegacy = await fs.promises
+      .stat(LEGACY_MAIL_ADDRESS_BOOK_PATH)
+      .then((stat) => stat && stat.isFile())
+      .catch(() => false);
+    if (!hasLegacy) return normalized;
+
+    const legacyRaw = await fs.promises.readFile(LEGACY_MAIL_ADDRESS_BOOK_PATH, 'utf8');
+    const legacyParsed = JSON.parse(legacyRaw);
+    const legacyNormalized = normalizeList(legacyParsed);
+    if (legacyNormalized.length === 0) return normalized;
+    await writeConfigJson(MAIL_ADDRESS_BOOK_PATH, legacyNormalized);
+    return legacyNormalized;
+  } catch (error) {
+    console.warn('[mail-address-book-store] legacy migration failed:', error && error.message ? error.message : error);
+    return normalized;
+  }
 }
 
 async function saveMailAddressBook(list = []) {
