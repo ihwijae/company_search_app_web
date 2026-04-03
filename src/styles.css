@@ -2009,6 +2009,7 @@ button.primary:hover { background: var(--accent-2); }
 .agreement-load-title .agreement-badge--eung { background: #fef9c3; color: #92400e; }
 .agreement-load-title .agreement-badge--tongsin { background: #e0f2fe; color: #075985; }
 .agreement-load-title .agreement-badge--sobang { background: #fee2e2; color: #991b1b; }
+.agreement-load-title .agreement-badge--saved-by { background: #e2e8f0; color: #0f172a; border: 1px solid #cbd5e1; }
 .agreement-load-title .agreement-badge--sms-sent { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
 
 .agreement-load-meta {
@@ -2217,6 +2218,20 @@ button.primary:hover { background: var(--accent-2); }
 .excel-btn-candidate.active {
   background: linear-gradient(135deg, #c2410c, #ea580c);
   box-shadow: 0 10px 22px rgba(194, 65, 12, 0.28);
+}
+
+.excel-btn-sms-status {
+  background: linear-gradient(135deg, #475569, #64748b);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 8px 18px rgba(71, 85, 105, 0.22);
+}
+
+.excel-btn-sms-status.is-complete {
+  background: linear-gradient(135deg, #16a34a, #22c55e);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 10px 22px rgba(22, 163, 74, 0.24);
 }
 
 .excel-btn-header-toggle {

@@ -41,6 +41,8 @@ export default function useAgreementBoardStorage({
   memoHtml,
   smsStatus,
   smsCompletedAt,
+  currentUserId,
+  currentUserName,
   candidates,
   pinned,
   excluded,
@@ -88,6 +90,8 @@ export default function useAgreementBoardStorage({
       noticeDate: noticeDate || '',
       noticeNo: noticeNo || '',
       noticeTitle: noticeTitle || '',
+      savedById: currentUserId || '',
+      savedByName: currentUserName || currentUserId || '',
       smsStatus: String(smsStatus || '').trim().toLowerCase() === 'sent' ? 'sent' : 'pending',
       smsCompletedAt: smsCompletedAt || '',
     },
@@ -106,6 +110,8 @@ export default function useAgreementBoardStorage({
       noticeNo: noticeNo || '',
       noticeTitle: noticeTitle || '',
       noticeDate: noticeDate || '',
+      savedById: currentUserId || '',
+      savedByName: currentUserName || currentUserId || '',
       smsStatus: String(smsStatus || '').trim().toLowerCase() === 'sent' ? 'sent' : 'pending',
       smsCompletedAt: smsCompletedAt || '',
       bidDeadline: bidDeadline || '',
@@ -141,6 +147,8 @@ export default function useAgreementBoardStorage({
     industryLabel,
     estimatedAmount,
     noticeDate,
+    currentUserId,
+    currentUserName,
     smsStatus,
     smsCompletedAt,
     baseAmount,
@@ -268,6 +276,16 @@ export default function useAgreementBoardStorage({
     setLoadModalOpen(false);
     setLoadError('');
   }, []);
+
+  const clearSmsTracking = React.useCallback(() => {
+    setActiveAgreementPath('');
+    if (typeof onUpdateBoard === 'function') {
+      onUpdateBoard({
+        smsStatus: 'pending',
+        smsCompletedAt: '',
+      });
+    }
+  }, [onUpdateBoard]);
 
   const applyAgreementSnapshot = React.useCallback((snapshot) => {
     if (!snapshot || typeof snapshot !== 'object') return;
@@ -496,6 +514,7 @@ export default function useAgreementBoardStorage({
     setLoadFilters,
     openLoadModal,
     closeLoadModal,
+    clearSmsTracking,
     handleSaveAgreement,
     handleLoadAgreement,
     handleDeleteAgreement,

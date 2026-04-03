@@ -77,6 +77,8 @@ function deriveMetaFromPayload(payload = {}, fallback = {}) {
     noticeDate: candidate.noticeDate || fallback.noticeDate || '',
     noticeNo: candidate.noticeNo || fallback.noticeNo || '',
     noticeTitle: candidate.noticeTitle || candidate.title || fallback.noticeTitle || '',
+    savedById: candidate.savedById || fallback.savedById || '',
+    savedByName: candidate.savedByName || fallback.savedByName || '',
     savedAt: candidate.savedAt || fallback.savedAt || '',
     smsStatus: normalizeSmsStatus(candidate.smsStatus ?? fallback.smsStatus),
     smsCompletedAt: candidate.smsCompletedAt || fallback.smsCompletedAt || '',

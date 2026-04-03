@@ -1226,6 +1226,10 @@ export default function AgreementBoardWindow({
   ), [rangeId, rangeOptions]);
   const selectedRangeKey = selectedRangeOption?.key || '';
   const isLh100To300 = isLHOwner && selectedRangeKey === LH_100_TO_300_KEY;
+  const currentAuthUser = React.useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    return window.__companySearchAuth?.user || null;
+  }, []);
   const isMois30To50 = isMoisOwner && selectedRangeKey === MOIS_30_TO_50_KEY;
   const isMois50To100 = isMoisOwner && selectedRangeKey === MOIS_50_TO_100_KEY;
   const isMoisUnderOr30To50 = isMoisOwner && (selectedRangeKey === MOIS_UNDER_30_KEY || selectedRangeKey === MOIS_30_TO_50_KEY);
@@ -2081,6 +2085,7 @@ export default function AgreementBoardWindow({
     setLoadFilters,
     openLoadModal,
     closeLoadModal,
+    clearSmsTracking,
     handleSaveAgreement,
     handleLoadAgreement,
     handleDeleteAgreement,
@@ -2114,6 +2119,8 @@ export default function AgreementBoardWindow({
     memoHtml,
     smsStatus,
     smsCompletedAt,
+    currentUserId: currentAuthUser?.id || '',
+    currentUserName: currentAuthUser?.name || currentAuthUser?.id || '',
     candidates,
     pinned,
     excluded,
@@ -4480,6 +4487,7 @@ export default function AgreementBoardWindow({
         alwaysInclude: [],
       });
     }
+    clearSmsTracking();
   };
 
   const toggleGroupSelection = (groupIndex) => {
@@ -6057,6 +6065,13 @@ export default function AgreementBoardWindow({
                 >
                   후보 {candidateDrawerEntries.length > 0 ? `(${candidateDrawerEntries.length})` : ''}
                 </button>
+                <button
+                  type="button"
+                  className={`excel-btn excel-btn-sms-status${isSmsCompleted ? ' is-complete' : ''}`}
+                  onClick={() => handleSetSmsStatus(isSmsCompleted ? 'pending' : 'sent')}
+                >
+                  {isSmsCompleted ? '문자전송완료 해제' : '문자전송완료'}
+                </button>
                 {isLh100To300 && (
                   <button
                     type="button"
@@ -6085,13 +6100,6 @@ export default function AgreementBoardWindow({
                   disabled={exporting}
                 >엑셀로 내보내기</button>
                 <button type="button" className="excel-btn" onClick={handleGenerateText}>협정 문자 생성</button>
-                <button
-                  type="button"
-                  className={`excel-btn${isSmsCompleted ? ' primary' : ''}`}
-                  onClick={() => handleSetSmsStatus(isSmsCompleted ? 'pending' : 'sent')}
-                >
-                  {isSmsCompleted ? '문자전송완료 해제' : '문자전송완료'}
-                </button>
                 <button
                   type="button"
                   className="excel-btn"

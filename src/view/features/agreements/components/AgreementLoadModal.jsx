@@ -213,6 +213,11 @@ export default function AgreementLoadModal({
                     {dutyRegions.map((region) => (
                       <span key={region} className="agreement-badge">{region}</span>
                     ))}
+                    {(meta.savedByName || meta.savedById) && (
+                      <span className="agreement-badge agreement-badge--saved-by">
+                        작업자 {meta.savedByName || meta.savedById}
+                      </span>
+                    )}
                     {isSmsSent && (
                       <span className="agreement-badge agreement-badge--sms-sent">✓ 전송완료</span>
                     )}
