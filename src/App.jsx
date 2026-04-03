@@ -34,6 +34,8 @@ export default function App() {
     authenticated: false,
     user: null,
   });
+  const [accountMenuOpen, setAccountMenuOpen] = React.useState(false);
+  const accountMenuRef = React.useRef(null);
 
   React.useEffect(() => {
     const onHashChange = () => setRoute(window.location.hash || '#/search');
@@ -80,6 +82,18 @@ export default function App() {
       window.location.hash = '#/search';
     }
   }, [authState.checking, authState.authenticated, path]);
+
+  React.useEffect(() => {
+    if (!accountMenuOpen) return undefined;
+    const onMouseDown = (event) => {
+      if (!accountMenuRef.current) return;
+      if (!accountMenuRef.current.contains(event.target)) {
+        setAccountMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [accountMenuOpen]);
 
   React.useEffect(() => {
     if (path !== '/excel-helper') {
@@ -188,8 +202,39 @@ export default function App() {
   return (
     <FeedbackProvider>
       <AgreementBoardProvider>
-        <div className="app-user-badge" title={authState.user?.id || ''}>
-          {authState.user?.name || authState.user?.id || '사용자'}
+        <div className="app-user-menu" ref={accountMenuRef}>
+          <button
+            type="button"
+            className="app-user-badge"
+            title={authState.user?.id || ''}
+            onClick={() => setAccountMenuOpen((prev) => !prev)}
+          >
+            {authState.user?.name || authState.user?.id || '사용자'}
+          </button>
+          {accountMenuOpen ? (
+            <div className="app-user-menu__panel">
+              <button
+                type="button"
+                className="app-user-menu__logout"
+                onClick={async () => {
+                  try {
+                    await authClient.logout();
+                  } catch (error) {
+                    // Ignore logout API errors and force local logout.
+                  }
+                  setAccountMenuOpen(false);
+                  setAuthState({
+                    checking: false,
+                    authenticated: false,
+                    user: null,
+                  });
+                  window.location.hash = '#/login';
+                }}
+              >
+                로그아웃
+              </button>
+            </div>
+          ) : null}
         </div>
         <Screen />
         <RegionSearchWindowHost />
