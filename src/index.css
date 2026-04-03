@@ -3317,3 +3317,36 @@ body {
   color: #dc2626;
   font-size: 13px;
 }
+
+.app-user-badge {
+  position: fixed;
+  top: 12px;
+  right: 14px;
+  z-index: 1200;
+  max-width: min(280px, 60vw);
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.92);
+  color: #111827;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(6px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 760px) {
+  .app-user-badge {
+    top: 10px;
+    right: 10px;
+    height: 30px;
+    font-size: 12px;
+    max-width: 70vw;
+  }
+}

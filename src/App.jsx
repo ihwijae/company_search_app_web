@@ -188,6 +188,9 @@ export default function App() {
   return (
     <FeedbackProvider>
       <AgreementBoardProvider>
+        <div className="app-user-badge" title={authState.user?.id || ''}>
+          {authState.user?.name || authState.user?.id || '사용자'}
+        </div>
         <Screen />
         <RegionSearchWindowHost />
       </AgreementBoardProvider>
