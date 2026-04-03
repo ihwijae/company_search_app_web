@@ -10,6 +10,34 @@ import { openTempCompaniesWindow } from '../utils/tempCompaniesWindow.js';
 
 export default function Sidebar({ active, onSelect, fileStatuses, collapsed = true }) {
   const anyLoaded = !!(fileStatuses?.eung || fileStatuses?.tongsin || fileStatuses?.sobang);
+  const [authMenuOpen, setAuthMenuOpen] = React.useState(false);
+  const [currentUser, setCurrentUser] = React.useState(() => {
+    if (typeof window === 'undefined') return null;
+    return window.__companySearchAuth?.user || null;
+  });
+  const accountMenuRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const sync = () => {
+      setCurrentUser(window.__companySearchAuth?.user || null);
+    };
+    window.addEventListener('company-search-auth-changed', sync);
+    sync();
+    return () => window.removeEventListener('company-search-auth-changed', sync);
+  }, []);
+
+  React.useEffect(() => {
+    if (!authMenuOpen) return undefined;
+    const onMouseDown = (event) => {
+      if (!accountMenuRef.current) return;
+      if (!accountMenuRef.current.contains(event.target)) {
+        setAuthMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [authMenuOpen]);
   const handleSelect = (key) => {
     if (key === 'agreements' && typeof window !== 'undefined') {
       const opener = window.__openAgreementBoard;
@@ -138,6 +166,32 @@ export default function Sidebar({ active, onSelect, fileStatuses, collapsed = tr
     <aside className={`sidebar top-nav ${collapsed ? 'collapsed' : 'expanded'}`}>
       <nav className="nav">
         {navItems.map(({ key, label, icon }) => item(key, label, icon))}
+        <div className="nav-user" ref={accountMenuRef}>
+          <button
+            type="button"
+            className="nav-user__button"
+            onClick={() => setAuthMenuOpen((prev) => !prev)}
+            title={currentUser?.id || ''}
+          >
+            {currentUser?.name || currentUser?.id || '사용자'}
+          </button>
+          {authMenuOpen ? (
+            <div className="nav-user__panel">
+              <button
+                type="button"
+                className="nav-user__logout"
+                onClick={async () => {
+                  const logout = window.__companySearchAuth?.logout;
+                  if (typeof logout === 'function') {
+                    await logout();
+                  }
+                }}
+              >
+                로그아웃
+              </button>
+            </div>
+          ) : null}
+        </div>
       </nav>
     </aside>
   );
