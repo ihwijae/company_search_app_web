@@ -190,7 +190,27 @@ export default function useAgreementBoardStorage({
     try {
       const result = await agreementBoardClient.save(payload);
       if (!result?.success) throw new Error(result?.message || '저장 실패');
-      if (result?.data?.path) setActiveAgreementPath(result.data.path);
+      if (result?.data?.path) {
+        const savedPath = result.data.path;
+        const savedMeta = result?.data?.meta || {};
+        setActiveAgreementPath(savedPath);
+        setLoadItems((prev) => {
+          const list = Array.isArray(prev) ? prev.slice() : [];
+          const index = list.findIndex((item) => item?.path === savedPath);
+          if (index >= 0) {
+            list[index] = {
+              ...(list[index] || {}),
+              path: savedPath,
+              meta: {
+                ...((list[index] && list[index].meta) || {}),
+                ...savedMeta,
+              },
+            };
+            return list;
+          }
+          return [{ path: savedPath, meta: savedMeta }, ...list];
+        });
+      }
       showHeaderAlert('협정 저장 완료');
     } catch (err) {
       showHeaderAlert(err?.message || '협정 저장 실패');

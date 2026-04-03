@@ -1226,9 +1226,19 @@ export default function AgreementBoardWindow({
   ), [rangeId, rangeOptions]);
   const selectedRangeKey = selectedRangeOption?.key || '';
   const isLh100To300 = isLHOwner && selectedRangeKey === LH_100_TO_300_KEY;
-  const currentAuthUser = React.useMemo(() => {
+  const [currentAuthUser, setCurrentAuthUser] = React.useState(() => {
     if (typeof window === 'undefined') return null;
     return window.__companySearchAuth?.user || null;
+  });
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const syncAuthUser = () => {
+      setCurrentAuthUser(window.__companySearchAuth?.user || null);
+    };
+    window.addEventListener('company-search-auth-changed', syncAuthUser);
+    syncAuthUser();
+    return () => window.removeEventListener('company-search-auth-changed', syncAuthUser);
   }, []);
   const isMois30To50 = isMoisOwner && selectedRangeKey === MOIS_30_TO_50_KEY;
   const isMois50To100 = isMoisOwner && selectedRangeKey === MOIS_50_TO_100_KEY;
