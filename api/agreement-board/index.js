@@ -4,6 +4,7 @@ const {
   listAgreementBoards,
   loadAgreementBoard,
   deleteAgreementBoard,
+  updateAgreementBoardSmsStatus,
   AGREEMENT_BOARD_ROOT_LABEL,
   AGREEMENT_BOARD_ROOT_PATH,
 } = require('../_lib/agreement-board-store');
@@ -49,6 +50,15 @@ module.exports = async function handler(req, res) {
       if (action === 'save') {
         const payload = body?.payload || {};
         const data = await saveAgreementBoard(payload);
+        return sendJson(res, 200, { success: true, data });
+      }
+      if (action === 'set-sms-status') {
+        const pathname = body?.path ? String(body.path) : '';
+        const status = body?.status;
+        if (!pathname) {
+          return sendJson(res, 400, { success: false, message: 'path is required' });
+        }
+        const data = await updateAgreementBoardSmsStatus(pathname, status);
         return sendJson(res, 200, { success: true, data });
       }
       if (action === 'load') {

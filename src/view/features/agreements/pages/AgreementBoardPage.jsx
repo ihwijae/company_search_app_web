@@ -95,6 +95,8 @@ export default function AgreementBoardPage() {
             netCostAmount={boardState.netCostAmount || ''}
             aValue={boardState.aValue || ''}
             memoHtml={boardState.memoHtml || ''}
+            smsStatus={boardState.smsStatus || 'pending'}
+            smsCompletedAt={boardState.smsCompletedAt || ''}
           />
         </div>
       </div>

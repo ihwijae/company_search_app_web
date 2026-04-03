@@ -52,6 +52,8 @@ const initialState = {
   netCostAmount: '',
   aValue: '',
   memoHtml: '',
+  smsStatus: 'pending',
+  smsCompletedAt: '',
 };
 
 const normalizeRuleEntry = (item = {}) => ({

@@ -49,6 +49,12 @@ function parseNumberLike(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function normalizeSmsStatus(value) {
+  const token = String(value || '').trim().toLowerCase();
+  if (token === 'sent' || token === 'done' || token === 'completed' || token === 'true') return 'sent';
+  return 'pending';
+}
+
 function deriveMetaFromPayload(payload = {}, fallback = {}) {
   const candidate = payload && typeof payload === 'object' ? payload : {};
   const estimatedAmount = parseNumberLike(
@@ -72,6 +78,8 @@ function deriveMetaFromPayload(payload = {}, fallback = {}) {
     noticeNo: candidate.noticeNo || fallback.noticeNo || '',
     noticeTitle: candidate.noticeTitle || candidate.title || fallback.noticeTitle || '',
     savedAt: candidate.savedAt || fallback.savedAt || '',
+    smsStatus: normalizeSmsStatus(candidate.smsStatus ?? fallback.smsStatus),
+    smsCompletedAt: candidate.smsCompletedAt || fallback.smsCompletedAt || '',
   };
 }
 
@@ -147,6 +155,8 @@ async function saveAgreementBoard(snapshot = {}, options = {}) {
     meta: {
       ...meta,
       savedAt,
+      smsStatus: normalizeSmsStatus(meta.smsStatus),
+      smsCompletedAt: meta.smsCompletedAt || '',
     },
     payload,
   };
@@ -184,6 +194,8 @@ async function listAgreementBoards() {
       const meta = {
         ...deriveMetaFromPayload(payload, fromFileMeta),
         savedAt: fromFileMeta.savedAt || fallbackSavedAt,
+        smsStatus: normalizeSmsStatus(fromFileMeta.smsStatus ?? payload.smsStatus),
+        smsCompletedAt: fromFileMeta.smsCompletedAt || payload.smsCompletedAt || '',
       };
       return { path: pathname, meta };
     }));
@@ -240,6 +252,53 @@ async function deleteAgreementBoard(pathname) {
   await writeAgreementManifest(manifest);
 }
 
+async function updateAgreementBoardSmsStatus(pathname, status) {
+  const nextStatus = normalizeSmsStatus(status);
+  const filePath = resolveWithinRoot(ROOTS.agreementBoards, pathname);
+  const parsed = await readJsonFile(filePath, null);
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('협정 파일을 찾을 수 없습니다.');
+  }
+
+  const payload = parsed.payload && typeof parsed.payload === 'object'
+    ? parsed.payload
+    : parsed;
+  const baseMeta = parsed.meta && typeof parsed.meta === 'object'
+    ? parsed.meta
+    : deriveMetaFromPayload(payload, {});
+
+  const nowIso = new Date().toISOString();
+  const nextMeta = {
+    ...baseMeta,
+    smsStatus: nextStatus,
+    smsCompletedAt: nextStatus === 'sent' ? nowIso : '',
+    savedAt: baseMeta.savedAt || nowIso,
+  };
+  const nextPayload = {
+    ...payload,
+    smsStatus: nextMeta.smsStatus,
+    smsCompletedAt: nextMeta.smsCompletedAt,
+  };
+
+  await writeJsonFile(filePath, { meta: nextMeta, payload: nextPayload });
+
+  const manifest = await readAgreementManifest();
+  manifest[AGREEMENT_BOARD_MANIFEST_KEY] = getAgreementBoardItems(manifest).map((item) => {
+    if (!item || item.path !== pathname) return item;
+    return {
+      ...item,
+      meta: {
+        ...(item.meta || {}),
+        smsStatus: nextMeta.smsStatus,
+        smsCompletedAt: nextMeta.smsCompletedAt,
+      },
+    };
+  });
+  await writeAgreementManifest(manifest);
+
+  return { path: pathname, meta: nextMeta };
+}
+
 module.exports = {
   AGREEMENT_BOARD_ROOT_LABEL,
   AGREEMENT_BOARD_ROOT_PATH,
@@ -247,4 +306,5 @@ module.exports = {
   listAgreementBoards,
   loadAgreementBoard,
   deleteAgreementBoard,
+  updateAgreementBoardSmsStatus,
 };

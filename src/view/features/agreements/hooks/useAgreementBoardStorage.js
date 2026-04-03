@@ -10,6 +10,7 @@ const DEFAULT_FILTERS = {
   noticeTitle: '',
   amountMin: '',
   amountMax: '',
+  smsStatus: '',
   sortOrder: 'savedAtDesc',
 };
 
@@ -38,6 +39,8 @@ export default function useAgreementBoardStorage({
   netCostAmount,
   aValue,
   memoHtml,
+  smsStatus,
+  smsCompletedAt,
   candidates,
   pinned,
   excluded,
@@ -70,6 +73,7 @@ export default function useAgreementBoardStorage({
   const [loadBusy, setLoadBusy] = React.useState(false);
   const [loadError, setLoadError] = React.useState('');
   const [loadRootPath, setLoadRootPath] = React.useState('');
+  const [activeAgreementPath, setActiveAgreementPath] = React.useState('');
 
   const buildAgreementSnapshot = React.useCallback(() => ({
     meta: {
@@ -84,6 +88,8 @@ export default function useAgreementBoardStorage({
       noticeDate: noticeDate || '',
       noticeNo: noticeNo || '',
       noticeTitle: noticeTitle || '',
+      smsStatus: String(smsStatus || '').trim().toLowerCase() === 'sent' ? 'sent' : 'pending',
+      smsCompletedAt: smsCompletedAt || '',
     },
     payload: {
       ownerId,
@@ -100,6 +106,8 @@ export default function useAgreementBoardStorage({
       noticeNo: noticeNo || '',
       noticeTitle: noticeTitle || '',
       noticeDate: noticeDate || '',
+      smsStatus: String(smsStatus || '').trim().toLowerCase() === 'sent' ? 'sent' : 'pending',
+      smsCompletedAt: smsCompletedAt || '',
       bidDeadline: bidDeadline || '',
       regionDutyRate: regionDutyRate || '',
       participantLimit: participantLimit || safeGroupSize,
@@ -133,6 +141,8 @@ export default function useAgreementBoardStorage({
     industryLabel,
     estimatedAmount,
     noticeDate,
+    smsStatus,
+    smsCompletedAt,
     baseAmount,
     bidAmount,
     ratioBaseAmount,
@@ -172,11 +182,54 @@ export default function useAgreementBoardStorage({
     try {
       const result = await agreementBoardClient.save(payload);
       if (!result?.success) throw new Error(result?.message || '저장 실패');
+      if (result?.data?.path) setActiveAgreementPath(result.data.path);
       showHeaderAlert('협정 저장 완료');
     } catch (err) {
       showHeaderAlert(err?.message || '협정 저장 실패');
     }
   }, [buildAgreementSnapshot, showHeaderAlert]);
+
+  const handleSetSmsStatus = React.useCallback(async (nextStatus = 'sent') => {
+    const resolvedStatus = String(nextStatus || '').trim().toLowerCase() === 'sent' ? 'sent' : 'pending';
+    try {
+      let targetPath = String(activeAgreementPath || '').trim();
+      if (!targetPath) {
+        const saveResult = await agreementBoardClient.save(buildAgreementSnapshot());
+        if (!saveResult?.success || !saveResult?.data?.path) {
+          throw new Error(saveResult?.message || '협정 저장 실패');
+        }
+        targetPath = saveResult.data.path;
+        setActiveAgreementPath(targetPath);
+      }
+
+      const result = await agreementBoardClient.setSmsStatus(targetPath, resolvedStatus);
+      if (!result?.success) throw new Error(result?.message || '상태 변경 실패');
+
+      const nextMeta = result?.data?.meta || {};
+      if (typeof onUpdateBoard === 'function') {
+        onUpdateBoard({
+          smsStatus: nextMeta.smsStatus || resolvedStatus,
+          smsCompletedAt: nextMeta.smsCompletedAt || '',
+        });
+      }
+
+      setLoadItems((prev) => (Array.isArray(prev) ? prev.map((item) => {
+        if (!item || item.path !== targetPath) return item;
+        return {
+          ...item,
+          meta: {
+            ...(item.meta || {}),
+            smsStatus: nextMeta.smsStatus || resolvedStatus,
+            smsCompletedAt: nextMeta.smsCompletedAt || '',
+          },
+        };
+      }) : prev));
+
+      showHeaderAlert(resolvedStatus === 'sent' ? '문자전송 완료로 표시했습니다.' : '문자전송 완료 표시를 해제했습니다.');
+    } catch (err) {
+      showHeaderAlert(err?.message || '문자전송 상태 변경 실패');
+    }
+  }, [activeAgreementPath, buildAgreementSnapshot, onUpdateBoard, showHeaderAlert]);
 
   const refreshLoadList = React.useCallback(async () => {
     setLoadBusy(true);
@@ -233,6 +286,8 @@ export default function useAgreementBoardStorage({
       noticeNo: snapshot.noticeNo || '',
       noticeTitle: snapshot.noticeTitle || '',
       noticeDate: snapshot.noticeDate || '',
+      smsStatus: String(snapshot.smsStatus || '').trim().toLowerCase() === 'sent' ? 'sent' : 'pending',
+      smsCompletedAt: snapshot.smsCompletedAt || '',
       bidDeadline: snapshot.bidDeadline || '',
       regionDutyRate: snapshot.regionDutyRate || '',
       participantLimit: snapshot.participantLimit || safeGroupSize,
@@ -287,6 +342,7 @@ export default function useAgreementBoardStorage({
         savedAt: selectedItem?.meta?.savedAt || '',
       });
       if (!result?.success) throw new Error(result?.message || '불러오기 실패');
+      setActiveAgreementPath(path);
       applyAgreementSnapshot(result.data || {});
       showHeaderAlert('협정 불러오기 완료');
       setLoadModalOpen(false);
@@ -312,6 +368,12 @@ export default function useAgreementBoardStorage({
     try {
       const result = await agreementBoardClient.remove(path);
       if (!result?.success) throw new Error(result?.message || '삭제 실패');
+      if (String(activeAgreementPath || '') === String(path || '')) {
+        setActiveAgreementPath('');
+        if (typeof onUpdateBoard === 'function') {
+          onUpdateBoard({ smsStatus: 'pending', smsCompletedAt: '' });
+        }
+      }
       showHeaderAlert('협정 삭제 완료');
       await refreshLoadList();
     } catch (err) {
@@ -319,7 +381,7 @@ export default function useAgreementBoardStorage({
     } finally {
       setLoadBusy(false);
     }
-  }, [refreshLoadList, showHeaderAlert]);
+  }, [activeAgreementPath, onUpdateBoard, refreshLoadList, showHeaderAlert]);
 
   const handlePickRoot = React.useCallback(async () => {
     setLoadBusy(true);
@@ -345,7 +407,8 @@ export default function useAgreementBoardStorage({
     const industryFilter = String(loadFilters.industryLabel || '').trim();
     const dutyFilter = String(loadFilters.dutyRegion || '').trim();
     const noticeNoFilter = String(loadFilters.noticeNo || '').trim().toLowerCase();
-    const noticeTitleFilter = String(loadFilters.noticeTitle || '').trim().toLowerCase();
+      const noticeTitleFilter = String(loadFilters.noticeTitle || '').trim().toLowerCase();
+    const smsFilter = String(loadFilters.smsStatus || '').trim().toLowerCase();
     const amountMin = parseNumeric(loadFilters.amountMin);
     const amountMax = parseNumeric(loadFilters.amountMax);
     const getNoticeDateValue = (value) => {
@@ -373,6 +436,9 @@ export default function useAgreementBoardStorage({
       if (industryFilter && String(meta.industryLabel || '') !== industryFilter) return false;
       if (noticeNoFilter && !String(meta.noticeNo || '').toLowerCase().includes(noticeNoFilter)) return false;
       if (noticeTitleFilter && !String(meta.noticeTitle || '').toLowerCase().includes(noticeTitleFilter)) return false;
+      const itemSmsStatus = String(meta.smsStatus || '').trim().toLowerCase() === 'sent' ? 'sent' : 'pending';
+      if (smsFilter === 'sent' && itemSmsStatus !== 'sent') return false;
+      if (smsFilter === 'pending' && itemSmsStatus !== 'pending') return false;
       if (dutyFilter) {
         const regions = Array.isArray(meta.dutyRegions) ? meta.dutyRegions : [];
         if (!regions.some((region) => String(region || '') === dutyFilter)) return false;
@@ -433,6 +499,7 @@ export default function useAgreementBoardStorage({
     handleSaveAgreement,
     handleLoadAgreement,
     handleDeleteAgreement,
+    handleSetSmsStatus,
     handlePickRoot,
     refreshLoadList,
     resetFilters: () => setLoadFilters({ ...DEFAULT_FILTERS }),

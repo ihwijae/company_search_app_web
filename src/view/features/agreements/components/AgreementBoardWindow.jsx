@@ -1106,6 +1106,8 @@ export default function AgreementBoardWindow({
   netCostAmount = '',
   aValue = '',
   memoHtml = '',
+  smsStatus = 'pending',
+  smsCompletedAt = '',
   inlineMode = false,
 }) {
   const [headerCollapsed, setHeaderCollapsed] = React.useState(() => {
@@ -2082,6 +2084,7 @@ export default function AgreementBoardWindow({
     handleSaveAgreement,
     handleLoadAgreement,
     handleDeleteAgreement,
+    handleSetSmsStatus,
     handlePickRoot,
     resetFilters,
   } = useAgreementBoardStorage({
@@ -2109,6 +2112,8 @@ export default function AgreementBoardWindow({
     netCostAmount,
     aValue,
     memoHtml,
+    smsStatus,
+    smsCompletedAt,
     candidates,
     pinned,
     excluded,
@@ -2152,6 +2157,8 @@ export default function AgreementBoardWindow({
     });
     return Array.from(map.values());
   }, [loadFilters.ownerId]);
+
+  const isSmsCompleted = String(smsStatus || '').trim().toLowerCase() === 'sent';
 
   const toggleColumnCollapse = React.useCallback((key) => {
     setCollapsedColumns((prev) => ({
@@ -6078,6 +6085,13 @@ export default function AgreementBoardWindow({
                   disabled={exporting}
                 >엑셀로 내보내기</button>
                 <button type="button" className="excel-btn" onClick={handleGenerateText}>협정 문자 생성</button>
+                <button
+                  type="button"
+                  className={`excel-btn${isSmsCompleted ? ' primary' : ''}`}
+                  onClick={() => handleSetSmsStatus(isSmsCompleted ? 'pending' : 'sent')}
+                >
+                  {isSmsCompleted ? '문자전송완료 해제' : '문자전송완료'}
+                </button>
                 <button
                   type="button"
                   className="excel-btn"

@@ -84,6 +84,14 @@ const agreementBoardClient = {
     return result;
   },
 
+  async setSmsStatus(path, status) {
+    return requestJson('/api/agreement-board', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ action: 'set-sms-status', path, status }),
+    });
+  },
+
   async getRoot() {
     return requestJson('/api/agreement-board?action=root');
   },

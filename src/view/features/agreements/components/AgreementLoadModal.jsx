@@ -165,6 +165,17 @@ export default function AgreementLoadModal({
               <option value="savedAtAsc">작성일 오래된순</option>
             </select>
           </label>
+          <label>
+            <span>문자전송</span>
+            <select
+              value={filters.smsStatus || ''}
+              onChange={(event) => setFilters((prev) => ({ ...prev, smsStatus: event.target.value }))}
+            >
+              <option value="">전체</option>
+              <option value="pending">전송미완료</option>
+              <option value="sent">전송완료</option>
+            </select>
+          </label>
           <button type="button" className="excel-btn" onClick={onResetFilters}>필터 초기화</button>
         </div>
         <div className="agreement-load-list">
@@ -175,6 +186,7 @@ export default function AgreementLoadModal({
           )}
           {!busy && !error && pagedItems.map((item) => {
             const meta = item.meta || {};
+            const isSmsSent = String(meta.smsStatus || '').trim().toLowerCase() === 'sent';
             const noticeTitle = [meta.noticeNo, meta.noticeTitle].filter(Boolean).join('-');
             const dutyRegions = Array.isArray(meta.dutyRegions) ? meta.dutyRegions.filter(Boolean) : [];
             const amountLabel = meta.estimatedAmount != null
@@ -201,6 +213,9 @@ export default function AgreementLoadModal({
                     {dutyRegions.map((region) => (
                       <span key={region} className="agreement-badge">{region}</span>
                     ))}
+                    {isSmsSent && (
+                      <span className="agreement-badge agreement-badge--sms-sent">✓ 전송완료</span>
+                    )}
                   </div>
                   <div className="agreement-load-meta">
                     <span>추정금액 {amountLabel || '-'}</span>
@@ -208,6 +223,13 @@ export default function AgreementLoadModal({
                   </div>
                 </div>
                 <div className="agreement-load-actions">
+                  <span
+                    className={`agreement-load-sms-icon${isSmsSent ? ' is-sent' : ''}`}
+                    title={isSmsSent ? '문자전송 완료' : '문자전송 미완료'}
+                    aria-label={isSmsSent ? '문자전송 완료' : '문자전송 미완료'}
+                  >
+                    {isSmsSent ? '✓' : '○'}
+                  </span>
                   <button type="button" className="excel-btn primary" onClick={() => onLoad(item.path)}>불러오기</button>
                   <button type="button" className="excel-btn" onClick={() => onDelete(item.path)}>삭제</button>
                 </div>
