@@ -9,6 +9,7 @@ const DEFAULT_USERS_FILE = path.resolve(process.cwd(), 'users.yaml');
 const parseArgs = (argv) => {
   const options = {
     id: '',
+    name: '',
     role: 'admin',
     file: DEFAULT_USERS_FILE,
     active: true,
@@ -26,6 +27,11 @@ const parseArgs = (argv) => {
     }
     if (arg === '--role') {
       options.role = String(argv[i + 1] || '').trim() || 'admin';
+      i += 1;
+      continue;
+    }
+    if (arg === '--name') {
+      options.name = String(argv[i + 1] || '').trim();
       i += 1;
       continue;
     }
@@ -56,11 +62,21 @@ const parseArgs = (argv) => {
   return options;
 };
 
+const promptText = (question) => new Promise((resolve, reject) => {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  rl.question(question, (answer) => {
+    rl.close();
+    resolve(String(answer || '').trim());
+  });
+  rl.on('error', reject);
+});
+
 const printHelp = () => {
   console.log(`Usage:
   node scripts/create-user.js --id <id> [options]
 
 Options:
+  --name <name>               Default: same as id
   --role <role>               Default: admin
   --file <path>               Default: ./users.yaml
   --inactive                  Create inactive account
@@ -69,8 +85,9 @@ Options:
   -h, --help                  Show help
 
 Examples:
+  node scripts/create-user.js
   node scripts/create-user.js --id admin
-  node scripts/create-user.js --id manager --role user --file ./users.yaml
+  node scripts/create-user.js --id manager --name "홍길동" --role user --file ./users.yaml
   printf 'StrongPassword123!\\n' | node scripts/create-user.js --id admin --password-stdin`);
 };
 
@@ -156,6 +173,13 @@ const main = async () => {
     return;
   }
 
+  if (!options.name && !options.passwordStdin) {
+    options.name = await promptText('Name: ');
+  }
+  if (!options.id && !options.passwordStdin) {
+    options.id = await promptText('ID: ');
+  }
+
   validateId(options.id);
 
   const firstPassword = options.passwordStdin
@@ -182,6 +206,7 @@ const main = async () => {
   const now = new Date().toISOString();
   const nextUser = {
     id: options.id,
+    name: options.name || options.id,
     passwordHash: hashPassword(finalPassword),
     role: options.role,
     mustChangePassword: Boolean(options.mustChangePassword),

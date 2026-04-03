@@ -1,6 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { getSessionFromRequest } = require('./api/_lib/auth-store');
 
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 4173);
@@ -95,6 +96,16 @@ const server = http.createServer(async (req, res) => {
   const pathname = normalizePath(url.pathname || '/');
 
   if (pathname.startsWith('/api/')) {
+    if (!pathname.startsWith('/api/auth')) {
+      const session = getSessionFromRequest(req);
+      if (!session) {
+        res.statusCode = 401;
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.end(JSON.stringify({ success: false, message: 'Unauthorized' }));
+        return;
+      }
+    }
+
     const handlerPath = resolveApiHandlerPath(pathname);
     if (!handlerPath) {
       res.statusCode = 404;

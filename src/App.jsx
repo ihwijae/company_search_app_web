@@ -24,17 +24,62 @@ import RegionSearchWindowHost from './view/features/agreements/components/Region
 import FeedbackProvider from './components/FeedbackProvider.jsx';
 import CompanyNotesPage from './view/features/notes/pages/CompanyNotesPage.jsx';
 import TempCompaniesPage from './view/features/temp-companies/pages/TempCompaniesPage.jsx';
+import LoginPage from './view/features/auth/pages/LoginPage.jsx';
+import authClient from './shared/authClient.js';
 
 export default function App() {
   const [route, setRoute] = React.useState(window.location.hash || '#/search');
+  const [authState, setAuthState] = React.useState({
+    checking: true,
+    authenticated: false,
+    user: null,
+  });
+
   React.useEffect(() => {
     const onHashChange = () => setRoute(window.location.hash || '#/search');
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
+  React.useEffect(() => {
+    let canceled = false;
+    (async () => {
+      try {
+        const payload = await authClient.getSession();
+        if (canceled) return;
+        setAuthState({
+          checking: false,
+          authenticated: Boolean(payload?.authenticated),
+          user: payload?.user || null,
+        });
+      } catch (error) {
+        if (canceled) return;
+        setAuthState({
+          checking: false,
+          authenticated: false,
+          user: null,
+        });
+      }
+    })();
+
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
   const normalizedRoute = route.replace('#', '') || '/search';
   const [path] = normalizedRoute.split('?');
+
+  React.useEffect(() => {
+    if (authState.checking) return;
+    if (!authState.authenticated && path !== '/login') {
+      if (window.location.hash !== '#/login') window.location.hash = '#/login';
+      return;
+    }
+    if (authState.authenticated && path === '/login') {
+      window.location.hash = '#/search';
+    }
+  }, [authState.checking, authState.authenticated, path]);
 
   React.useEffect(() => {
     if (path !== '/excel-helper') {
@@ -104,10 +149,40 @@ export default function App() {
     case '/temp-companies':
       Screen = TempCompaniesPage;
       break;
+    case '/login':
+      Screen = LoginPage;
+      break;
     case '/search':
     default:
       Screen = SearchPage;
       break;
+  }
+
+  if (authState.checking) {
+    return (
+      <main className="login-page">
+        <section className="login-card">
+          <h1>세션 확인 중...</h1>
+        </section>
+      </main>
+    );
+  }
+
+  if (!authState.authenticated) {
+    return (
+      <LoginPage
+        onLoginSuccess={(payload) => {
+          setAuthState({
+            checking: false,
+            authenticated: true,
+            user: payload?.user || null,
+          });
+          if (window.location.hash === '#/login' || !window.location.hash) {
+            window.location.hash = '#/search';
+          }
+        }}
+      />
+    );
   }
 
   return (
