@@ -165,7 +165,9 @@ export default function Sidebar({ active, onSelect, fileStatuses, collapsed = tr
   return (
     <aside className={`sidebar top-nav ${collapsed ? 'collapsed' : 'expanded'}`}>
       <nav className="nav">
-        {navItems.map(({ key, label, icon }) => item(key, label, icon))}
+        <div className="nav-scroll">
+          {navItems.map(({ key, label, icon }) => item(key, label, icon))}
+        </div>
         <div className="nav-user" ref={accountMenuRef}>
           <button
             type="button"
