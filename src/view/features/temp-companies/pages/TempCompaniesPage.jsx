@@ -164,9 +164,9 @@ const buildSavePayload = (payload = {}) => {
   next.industry = normalizeIndustry(next.industry);
   next.bizNo = normalizeBizNoDigits(next.bizNo);
   COMMA_NUMERIC_FIELDS.forEach((field) => {
-    next[field] = THOUSAND_UNIT_FIELDS.has(field)
-      ? multiplyThousandsStorage(next[field])
-      : normalizeNumericValue(next[field]);
+    // Thousand-unit fields are already stored in won units in form state.
+    // Re-applying x1000 here causes values to grow on every save.
+    next[field] = normalizeNumericValue(next[field]);
   });
   RATIO_FIELDS.forEach((field) => {
     next[field] = normalizeRatioValue(next[field]);
