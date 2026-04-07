@@ -863,6 +863,7 @@ export default function BidResultPage() {
     const parsedBase = readOrderingSheetData(orderingSheet);
     let validNumbers = parsedBase.validNumbers;
     let winnerInfos = Array.isArray(parsedBase.winnerInfos) ? [...parsedBase.winnerInfos] : [];
+    console.log('[bid-result:web] ordering parsed(xlsx) validNumbers:', validNumbers.size, 'winners:', winnerInfos.length);
 
     const lowerName = String(orderingFile?.name || '').toLowerCase();
     if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xlsm')) {
@@ -877,6 +878,7 @@ export default function BidResultPage() {
         validNumbers = seqFromExcelJs;
       }
       const yellowRowWinners = readWinnerInfosByYellowRowExcelJs(orderingSheetByStyle);
+      console.log('[bid-result:web] ordering parsed(exceljs) validNumbers:', seqFromExcelJs.size, 'yellow winners:', yellowRowWinners.length);
       const existing = new Set(winnerInfos.map((info) => info?.bizNo).filter(Boolean));
       yellowRowWinners.forEach((info) => {
         const key = info?.bizNo;
@@ -885,6 +887,12 @@ export default function BidResultPage() {
         existing.add(key);
       });
     }
+    console.log(
+      '[bid-result:web] merged winners:',
+      winnerInfos.length,
+      'sample:',
+      winnerInfos.slice(0, 10).map((info) => ({ row: info.sourceRow, bizNo: info.bizNo, rank: info.rank, name: info.companyName })),
+    );
     if (!validNumbers.size) {
       throw new Error('발주처결과 파일에서 순번을 읽지 못했습니다. 입찰금액점수 시트의 순번(A열) 형식을 확인하세요.');
     }
@@ -904,12 +912,15 @@ export default function BidResultPage() {
     }
 
     const winnerRows = new Set();
+    const unmatchedWinnerBizNos = [];
     winnerInfos.forEach((info) => {
       if (!info?.bizNo) return;
+      let matched = false;
       for (let row = 14; row <= lastRow; row += 1) {
         const normalizedBiz = normalizeBizNumber(getCellText(sheet.getCell(row, 3)));
         if (normalizedBiz && normalizedBiz === info.bizNo) {
           winnerRows.add(row);
+          matched = true;
           const templateName = getCellText(sheet.getCell(row, 4)).trim();
           if (templateName) info.companyName = templateName;
           if (!info.rank) {
@@ -919,7 +930,14 @@ export default function BidResultPage() {
           break;
         }
       }
+      if (!matched) unmatchedWinnerBizNos.push(info.bizNo);
     });
+    console.log(
+      '[bid-result:web] winner match rows:',
+      Array.from(winnerRows.values()),
+      'unmatched bizNos:',
+      unmatchedWinnerBizNos.slice(0, 20),
+    );
 
     for (let row = 14; row <= lastRow; row += 1) {
       sheet.getCell(row, 15).value = null;
@@ -930,6 +948,7 @@ export default function BidResultPage() {
     winnerRows.forEach((row) => {
       sheet.getCell(row, 15).value = 'Y';
     });
+    console.log('[bid-result:web] wrote Y count:', winnerRows.size);
 
     const b4 = sheet.getCell('B4');
     b4.value = `무효 ${invalidRows.size}건`;
