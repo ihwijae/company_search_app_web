@@ -359,9 +359,25 @@ const isOrderingWinnerCell = (cell) => {
   if (!cell) return false;
   const style = cell.s;
   if (!style || typeof style !== 'object') return false;
-  const fillRgb = style.fill?.fgColor?.rgb || style.fill?.fgColor?.argb || style.fgColor?.rgb || style.fgColor?.argb || '';
-  return normalizeRgb(fillRgb) === 'FFFF00';
+  const fillRgb = style.fill?.fgColor?.rgb || style.fill?.fgColor?.argb
+    || style.fgColor?.rgb || style.fgColor?.argb
+    || style.bgColor?.rgb || style.bgColor?.argb || '';
+  if (normalizeRgb(fillRgb) === 'FFFF00') return true;
+  const fgIndexed = Number(style.fill?.fgColor?.indexed ?? style.fgColor?.indexed);
+  const bgIndexed = Number(style.fill?.bgColor?.indexed ?? style.bgColor?.indexed);
+  if (fgIndexed === 6 || fgIndexed === 13) return true;
+  if (bgIndexed === 6 || bgIndexed === 13) return true;
+  return false;
 };
+
+const rowHasYellowInXlsxSheet = (sheet, row, maxCol = 32) => {
+  for (let col = 0; col < maxCol; col += 1) {
+    const cell = sheet[XLSX.utils.encode_cell({ r: row - 1, c: col })];
+    if (isOrderingWinnerCell(cell)) return true;
+  }
+  return false;
+};
+
 
 const extractBizNoFromXlsxRow = (sheet, row) => {
   const candidateCols = [2, 3, 4, 1, 5]; // C, D, E, B, F
@@ -409,7 +425,7 @@ const readOrderingSheetData = (sheet) => {
     const seqRaw = seqCell ? XLSX.utils.format_cell(seqCell) : '';
     const seq = normalizeSequence(seqRaw);
 
-    if (isOrderingWinnerCell(seqCell)) {
+    if (rowHasYellowInXlsxSheet(sheet, row)) {
       appendWinnerInfo(row, seq);
     }
 
