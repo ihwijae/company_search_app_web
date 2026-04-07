@@ -8,6 +8,7 @@ import { BASE_ROUTES } from '../../../../shared/navigation.js';
 import { searchClient } from '../../../../shared/searchClient.js';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 
 const FILE_TYPE_OPTIONS = [
   { value: 'eung', label: '전기' },
@@ -465,6 +466,104 @@ const readOrderingSequencesFromExcelJs = (worksheet) => {
   return validNumbers;
 };
 
+const readZipText = async (zip, path) => {
+  const file = zip.file(path);
+  if (!file) return '';
+  return file.async('text');
+};
+
+const resolveSheetPathFromXml = (workbookXml, relsXml, sheetName) => {
+  if (!workbookXml || !relsXml || !sheetName) return '';
+  const escaped = sheetName.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+  const sheetMatch = new RegExp(`<sheet[^>]*name="${escaped}"[^>]*>`, 'i').exec(workbookXml);
+  if (!sheetMatch) return '';
+  const ridMatch = sheetMatch[0].match(/r:id="([^"]+)"/i);
+  if (!ridMatch) return '';
+  const rid = ridMatch[1];
+  const relMatch = new RegExp(`<Relationship[^>]*Id="${rid}"[^>]*>`, 'i').exec(relsXml);
+  if (!relMatch) return '';
+  const targetMatch = relMatch[0].match(/Target="([^"]+)"/i);
+  if (!targetMatch) return '';
+  const target = targetMatch[1];
+  return target.startsWith('xl/') ? target : `xl/${target}`;
+};
+
+const parseStyleMapFromXml = (stylesXml) => {
+  if (!stylesXml) return { fills: [], xfs: [] };
+  const fillsBlock = stylesXml.match(/<fills[^>]*>[\s\S]*?<\/fills>/i);
+  const xfsBlock = stylesXml.match(/<cellXfs[^>]*>[\s\S]*?<\/cellXfs>/i);
+  const fillList = fillsBlock ? (fillsBlock[0].match(/<fill>[\s\S]*?<\/fill>/gi) || []) : [];
+  const xfList = xfsBlock ? (xfsBlock[0].match(/<xf[^>]*\/>|<xf[^>]*>[\s\S]*?<\/xf>/gi) || []) : [];
+
+  const fills = fillList.map((fill) => {
+    const rgbMatch = fill.match(/<fgColor[^>]*rgb="([^"]+)"/i) || fill.match(/<bgColor[^>]*rgb="([^"]+)"/i);
+    const indexedMatch = fill.match(/<fgColor[^>]*indexed="([^"]+)"/i) || fill.match(/<bgColor[^>]*indexed="([^"]+)"/i);
+    return {
+      rgb: rgbMatch ? normalizeRgb(rgbMatch[1]) : '',
+      indexed: indexedMatch ? Number(indexedMatch[1]) : null,
+    };
+  });
+
+  const xfs = xfList.map((xf) => {
+    const fillIdMatch = xf.match(/fillId="(\d+)"/i);
+    return { fillId: fillIdMatch ? Number(fillIdMatch[1]) : null };
+  });
+
+  return { fills, xfs };
+};
+
+const isYellowStyleId = (styleId, styleMap) => {
+  if (!Number.isFinite(styleId)) return false;
+  const xf = styleMap?.xfs?.[styleId];
+  if (!xf || xf.fillId === null || xf.fillId === undefined) return false;
+  const fill = styleMap?.fills?.[xf.fillId];
+  if (!fill) return false;
+  if (fill.rgb === 'FFFF00') return true;
+  if (fill.indexed === 6 || fill.indexed === 13) return true;
+  return false;
+};
+
+const findYellowRowsFromSheetXml = (sheetXml, styleMap) => {
+  if (!sheetXml) return [];
+  const rows = new Set();
+  const cellRegex = /<c[^>]*r=['"]([A-Z]+)(\d+)['"][^>]*s=['"](\d+)['"][^>]*>/gi;
+  let match = cellRegex.exec(sheetXml);
+  while (match) {
+    const row = Number(match[2]);
+    const styleId = Number(match[3]);
+    if (!Number.isNaN(row) && isYellowStyleId(styleId, styleMap)) {
+      rows.add(row);
+    }
+    match = cellRegex.exec(sheetXml);
+  }
+  return Array.from(rows.values());
+};
+
+const extractWinnerInfosFromOrderingXml = async (buffer, sheetName, orderingSheet) => {
+  const zip = await JSZip.loadAsync(buffer);
+  const workbookXml = await readZipText(zip, 'xl/workbook.xml');
+  const relsXml = await readZipText(zip, 'xl/_rels/workbook.xml.rels');
+  const stylesXml = await readZipText(zip, 'xl/styles.xml');
+  const sheetPath = resolveSheetPathFromXml(workbookXml, relsXml, sheetName) || 'xl/worksheets/sheet1.xml';
+  const sheetXml = await readZipText(zip, sheetPath);
+  if (!sheetXml) return [];
+
+  const styleMap = parseStyleMapFromXml(stylesXml);
+  const rows = findYellowRowsFromSheetXml(sheetXml, styleMap);
+  const winnerInfos = [];
+  rows.forEach((row) => {
+    const bizNo = extractBizNoFromXlsxRow(orderingSheet, row); // C열 우선
+    if (!bizNo) return;
+    if (winnerInfos.some((info) => info.bizNo === bizNo)) return;
+    const seqCell = orderingSheet[XLSX.utils.encode_cell({ r: row - 1, c: 0 })];
+    const seqRaw = seqCell ? XLSX.utils.format_cell(seqCell) : '';
+    const rank = normalizeSequence(seqRaw);
+    const companyName = extractNameFromXlsxRow(orderingSheet, row);
+    winnerInfos.push({ bizNo, rank: rank || null, companyName, sourceRow: row });
+  });
+  return winnerInfos;
+};
+
 const rowHasYellowFill = (worksheet, row, maxCol = 32) => {
   if (!worksheet) return false;
   const rowStyleFill = worksheet.getRow(row)?.style?.fill;
@@ -893,8 +992,16 @@ export default function BidResultPage() {
       if (seqFromExcelJs.size > validNumbers.size) {
         validNumbers = seqFromExcelJs;
       }
-      const yellowRowWinners = readWinnerInfosByYellowRowExcelJs(orderingSheetByStyle);
-      console.log('[bid-result:web] ordering parsed(exceljs) validNumbers:', seqFromExcelJs.size, 'yellow winners:', yellowRowWinners.length);
+      let yellowRowWinners = [];
+      try {
+        yellowRowWinners = await extractWinnerInfosFromOrderingXml(orderingBuffer, orderingSheetName, orderingSheet);
+      } catch (error) {
+        console.warn('[bid-result:web] xml winner parse failed:', error);
+      }
+      if (yellowRowWinners.length === 0) {
+        yellowRowWinners = readWinnerInfosByYellowRowExcelJs(orderingSheetByStyle);
+      }
+      console.log('[bid-result:web] ordering parsed(exceljs/xml) validNumbers:', seqFromExcelJs.size, 'yellow winners:', yellowRowWinners.length);
       const existing = new Set(winnerInfos.map((info) => info?.bizNo).filter(Boolean));
       yellowRowWinners.forEach((info) => {
         const key = info?.bizNo;
