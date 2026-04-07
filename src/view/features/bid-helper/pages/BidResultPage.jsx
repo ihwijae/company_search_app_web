@@ -44,6 +44,12 @@ const normalizeName = (value) => {
 };
 
 const normalizeBizNumber = (value) => String(value || '').replace(/[^0-9]/g, '');
+const normalizeSequence = (value) => {
+  const digits = String(value || '').replace(/[^0-9]/g, '');
+  if (!digits) return null;
+  const parsed = Number.parseInt(digits, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+};
 
 const pickFirstValue = (obj, fields) => {
   if (!obj || typeof obj !== 'object') return '';
@@ -238,8 +244,8 @@ const autoFitDiffColumn = (worksheet, maxRow, { minWidth = 8, maxWidth = 20 } = 
   for (let row = 15; row <= maxRow; row += 1) {
     const current = worksheet.getCell(row, 5).value;
     const prev = worksheet.getCell(row - 1, 5).value;
-    const currentNum = typeof current === 'number' ? current : Number(String(current || '').replace(/[^0-9.\-]/g, ''));
-    const prevNum = typeof prev === 'number' ? prev : Number(String(prev || '').replace(/[^0-9.\-]/g, ''));
+    const currentNum = typeof current === 'number' ? current : Number(String(current || '').replace(/[^0-9.-]/g, ''));
+    const prevNum = typeof prev === 'number' ? prev : Number(String(prev || '').replace(/[^0-9.-]/g, ''));
     if (!Number.isFinite(currentNum) || !Number.isFinite(prevNum)) continue;
     const diff = currentNum - prevNum;
     const text = diff.toLocaleString('en-US');
@@ -252,6 +258,61 @@ const autoFitDiffColumn = (worksheet, maxRow, { minWidth = 8, maxWidth = 20 } = 
 const sanitizeDownloadName = (value, fallback = 'output.xlsx') => {
   const cleaned = String(value || '').trim().replace(/[\\/:*?"<>|]/g, '');
   return cleaned || fallback;
+};
+
+const normalizeRgb = (rgb) => String(rgb || '').replace(/^FF/i, '').toUpperCase();
+
+const isOrderingWinnerCell = (cell) => {
+  if (!cell) return false;
+  const style = cell.s;
+  if (!style || typeof style !== 'object') return false;
+  const bold = Boolean(style.font?.bold || style.font?.b);
+  const fillRgb = style.fill?.fgColor?.rgb || style.fgColor?.rgb || '';
+  return bold && normalizeRgb(fillRgb) === 'FFFF00';
+};
+
+const readOrderingSheetData = (sheet) => {
+  const validNumbers = new Set();
+  const winnerInfos = [];
+  let started = false;
+  let emptyStreak = 0;
+
+  const appendWinnerInfo = (row, seq) => {
+    const bizCell = sheet[XLSX.utils.encode_cell({ r: row - 1, c: 2 })];
+    const nameCell = sheet[XLSX.utils.encode_cell({ r: row - 1, c: 3 })];
+    const bizRaw = bizCell ? XLSX.utils.format_cell(bizCell) : '';
+    const nameRaw = nameCell ? XLSX.utils.format_cell(nameCell) : '';
+    const bizNo = normalizeBizNumber(bizRaw);
+    if (!bizNo) return;
+    if (winnerInfos.some((info) => info.bizNo === bizNo)) return;
+    winnerInfos.push({
+      bizNo,
+      rank: seq || null,
+      companyName: String(nameRaw || '').trim(),
+      sourceRow: row,
+    });
+  };
+
+  for (let row = 5; row <= 5000; row += 1) {
+    const seqCell = sheet[XLSX.utils.encode_cell({ r: row - 1, c: 0 })];
+    const seqRaw = seqCell ? XLSX.utils.format_cell(seqCell) : '';
+    const seq = normalizeSequence(seqRaw);
+
+    if (isOrderingWinnerCell(seqCell)) {
+      appendWinnerInfo(row, seq);
+    }
+
+    if (seq) {
+      validNumbers.add(seq);
+      started = true;
+      emptyStreak = 0;
+    } else if (started) {
+      emptyStreak += 1;
+      if (emptyStreak >= 3) break;
+    }
+  }
+
+  return { validNumbers, winnerInfos };
 };
 
 const downloadBlob = (blob, fileName) => {
@@ -269,6 +330,21 @@ const QUALITY_FILL = {
   type: 'pattern',
   pattern: 'solid',
   fgColor: { argb: 'FFFFFF00' },
+};
+const AGREEMENT_DEFAULT_FILL = {
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FF00B0F0' },
+};
+const AGREEMENT_SPECIAL_FILL = {
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FF00B050' },
+};
+const ORDERING_INVALID_FILL = {
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FFFF0000' },
 };
 
 export default function BidResultPage() {
@@ -320,7 +396,6 @@ export default function BidResultPage() {
   const bidAmountOwnerLabel = React.useMemo(() => (
     OWNER_OPTIONS.find((option) => option.value === bidAmountOwnerId)?.label || '한국토지주택공사'
   ), [bidAmountOwnerId]);
-  const isElectron = Boolean(window?.electronAPI);
 
   const strongLabelStyle = React.useMemo(() => ({
     display: 'block',
@@ -346,6 +421,19 @@ export default function BidResultPage() {
     fontWeight: 700,
     letterSpacing: '0.2px',
   }), []);
+
+  const saveProcessedTemplate = React.useCallback((buffer, suffix) => {
+    if (!buffer) throw new Error('개찰결과 파일 처리 결과가 비어 있습니다.');
+    const baseSource = templateFile?.name || templateFileName || '개찰결과파일.xlsx';
+    const baseName = sanitizeDownloadName(baseSource, '개찰결과파일.xlsx').replace(/\.xlsx$/i, '');
+    const outputName = `${baseName}_${suffix}.xlsx`;
+    const outputBlob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const nextTemplateFile = new File([outputBlob], outputName, { type: outputBlob.type });
+    setTemplateFile(nextTemplateFile);
+    setTemplatePath(outputName);
+    downloadBlob(outputBlob, outputName);
+    return outputName;
+  }, [templateFile, templateFileName]);
 
   const handleSidebarSelect = React.useCallback((key) => {
     if (!key) return;
@@ -548,6 +636,131 @@ export default function BidResultPage() {
     };
   }, []);
 
+  const applyAgreementInBrowser = React.useCallback(async ({ sourceFile, entries }) => {
+    if (!sourceFile) throw new Error('개찰결과파일을 먼저 선택하세요.');
+    if (!Array.isArray(entries) || entries.length === 0) {
+      throw new Error('협정파일에서 매칭할 사업자번호가 없습니다.');
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const buffer = await sourceFile.arrayBuffer();
+    await workbook.xlsx.load(buffer);
+    const sheet = workbook.worksheets[0];
+    if (!sheet) throw new Error('개찰결과 파일 시트를 찾을 수 없습니다.');
+
+    const entryMap = new Map();
+    entries.forEach((entry) => {
+      const normalizedBiz = normalizeBizNumber(entry?.bizNo);
+      if (!normalizedBiz || normalizedBiz.length !== 10) return;
+      if (!entryMap.has(normalizedBiz)) {
+        entryMap.set(normalizedBiz, Boolean(entry?.special));
+        return;
+      }
+      const prevSpecial = entryMap.get(normalizedBiz);
+      entryMap.set(normalizedBiz, Boolean(prevSpecial || entry?.special));
+    });
+    if (!entryMap.size) throw new Error('협정파일에서 유효한 사업자번호를 찾지 못했습니다.');
+
+    const lastRow = findLastDataRow(sheet, 3);
+    const matchedRows = new Set();
+    const specialRows = new Set();
+    for (let row = 14; row <= lastRow; row += 1) {
+      const normalizedBiz = normalizeBizNumber(getCellText(sheet.getCell(row, 3)));
+      if (!normalizedBiz || normalizedBiz.length !== 10) continue;
+      if (!entryMap.has(normalizedBiz)) continue;
+      matchedRows.add(row);
+      if (entryMap.get(normalizedBiz)) specialRows.add(row);
+    }
+
+    for (let row = 14; row <= lastRow; row += 1) {
+      sheet.getCell(row, 2).fill = { type: 'pattern', pattern: 'none' };
+    }
+    matchedRows.forEach((row) => {
+      sheet.getCell(row, 2).fill = specialRows.has(row) ? AGREEMENT_SPECIAL_FILL : AGREEMENT_DEFAULT_FILL;
+    });
+
+    const output = await workbook.xlsx.writeBuffer();
+    return { buffer: output, matchedCount: matchedRows.size, scannedCount: entryMap.size };
+  }, []);
+
+  const applyOrderingInBrowser = React.useCallback(async ({ sourceFile, orderingFile }) => {
+    if (!sourceFile) throw new Error('개찰결과파일을 먼저 선택하세요.');
+    if (!orderingFile) throw new Error('발주처결과 파일을 먼저 선택하세요.');
+
+    const orderingBuffer = await orderingFile.arrayBuffer();
+    const orderingWorkbook = XLSX.read(orderingBuffer, { type: 'array', cellStyles: true });
+    const orderingSheetName = (orderingWorkbook.SheetNames || []).find(
+      (name) => name.replace(/\s+/g, '') === '입찰금액점수',
+    );
+    if (!orderingSheetName) throw new Error('발주처결과 파일에서 "입찰금액점수" 시트를 찾을 수 없습니다.');
+    const orderingSheet = orderingWorkbook.Sheets[orderingSheetName];
+    if (!orderingSheet) throw new Error('발주처결과 파일에서 "입찰금액점수" 시트를 찾을 수 없습니다.');
+
+    const { validNumbers, winnerInfos } = readOrderingSheetData(orderingSheet);
+
+    const workbook = new ExcelJS.Workbook();
+    const sourceBuffer = await sourceFile.arrayBuffer();
+    await workbook.xlsx.load(sourceBuffer);
+    const sheet = workbook.worksheets[0];
+    if (!sheet) throw new Error('개찰결과 파일 시트를 찾을 수 없습니다.');
+
+    const lastRow = findLastDataRow(sheet, 2);
+    const invalidRows = new Set();
+    for (let row = 14; row <= lastRow; row += 1) {
+      const seq = normalizeSequence(getCellText(sheet.getCell(row, 2)));
+      if (!seq) continue;
+      if (!validNumbers.has(seq)) invalidRows.add(row);
+    }
+
+    const winnerRows = new Map();
+    winnerInfos.forEach((info) => {
+      if (!info?.bizNo) return;
+      for (let row = 14; row <= lastRow; row += 1) {
+        const normalizedBiz = normalizeBizNumber(getCellText(sheet.getCell(row, 3)));
+        if (normalizedBiz && normalizedBiz === info.bizNo) {
+          winnerRows.set(info.bizNo, row);
+          const templateName = getCellText(sheet.getCell(row, 4)).trim();
+          if (templateName) info.companyName = templateName;
+          if (!info.rank) {
+            const templateRank = normalizeSequence(getCellText(sheet.getCell(row, 2)));
+            if (templateRank) info.rank = templateRank;
+          }
+          break;
+        }
+      }
+    });
+
+    for (let row = 14; row <= lastRow; row += 1) {
+      sheet.getCell(row, 2).fill = { type: 'pattern', pattern: 'none' };
+      sheet.getCell(row, 15).value = null;
+    }
+    invalidRows.forEach((row) => {
+      sheet.getCell(row, 2).fill = ORDERING_INVALID_FILL;
+    });
+    winnerRows.forEach((row) => {
+      sheet.getCell(row, 15).value = 'Y';
+    });
+
+    const b4 = sheet.getCell('B4');
+    b4.value = `무효 ${invalidRows.size}건`;
+    b4.font = { ...(b4.font || {}), bold: true, color: { argb: 'FFFF0000' } };
+
+    const winnerParts = winnerInfos
+      .filter((info) => info?.rank && info?.companyName)
+      .map((info) => `${info.rank}순위 ${info.companyName}`);
+    if (winnerParts.length > 0) {
+      sheet.getCell('K4').value = `실제낙찰사: 균형근접 ${winnerParts.join(', ')}`;
+    }
+
+    const output = await workbook.xlsx.writeBuffer();
+    return {
+      buffer: output,
+      invalidCount: invalidRows.size,
+      winnerInfo: winnerInfos,
+      winnerRow: winnerRows.size > 0 ? Array.from(winnerRows.values()) : null,
+    };
+  }, []);
+
   const handleTemplateFileUpload = (event) => {
     const file = event.target.files[0];
     if (file) {
@@ -639,10 +852,6 @@ export default function BidResultPage() {
       notify({ type: 'info', message: '협정파일 시트를 선택하세요.' });
       return;
     }
-    if (isElectron && !window.electronAPI?.bidResult?.applyBidAmountTemplate) {
-      notify({ type: 'error', message: '투찰금액 템플릿 기능을 사용할 수 없습니다.' });
-      return;
-    }
     setIsBidAmountProcessing(true);
     try {
       const { entries, excludedNames } = extractBidAmountEntries();
@@ -684,53 +893,29 @@ export default function BidResultPage() {
         deadlineParts.push(bidAmountDeadlinePeriod === 'PM' ? '오후' : '오전');
         deadlineParts.push(bidAmountDeadlineTime);
       }
-      let total = null;
-      let quality = null;
-      let tie = null;
-      if (isElectron) {
-        const response = await window.electronAPI.bidResult.applyBidAmountTemplate({
-          templatePath: bidAmountTemplatePath,
-          entries: bidEntries,
-          header: {
-            noticeNo: bidAmountNoticeNo,
-            noticeTitle: bidAmountNoticeTitle,
-            ownerLabel: bidAmountOwnerLabel,
-            bidDeadline: deadlineParts.filter(Boolean).join(' '),
-            baseAmount: bidAmountBaseAmount,
-          },
-        });
-        if (!response?.success) {
-          if (response?.canceled) return;
-          throw new Error(response?.message || '투찰금액 템플릿 처리에 실패했습니다.');
-        }
-        total = Number.isFinite(response?.totalCount) ? response.totalCount : null;
-        quality = Number.isFinite(response?.qualityCount) ? response.qualityCount : null;
-        tie = Number.isFinite(response?.tieCount) ? response.tieCount : null;
-      } else {
-        if (!bidAmountTemplateFile) {
-          throw new Error('투찰금액 템플릿 파일을 다시 선택하세요.');
-        }
-        const result = await applyBidAmountTemplateInBrowser({
-          templateFile: bidAmountTemplateFile,
-          entries: bidEntries,
-          header: {
-            noticeNo: bidAmountNoticeNo,
-            noticeTitle: bidAmountNoticeTitle,
-            ownerLabel: bidAmountOwnerLabel,
-            bidDeadline: deadlineParts.filter(Boolean).join(' '),
-            baseAmount: bidAmountBaseAmount,
-          },
-        });
-        total = result.totalCount;
-        quality = result.qualityCount;
-        tie = result.tieCount;
-        const baseName = sanitizeDownloadName(bidAmountTemplateFile.name || '투찰금액_템플릿.xlsx', '투찰금액_템플릿.xlsx').replace(/\.xlsx$/i, '');
-        const fileName = `${baseName}_배치완료.xlsx`;
-        downloadBlob(
-          new Blob([result.buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
-          fileName,
-        );
+      if (!bidAmountTemplateFile) {
+        throw new Error('투찰금액 템플릿 파일을 다시 선택하세요.');
       }
+      const result = await applyBidAmountTemplateInBrowser({
+        templateFile: bidAmountTemplateFile,
+        entries: bidEntries,
+        header: {
+          noticeNo: bidAmountNoticeNo,
+          noticeTitle: bidAmountNoticeTitle,
+          ownerLabel: bidAmountOwnerLabel,
+          bidDeadline: deadlineParts.filter(Boolean).join(' '),
+          baseAmount: bidAmountBaseAmount,
+        },
+      });
+      const total = result.totalCount;
+      const quality = result.qualityCount;
+      const tie = result.tieCount;
+      const baseName = sanitizeDownloadName(bidAmountTemplateFile.name || '투찰금액_템플릿.xlsx', '투찰금액_템플릿.xlsx').replace(/\.xlsx$/i, '');
+      const fileName = `${baseName}_배치완료.xlsx`;
+      downloadBlob(
+        new Blob([result.buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+        fileName,
+      );
       const parts = [];
       if (total !== null) parts.push(`총 ${total}개`);
       if (quality !== null) parts.push(`품질만점 ${quality}개`);
@@ -764,31 +949,17 @@ export default function BidResultPage() {
       notify({ type: 'info', message: '엑셀 파일을 선택하세요.' });
       return;
     }
-    if (isElectron && !window.electronAPI?.excelHelper?.formatUploaded) {
-      notify({ type: 'error', message: '엑셀 서식 변환 기능을 사용할 수 없습니다.' });
-      return;
-    }
     setIsFormatting(true);
     try {
-      if (isElectron) {
-        const response = await window.electronAPI.excelHelper.formatUploaded({ path: formatFile.path });
-        if (!response?.success) throw new Error(response?.message || '엑셀 서식 변환에 실패했습니다.');
-        if (response?.path) setTemplatePath(response.path);
-        notify({
-          type: 'success',
-          message: response?.path ? `변환이 완료되었습니다. (${response.path})` : '변환이 완료되었습니다.',
-        });
-      } else {
-        const outputBuffer = await formatWorkbookInBrowser(formatFile);
-        const baseName = sanitizeDownloadName(formatFile.name || '개찰결과파일.xlsx', '개찰결과파일.xlsx').replace(/\.xlsx$/i, '');
-        const outputName = `${baseName}_서식변환.xlsx`;
-        const outputBlob = new Blob([outputBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const nextTemplateFile = new File([outputBlob], outputName, { type: outputBlob.type });
-        setTemplateFile(nextTemplateFile);
-        setTemplatePath(outputName);
-        downloadBlob(outputBlob, outputName);
-        notify({ type: 'success', message: `변환이 완료되었습니다. (${outputName})` });
-      }
+      const outputBuffer = await formatWorkbookInBrowser(formatFile);
+      const baseName = sanitizeDownloadName(formatFile.name || '개찰결과파일.xlsx', '개찰결과파일.xlsx').replace(/\.xlsx$/i, '');
+      const outputName = `${baseName}_서식변환.xlsx`;
+      const outputBlob = new Blob([outputBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const nextTemplateFile = new File([outputBlob], outputName, { type: outputBlob.type });
+      setTemplateFile(nextTemplateFile);
+      setTemplatePath(outputName);
+      downloadBlob(outputBlob, outputName);
+      notify({ type: 'success', message: `변환이 완료되었습니다. (${outputName})` });
     } catch (err) {
       notify({ type: 'error', message: err.message || '엑셀 서식 변환에 실패했습니다.' });
     } finally {
@@ -1122,56 +1293,29 @@ export default function BidResultPage() {
           deadlineParts.push(bidAmountDeadlinePeriod === 'PM' ? '오후' : '오전');
           deadlineParts.push(bidAmountDeadlineTime);
         }
-        let total = null;
-        let quality = null;
-        let tie = null;
-        if (isElectron) {
-          const response = await window.electronAPI.bidResult.applyBidAmountTemplate({
-            templatePath: bidAmountTemplatePath,
-            entries: bidEntries,
-            header: {
-              noticeNo: bidAmountNoticeNo,
-              noticeTitle: bidAmountNoticeTitle,
-              ownerLabel: bidAmountOwnerLabel,
-              bidDeadline: deadlineParts.filter(Boolean).join(' '),
-              baseAmount: bidAmountBaseAmount,
-            },
-          });
-          if (!response?.success) {
-            if (response?.canceled) {
-              handleCompanyConflictCancel();
-              return;
-            }
-            throw new Error(response?.message || '투찰금액 템플릿 처리에 실패했습니다.');
-          }
-          total = Number.isFinite(response?.totalCount) ? response.totalCount : null;
-          quality = Number.isFinite(response?.qualityCount) ? response.qualityCount : null;
-          tie = Number.isFinite(response?.tieCount) ? response.tieCount : null;
-        } else {
-          if (!bidAmountTemplateFile) {
-            throw new Error('투찰금액 템플릿 파일을 다시 선택하세요.');
-          }
-          const result = await applyBidAmountTemplateInBrowser({
-            templateFile: bidAmountTemplateFile,
-            entries: bidEntries,
-            header: {
-              noticeNo: bidAmountNoticeNo,
-              noticeTitle: bidAmountNoticeTitle,
-              ownerLabel: bidAmountOwnerLabel,
-              bidDeadline: deadlineParts.filter(Boolean).join(' '),
-              baseAmount: bidAmountBaseAmount,
-            },
-          });
-          total = result.totalCount;
-          quality = result.qualityCount;
-          tie = result.tieCount;
-          const baseName = sanitizeDownloadName(bidAmountTemplateFile.name || '투찰금액_템플릿.xlsx', '투찰금액_템플릿.xlsx').replace(/\.xlsx$/i, '');
-          const fileName = `${baseName}_배치완료.xlsx`;
-          downloadBlob(
-            new Blob([result.buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
-            fileName,
-          );
+        if (!bidAmountTemplateFile) {
+          throw new Error('투찰금액 템플릿 파일을 다시 선택하세요.');
         }
+        const result = await applyBidAmountTemplateInBrowser({
+          templateFile: bidAmountTemplateFile,
+          entries: bidEntries,
+          header: {
+            noticeNo: bidAmountNoticeNo,
+            noticeTitle: bidAmountNoticeTitle,
+            ownerLabel: bidAmountOwnerLabel,
+            bidDeadline: deadlineParts.filter(Boolean).join(' '),
+            baseAmount: bidAmountBaseAmount,
+          },
+        });
+        const total = result.totalCount;
+        const quality = result.qualityCount;
+        const tie = result.tieCount;
+        const baseName = sanitizeDownloadName(bidAmountTemplateFile.name || '투찰금액_템플릿.xlsx', '투찰금액_템플릿.xlsx').replace(/\.xlsx$/i, '');
+        const fileName = `${baseName}_배치완료.xlsx`;
+        downloadBlob(
+          new Blob([result.buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+          fileName,
+        );
         const parts = [];
         if (total !== null) parts.push(`총 ${total}개`);
         if (quality !== null) parts.push(`품질만점 ${quality}개`);
@@ -1196,13 +1340,14 @@ export default function BidResultPage() {
       } else {
         const bizEntries = buildBizEntries(pendingAgreementEntries, pendingCandidatesMap, companyConflictSelections);
         if (!bizEntries.length) throw new Error('조회된 사업자번호가 없습니다.');
-        const response = await window.electronAPI.bidResult.applyAgreement({
-          templatePath,
+        if (!templateFile) throw new Error('개찰결과파일을 다시 선택하세요.');
+        const result = await applyAgreementInBrowser({
+          sourceFile: templateFile,
           entries: bizEntries,
         });
-        if (!response?.success) throw new Error(response?.message || '협정파일 처리에 실패했습니다.');
-        const matched = Number.isFinite(response?.matchedCount) ? response.matchedCount : null;
-        const scanned = Number.isFinite(response?.scannedCount) ? response.scannedCount : null;
+        saveProcessedTemplate(result.buffer, '협정체크');
+        const matched = Number.isFinite(result?.matchedCount) ? result.matchedCount : null;
+        const scanned = Number.isFinite(result?.scannedCount) ? result.scannedCount : null;
         const summary = matched !== null && scanned !== null
           ? ` (매칭 ${matched}/${scanned})`
           : '';
@@ -1237,7 +1382,7 @@ export default function BidResultPage() {
       notify({ type: 'info', message: '먼저 템플릿 파일을 서식 변환으로 생성하세요.' });
       return;
     }
-    if (!agreementFile?.path) {
+    if (!agreementFile) {
       notify({ type: 'info', message: '협정파일을 선택하세요.' });
       return;
     }
@@ -1249,30 +1394,15 @@ export default function BidResultPage() {
       notify({ type: 'info', message: '공종(전기/통신/소방)을 선택하세요.' });
       return;
     }
-    if (!window.electronAPI?.bidResult?.applyAgreement) {
-      notify({ type: 'error', message: '협정파일 실행 기능을 사용할 수 없습니다.' });
-      return;
-    }
-    if (!window.electronAPI?.searchCompanies) {
-      notify({ type: 'error', message: '업체 조회 기능을 사용할 수 없습니다.' });
+    if (!templateFile) {
+      notify({ type: 'info', message: '개찰결과파일을 먼저 선택하세요.' });
       return;
     }
     setIsAgreementProcessing(true);
     try {
       const entries = extractAgreementEntries();
       if (!entries.length) throw new Error('협정파일에서 업체명을 찾지 못했습니다.');
-      const candidatesMap = new Map();
-      for (const entry of entries) {
-        if (!entry.normalizedName) continue;
-        if (candidatesMap.has(entry.normalizedName)) continue;
-        const response = await window.electronAPI.searchCompanies({ name: entry.cleanedName }, fileType);
-        if (!response?.success) {
-          candidatesMap.set(entry.normalizedName, []);
-          continue;
-        }
-        const data = Array.isArray(response.data) ? response.data : [];
-        candidatesMap.set(entry.normalizedName, data);
-      }
+      const candidatesMap = await findCompaniesForEntries(entries, fileType);
 
       const conflictEntries = [];
       entries.forEach((entry) => {
@@ -1302,18 +1432,16 @@ export default function BidResultPage() {
       }
 
       const bizEntries = buildBizEntries(entries, candidatesMap, companyConflictSelections);
-      console.log('[bid-result] agreement entries:', entries.length);
-      console.log('[bid-result] biz entries:', bizEntries.slice(0, 5), 'total:', bizEntries.length);
       const missingSummary = summarizeMissingEntries(entries, candidatesMap);
       if (!bizEntries.length) throw new Error('조회된 사업자번호가 없습니다.');
 
-      const response = await window.electronAPI.bidResult.applyAgreement({
-        templatePath,
+      const result = await applyAgreementInBrowser({
+        sourceFile: templateFile,
         entries: bizEntries,
       });
-      if (!response?.success) throw new Error(response?.message || '협정파일 처리에 실패했습니다.');
-      const matched = Number.isFinite(response?.matchedCount) ? response.matchedCount : null;
-      const scanned = Number.isFinite(response?.scannedCount) ? response.scannedCount : null;
+      saveProcessedTemplate(result.buffer, '협정체크');
+      const matched = Number.isFinite(result?.matchedCount) ? result.matchedCount : null;
+      const scanned = Number.isFinite(result?.scannedCount) ? result.scannedCount : null;
       const summary = matched !== null && scanned !== null
         ? ` (매칭 ${matched}/${scanned})`
         : '';
@@ -1341,21 +1469,21 @@ export default function BidResultPage() {
       notify({ type: 'info', message: '먼저 템플릿 파일을 서식 변환으로 생성하세요.' });
       return;
     }
-    if (!orderingResultFile?.path) {
+    if (!orderingResultFile) {
       notify({ type: 'info', message: '발주처결과 파일을 선택하세요.' });
       return;
     }
-    if (!window.electronAPI?.bidResult?.applyOrdering) {
-      notify({ type: 'error', message: '발주처결과 실행 기능을 사용할 수 없습니다.' });
+    if (!templateFile) {
+      notify({ type: 'info', message: '개찰결과파일을 먼저 선택하세요.' });
       return;
     }
     setIsOrderingProcessing(true);
     try {
-      const response = await window.electronAPI.bidResult.applyOrdering({
-        templatePath,
-        orderingPath: orderingResultFile.path,
+      const response = await applyOrderingInBrowser({
+        sourceFile: templateFile,
+        orderingFile: orderingResultFile,
       });
-      if (!response?.success) throw new Error(response?.message || '발주처결과 처리에 실패했습니다.');
+      saveProcessedTemplate(response.buffer, '발주처결과');
       const invalidCount = Number.isFinite(response?.invalidCount) ? response.invalidCount : null;
       const summary = invalidCount !== null ? ` (무효 ${invalidCount}건)` : '';
       const winnerInfo = response?.winnerInfo;
