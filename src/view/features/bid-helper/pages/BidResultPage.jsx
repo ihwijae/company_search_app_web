@@ -412,9 +412,8 @@ const readOrderingSheetData = (sheet) => {
   const appendWinnerInfo = (row, seq) => {
     const bizNo = extractBizNoFromXlsxRow(sheet, row);
     const companyName = extractNameFromXlsxRow(sheet, row);
-    if (!bizNo && !seq) return;
-    if (bizNo && winnerInfos.some((info) => info.bizNo === bizNo)) return;
-    if (!bizNo && seq && winnerInfos.some((info) => !info.bizNo && info.rank === seq)) return;
+    if (!bizNo) return;
+    if (winnerInfos.some((info) => info.bizNo === bizNo)) return;
     winnerInfos.push({
       bizNo,
       rank: seq || null,
@@ -464,9 +463,8 @@ const readOrderingSheetDataFromExcelJs = (worksheet) => {
   const appendWinnerInfo = (row, seq) => {
     const bizNo = extractBizNoFromExcelJsRow(worksheet, row);
     const companyName = extractNameFromExcelJsRow(worksheet, row);
-    if (!bizNo && !seq) return;
-    if (bizNo && winnerInfos.some((info) => info.bizNo === bizNo)) return;
-    if (!bizNo && seq && winnerInfos.some((info) => !info.bizNo && info.rank === seq)) return;
+    if (!bizNo) return;
+    if (winnerInfos.some((info) => info.bizNo === bizNo)) return;
     winnerInfos.push({
       bizNo,
       rank: seq || null,
@@ -511,8 +509,6 @@ const readOrderingSequencesFromExcelJs = (worksheet) => {
   }
   return validNumbers;
 };
-
-const normalizeCompanyForMatch = (value) => normalizeName(cleanCompanyName(value || ''));
 
 const downloadBlob = (blob, fileName) => {
   const url = URL.createObjectURL(blob);
@@ -912,16 +908,9 @@ export default function BidResultPage() {
         validNumbers = seqFromExcelJs;
       }
       const styleParsed = readOrderingSheetDataFromExcelJs(orderingSheetByStyle);
-      const buildWinnerKey = (info) => {
-        if (!info) return '';
-        if (info.bizNo) return `biz:${info.bizNo}`;
-        if (info.rank) return `rank:${info.rank}`;
-        const name = String(info.companyName || '').trim();
-        return name ? `name:${name}` : '';
-      };
-      const existing = new Set(winnerInfos.map((info) => buildWinnerKey(info)).filter(Boolean));
+      const existing = new Set(winnerInfos.map((info) => info?.bizNo).filter(Boolean));
       styleParsed.winnerInfos.forEach((info) => {
-        const key = buildWinnerKey(info);
+        const key = info?.bizNo;
         if (!key || existing.has(key)) return;
         winnerInfos.push(info);
         existing.add(key);
@@ -946,45 +935,20 @@ export default function BidResultPage() {
     }
 
     const winnerRows = new Set();
-    const rankToTemplateRow = new Map();
-    const nameToTemplateRow = new Map();
-    for (let row = 14; row <= lastRow; row += 1) {
-      const rank = normalizeSequence(getCellText(sheet.getCell(row, 2)));
-      if (!rank || rankToTemplateRow.has(rank)) continue;
-      rankToTemplateRow.set(rank, row);
-    }
-    for (let row = 14; row <= lastRow; row += 1) {
-      const normalizedName = normalizeCompanyForMatch(getCellText(sheet.getCell(row, 4)));
-      if (!normalizedName || nameToTemplateRow.has(normalizedName)) continue;
-      nameToTemplateRow.set(normalizedName, row);
-    }
     winnerInfos.forEach((info) => {
-      let matchedRow = null;
-      if (info?.bizNo) {
-        for (let row = 14; row <= lastRow; row += 1) {
-          const normalizedBiz = normalizeBizNumber(getCellText(sheet.getCell(row, 3)));
-          if (normalizedBiz && normalizedBiz === info.bizNo) {
-            matchedRow = row;
-            break;
+      if (!info?.bizNo) return;
+      for (let row = 14; row <= lastRow; row += 1) {
+        const normalizedBiz = normalizeBizNumber(getCellText(sheet.getCell(row, 3)));
+        if (normalizedBiz && normalizedBiz === info.bizNo) {
+          winnerRows.add(row);
+          const templateName = getCellText(sheet.getCell(row, 4)).trim();
+          if (templateName) info.companyName = templateName;
+          if (!info.rank) {
+            const templateRank = normalizeSequence(getCellText(sheet.getCell(row, 2)));
+            if (templateRank) info.rank = templateRank;
           }
+          break;
         }
-      }
-      if (!matchedRow && info?.rank) {
-        matchedRow = rankToTemplateRow.get(info.rank) || null;
-      }
-      if (!matchedRow && info?.companyName) {
-        const normalizedWinnerName = normalizeCompanyForMatch(info.companyName);
-        if (normalizedWinnerName) {
-          matchedRow = nameToTemplateRow.get(normalizedWinnerName) || null;
-        }
-      }
-      if (!matchedRow) return;
-      winnerRows.add(matchedRow);
-      const templateName = getCellText(sheet.getCell(matchedRow, 4)).trim();
-      if (templateName) info.companyName = templateName;
-      if (!info.rank) {
-        const templateRank = normalizeSequence(getCellText(sheet.getCell(matchedRow, 2)));
-        if (templateRank) info.rank = templateRank;
       }
     });
 
