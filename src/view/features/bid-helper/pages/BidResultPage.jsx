@@ -399,7 +399,6 @@ const isYellowFill = (fill) => {
 };
 
 const readOrderingSheetDataFromExcelJs = (worksheet) => {
-  const validNumbers = new Set();
   const winnerInfos = [];
   let started = false;
   let emptyStreak = 0;
@@ -420,11 +419,16 @@ const readOrderingSheetDataFromExcelJs = (worksheet) => {
   for (let row = 5; row <= 5000; row += 1) {
     const seqCell = worksheet.getCell(row, 1);
     const seq = normalizeSequence(getCellText(seqCell));
-    if (isYellowFill(seqCell.fill)) {
+    const rowFill = worksheet.getRow(row)?.style?.fill;
+    const isWinnerRow = isYellowFill(seqCell.fill)
+      || isYellowFill(rowFill)
+      || isYellowFill(worksheet.getCell(row, 2).fill)
+      || isYellowFill(worksheet.getCell(row, 3).fill)
+      || isYellowFill(worksheet.getCell(row, 4).fill);
+    if (isWinnerRow) {
       appendWinnerInfo(row, seq);
     }
     if (seq) {
-      validNumbers.add(seq);
       started = true;
       emptyStreak = 0;
     } else if (started) {
@@ -433,7 +437,7 @@ const readOrderingSheetDataFromExcelJs = (worksheet) => {
     }
   }
 
-  return { validNumbers, winnerInfos };
+  return { winnerInfos };
 };
 
 const downloadBlob = (blob, fileName) => {
@@ -807,9 +811,18 @@ export default function BidResultPage() {
     if (!orderingFile) throw new Error('발주처결과 파일을 먼저 선택하세요.');
 
     const orderingBuffer = await orderingFile.arrayBuffer();
+    const orderingWorkbook = XLSX.read(orderingBuffer, { type: 'array', cellStyles: true });
+    const orderingSheetName = (orderingWorkbook.SheetNames || []).find(
+      (name) => name.replace(/\s+/g, '') === '입찰금액점수',
+    );
+    if (!orderingSheetName) throw new Error('발주처결과 파일에서 "입찰금액점수" 시트를 찾을 수 없습니다.');
+    const orderingSheet = orderingWorkbook.Sheets[orderingSheetName];
+    if (!orderingSheet) throw new Error('발주처결과 파일에서 "입찰금액점수" 시트를 찾을 수 없습니다.');
+    const parsedBase = readOrderingSheetData(orderingSheet);
+    let validNumbers = parsedBase.validNumbers;
+    let winnerInfos = Array.isArray(parsedBase.winnerInfos) ? [...parsedBase.winnerInfos] : [];
+
     const lowerName = String(orderingFile?.name || '').toLowerCase();
-    let validNumbers = new Set();
-    let winnerInfos = [];
     if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xlsm')) {
       const orderingBookForStyle = new ExcelJS.Workbook();
       await orderingBookForStyle.xlsx.load(orderingBuffer);
@@ -817,20 +830,13 @@ export default function BidResultPage() {
         (ws) => String(ws?.name || '').replace(/\s+/g, '') === '입찰금액점수',
       );
       if (!orderingSheetByStyle) throw new Error('발주처결과 파일에서 "입찰금액점수" 시트를 찾을 수 없습니다.');
-      const parsed = readOrderingSheetDataFromExcelJs(orderingSheetByStyle);
-      validNumbers = parsed.validNumbers;
-      winnerInfos = parsed.winnerInfos;
-    } else {
-      const orderingWorkbook = XLSX.read(orderingBuffer, { type: 'array', cellStyles: true });
-      const orderingSheetName = (orderingWorkbook.SheetNames || []).find(
-        (name) => name.replace(/\s+/g, '') === '입찰금액점수',
-      );
-      if (!orderingSheetName) throw new Error('발주처결과 파일에서 "입찰금액점수" 시트를 찾을 수 없습니다.');
-      const orderingSheet = orderingWorkbook.Sheets[orderingSheetName];
-      if (!orderingSheet) throw new Error('발주처결과 파일에서 "입찰금액점수" 시트를 찾을 수 없습니다.');
-      const parsed = readOrderingSheetData(orderingSheet);
-      validNumbers = parsed.validNumbers;
-      winnerInfos = parsed.winnerInfos;
+      const styleParsed = readOrderingSheetDataFromExcelJs(orderingSheetByStyle);
+      const existing = new Set(winnerInfos.map((info) => info?.bizNo).filter(Boolean));
+      styleParsed.winnerInfos.forEach((info) => {
+        if (!info?.bizNo || existing.has(info.bizNo)) return;
+        winnerInfos.push(info);
+        existing.add(info.bizNo);
+      });
     }
     if (!validNumbers.size) {
       throw new Error('발주처결과 파일에서 순번을 읽지 못했습니다. 입찰금액점수 시트의 순번(A열) 형식을 확인하세요.');
