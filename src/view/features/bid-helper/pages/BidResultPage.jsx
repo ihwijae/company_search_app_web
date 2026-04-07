@@ -448,7 +448,12 @@ const readOrderingSheetData = (sheet) => {
 const isYellowFill = (fill) => {
   if (!fill || typeof fill !== 'object') return false;
   const rgb = fill?.fgColor?.argb || fill?.fgColor?.rgb || fill?.bgColor?.argb || fill?.bgColor?.rgb || '';
-  return normalizeRgb(rgb) === 'FFFF00';
+  if (normalizeRgb(rgb) === 'FFFF00') return true;
+  const fgIndexed = Number(fill?.fgColor?.indexed);
+  const bgIndexed = Number(fill?.bgColor?.indexed);
+  if (fgIndexed === 6 || fgIndexed === 13) return true;
+  if (bgIndexed === 6 || bgIndexed === 13) return true;
+  return false;
 };
 
 const readOrderingSheetDataFromExcelJs = (worksheet) => {
@@ -472,7 +477,8 @@ const readOrderingSheetDataFromExcelJs = (worksheet) => {
 
   for (let row = 5; row <= 5000; row += 1) {
     const seqCell = worksheet.getCell(row, 1);
-    const seq = normalizeSequence(getCellText(seqCell));
+    const seqCellB = worksheet.getCell(row, 2);
+    const seq = normalizeSequence(getCellText(seqCell)) || normalizeSequence(getCellText(seqCellB));
     const rowFill = worksheet.getRow(row)?.style?.fill;
     const isWinnerRow = isYellowFill(seqCell.fill)
       || isYellowFill(rowFill)
@@ -505,6 +511,8 @@ const readOrderingSequencesFromExcelJs = (worksheet) => {
   }
   return validNumbers;
 };
+
+const normalizeCompanyForMatch = (value) => normalizeName(cleanCompanyName(value || ''));
 
 const downloadBlob = (blob, fileName) => {
   const url = URL.createObjectURL(blob);
@@ -939,10 +947,16 @@ export default function BidResultPage() {
 
     const winnerRows = new Set();
     const rankToTemplateRow = new Map();
+    const nameToTemplateRow = new Map();
     for (let row = 14; row <= lastRow; row += 1) {
       const rank = normalizeSequence(getCellText(sheet.getCell(row, 2)));
       if (!rank || rankToTemplateRow.has(rank)) continue;
       rankToTemplateRow.set(rank, row);
+    }
+    for (let row = 14; row <= lastRow; row += 1) {
+      const normalizedName = normalizeCompanyForMatch(getCellText(sheet.getCell(row, 4)));
+      if (!normalizedName || nameToTemplateRow.has(normalizedName)) continue;
+      nameToTemplateRow.set(normalizedName, row);
     }
     winnerInfos.forEach((info) => {
       let matchedRow = null;
@@ -957,6 +971,12 @@ export default function BidResultPage() {
       }
       if (!matchedRow && info?.rank) {
         matchedRow = rankToTemplateRow.get(info.rank) || null;
+      }
+      if (!matchedRow && info?.companyName) {
+        const normalizedWinnerName = normalizeCompanyForMatch(info.companyName);
+        if (normalizedWinnerName) {
+          matchedRow = nameToTemplateRow.get(normalizedWinnerName) || null;
+        }
       }
       if (!matchedRow) return;
       winnerRows.add(matchedRow);
