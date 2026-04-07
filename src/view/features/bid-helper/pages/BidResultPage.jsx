@@ -385,24 +385,6 @@ const extractNameFromXlsxRow = (sheet, row) => {
   return '';
 };
 
-const extractBizNoFromExcelJsRow = (worksheet, row) => {
-  const candidateCols = [3, 4, 5, 2, 6]; // C, D, E, B, F
-  for (const col of candidateCols) {
-    const bizNo = normalizeBizNumber(getCellText(worksheet.getCell(row, col)));
-    if (bizNo.length === 10) return bizNo;
-  }
-  return '';
-};
-
-const extractNameFromExcelJsRow = (worksheet, row) => {
-  const candidateCols = [4, 5, 6, 3]; // D, E, F, C
-  for (const col of candidateCols) {
-    const name = getCellText(worksheet.getCell(row, col)).trim();
-    if (name) return name;
-  }
-  return '';
-};
-
 const readOrderingSheetData = (sheet) => {
   const validNumbers = new Set();
   const winnerInfos = [];
@@ -455,49 +437,6 @@ const isYellowFill = (fill) => {
   return false;
 };
 
-const readOrderingSheetDataFromExcelJs = (worksheet) => {
-  const winnerInfos = [];
-  let started = false;
-  let emptyStreak = 0;
-
-  const appendWinnerInfo = (row, seq) => {
-    const bizNo = extractBizNoFromExcelJsRow(worksheet, row);
-    const companyName = extractNameFromExcelJsRow(worksheet, row);
-    if (!bizNo) return;
-    if (winnerInfos.some((info) => info.bizNo === bizNo)) return;
-    winnerInfos.push({
-      bizNo,
-      rank: seq || null,
-      companyName,
-      sourceRow: row,
-    });
-  };
-
-  for (let row = 5; row <= 5000; row += 1) {
-    const seqCell = worksheet.getCell(row, 1);
-    const seqCellB = worksheet.getCell(row, 2);
-    const seq = normalizeSequence(getCellText(seqCell)) || normalizeSequence(getCellText(seqCellB));
-    const rowFill = worksheet.getRow(row)?.style?.fill;
-    const isWinnerRow = isYellowFill(seqCell.fill)
-      || isYellowFill(rowFill)
-      || isYellowFill(worksheet.getCell(row, 2).fill)
-      || isYellowFill(worksheet.getCell(row, 3).fill)
-      || isYellowFill(worksheet.getCell(row, 4).fill);
-    if (isWinnerRow) {
-      appendWinnerInfo(row, seq);
-    }
-    if (seq) {
-      started = true;
-      emptyStreak = 0;
-    } else if (started) {
-      emptyStreak += 1;
-      if (emptyStreak >= 3) break;
-    }
-  }
-
-  return { winnerInfos };
-};
-
 const readOrderingSequencesFromExcelJs = (worksheet) => {
   const validNumbers = new Set();
   const maxRow = Math.max(worksheet?.rowCount || 0, 5);
@@ -508,6 +447,36 @@ const readOrderingSequencesFromExcelJs = (worksheet) => {
     if (seq) validNumbers.add(seq);
   }
   return validNumbers;
+};
+
+const rowHasYellowFill = (worksheet, row, maxCol = 32) => {
+  if (!worksheet) return false;
+  const rowStyleFill = worksheet.getRow(row)?.style?.fill;
+  if (isYellowFill(rowStyleFill)) return true;
+  for (let col = 1; col <= maxCol; col += 1) {
+    if (isYellowFill(worksheet.getCell(row, col).fill)) return true;
+  }
+  return false;
+};
+
+const readWinnerInfosByYellowRowExcelJs = (worksheet) => {
+  const winnerInfos = [];
+  const maxRow = Math.max(worksheet?.rowCount || 0, 5);
+  for (let row = 5; row <= maxRow; row += 1) {
+    if (!rowHasYellowFill(worksheet, row)) continue;
+    const bizNo = normalizeBizNumber(getCellText(worksheet.getCell(row, 3))); // C열 고정
+    if (!bizNo) continue;
+    if (winnerInfos.some((info) => info.bizNo === bizNo)) continue;
+    const rank = normalizeSequence(getCellText(worksheet.getCell(row, 1)));
+    const companyName = getCellText(worksheet.getCell(row, 4)).trim(); // D열
+    winnerInfos.push({
+      bizNo,
+      rank: rank || null,
+      companyName,
+      sourceRow: row,
+    });
+  }
+  return winnerInfos;
 };
 
 const downloadBlob = (blob, fileName) => {
@@ -907,9 +876,9 @@ export default function BidResultPage() {
       if (seqFromExcelJs.size > validNumbers.size) {
         validNumbers = seqFromExcelJs;
       }
-      const styleParsed = readOrderingSheetDataFromExcelJs(orderingSheetByStyle);
+      const yellowRowWinners = readWinnerInfosByYellowRowExcelJs(orderingSheetByStyle);
       const existing = new Set(winnerInfos.map((info) => info?.bizNo).filter(Boolean));
-      styleParsed.winnerInfos.forEach((info) => {
+      yellowRowWinners.forEach((info) => {
         const key = info?.bizNo;
         if (!key || existing.has(key)) return;
         winnerInfos.push(info);
