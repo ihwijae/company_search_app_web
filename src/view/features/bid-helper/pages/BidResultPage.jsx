@@ -229,6 +229,21 @@ const setFontSize = (cell, size) => {
   }
 };
 
+const cloneCellStyle = (cell) => {
+  const current = cell?.style;
+  if (!current || typeof current !== 'object') return {};
+  return { ...current };
+};
+
+const applyCellFillStyle = (cell, fill) => {
+  if (!cell) return;
+  const baseStyle = cloneCellStyle(cell);
+  cell.style = {
+    ...baseStyle,
+    fill: { ...(fill || { type: 'pattern', pattern: 'none' }) },
+  };
+};
+
 const findLastDataRow = (worksheet) => {
   const maxRow = Math.max(worksheet.rowCount, 14);
   let lastRow = 0;
@@ -438,6 +453,18 @@ const readOrderingSheetDataFromExcelJs = (worksheet) => {
   }
 
   return { winnerInfos };
+};
+
+const readOrderingSequencesFromExcelJs = (worksheet) => {
+  const validNumbers = new Set();
+  const maxRow = Math.max(worksheet?.rowCount || 0, 5);
+  for (let row = 5; row <= maxRow; row += 1) {
+    const seqA = normalizeSequence(getCellText(worksheet.getCell(row, 1)));
+    const seqB = normalizeSequence(getCellText(worksheet.getCell(row, 2)));
+    const seq = seqA || seqB;
+    if (seq) validNumbers.add(seq);
+  }
+  return validNumbers;
 };
 
 const downloadBlob = (blob, fileName) => {
@@ -718,7 +745,7 @@ export default function BidResultPage() {
       sheet.getCell(row, 2).value = null;
       sheet.getCell(row, 3).value = null;
       sheet.getCell(row, 7).value = null;
-      sheet.getCell(row, 2).fill = { type: 'pattern', pattern: 'none' };
+      applyCellFillStyle(sheet.getCell(row, 2), { type: 'pattern', pattern: 'none' });
     }
 
     const noticeNo = header.noticeNo ? String(header.noticeNo).trim() : '';
@@ -738,7 +765,7 @@ export default function BidResultPage() {
       sheet.getCell(row, 3).value = entry.name;
       if (entry.isQuality) {
         sheet.getCell(row, 7).value = '품질만점';
-        sheet.getCell(row, 2).fill = QUALITY_FILL;
+        applyCellFillStyle(sheet.getCell(row, 2), QUALITY_FILL);
       } else if (entry.isTie) {
         sheet.getCell(row, 7).value = '동가주의';
       }
@@ -799,7 +826,10 @@ export default function BidResultPage() {
     }
 
     matchedRows.forEach((row) => {
-      sheet.getCell(row, 2).fill = specialRows.has(row) ? AGREEMENT_SPECIAL_FILL : AGREEMENT_DEFAULT_FILL;
+      applyCellFillStyle(
+        sheet.getCell(row, 2),
+        specialRows.has(row) ? AGREEMENT_SPECIAL_FILL : AGREEMENT_DEFAULT_FILL,
+      );
     });
 
     const output = await workbook.xlsx.writeBuffer();
@@ -830,6 +860,10 @@ export default function BidResultPage() {
         (ws) => String(ws?.name || '').replace(/\s+/g, '') === '입찰금액점수',
       );
       if (!orderingSheetByStyle) throw new Error('발주처결과 파일에서 "입찰금액점수" 시트를 찾을 수 없습니다.');
+      const seqFromExcelJs = readOrderingSequencesFromExcelJs(orderingSheetByStyle);
+      if (seqFromExcelJs.size > validNumbers.size) {
+        validNumbers = seqFromExcelJs;
+      }
       const styleParsed = readOrderingSheetDataFromExcelJs(orderingSheetByStyle);
       const existing = new Set(winnerInfos.map((info) => info?.bizNo).filter(Boolean));
       styleParsed.winnerInfos.forEach((info) => {
@@ -878,7 +912,7 @@ export default function BidResultPage() {
       sheet.getCell(row, 15).value = null;
     }
     invalidRows.forEach((row) => {
-      sheet.getCell(row, 2).fill = ORDERING_INVALID_FILL;
+      applyCellFillStyle(sheet.getCell(row, 2), ORDERING_INVALID_FILL);
     });
     winnerRows.forEach((row) => {
       sheet.getCell(row, 15).value = 'Y';
@@ -886,7 +920,6 @@ export default function BidResultPage() {
 
     const b4 = sheet.getCell('B4');
     b4.value = `무효 ${invalidRows.size}건`;
-    b4.font = { ...(b4.font || {}), bold: true, color: { argb: 'FFFF0000' } };
 
     const winnerParts = winnerInfos
       .filter((info) => info?.rank && info?.companyName)
