@@ -260,15 +260,92 @@ const sanitizeDownloadName = (value, fallback = 'output.xlsx') => {
   return cleaned || fallback;
 };
 
+const columnToNumber = (letters = '') => {
+  let num = 0;
+  for (let i = 0; i < letters.length; i += 1) {
+    const code = letters.toUpperCase().charCodeAt(i) - 64;
+    if (code < 1 || code > 26) continue;
+    num = num * 26 + code;
+  }
+  return num;
+};
+
+const parseCellRef = (ref = '') => {
+  const match = /^([A-Z]+)(\d+)$/i.exec(ref.trim());
+  if (!match) return null;
+  return { col: columnToNumber(match[1]), row: Number(match[2]) };
+};
+
+const parseColumnOnly = (ref = '') => {
+  const match = /^([A-Z]+)$/i.exec(ref.trim());
+  if (!match) return null;
+  return { col: columnToNumber(match[1]) };
+};
+
+const parseRange = (ref = '') => {
+  const cleaned = ref.replace(/\$/g, '').trim();
+  if (!cleaned) return null;
+  if (!cleaned.includes(':')) {
+    const cell = parseCellRef(cleaned);
+    if (cell) return { start: cell, end: cell };
+    const colOnly = parseColumnOnly(cleaned);
+    if (colOnly) return { start: { col: colOnly.col, row: 1 }, end: { col: colOnly.col, row: 1048576 } };
+    return null;
+  }
+  const [startRef, endRef] = cleaned.split(':');
+  const startCell = parseCellRef(startRef);
+  const endCell = parseCellRef(endRef);
+  if (startCell && endCell) {
+    return {
+      start: { col: Math.min(startCell.col, endCell.col), row: Math.min(startCell.row, endCell.row) },
+      end: { col: Math.max(startCell.col, endCell.col), row: Math.max(startCell.row, endCell.row) },
+    };
+  }
+  const startCol = parseColumnOnly(startRef);
+  const endCol = parseColumnOnly(endRef);
+  if (startCol && endCol) {
+    return {
+      start: { col: Math.min(startCol.col, endCol.col), row: 1 },
+      end: { col: Math.max(startCol.col, endCol.col), row: 1048576 },
+    };
+  }
+  return null;
+};
+
+const touchesB14 = (ref = '') => {
+  const tokens = ref.split(/\s+/).filter(Boolean);
+  const targetCol = 2; // B
+  for (const token of tokens) {
+    const range = parseRange(token);
+    if (!range) continue;
+    if (range.end.col < targetCol || range.start.col > targetCol) continue;
+    if (range.end.row < 14) continue;
+    return true;
+  }
+  return false;
+};
+
+const removeConditionalFormatting = (worksheet) => {
+  const list = Array.isArray(worksheet.conditionalFormattings)
+    ? worksheet.conditionalFormattings
+    : Array.isArray(worksheet.model?.conditionalFormattings)
+      ? worksheet.model.conditionalFormattings
+      : [];
+  const filtered = list.filter((rule) => !touchesB14(rule?.ref || ''));
+  worksheet.conditionalFormattings = filtered;
+  if (worksheet.model) {
+    worksheet.model.conditionalFormattings = filtered;
+  }
+};
+
 const normalizeRgb = (rgb) => String(rgb || '').replace(/^FF/i, '').toUpperCase();
 
 const isOrderingWinnerCell = (cell) => {
   if (!cell) return false;
   const style = cell.s;
   if (!style || typeof style !== 'object') return false;
-  const bold = Boolean(style.font?.bold || style.font?.b);
-  const fillRgb = style.fill?.fgColor?.rgb || style.fgColor?.rgb || '';
-  return bold && normalizeRgb(fillRgb) === 'FFFF00';
+  const fillRgb = style.fill?.fgColor?.rgb || style.fill?.fgColor?.argb || style.fgColor?.rgb || style.fgColor?.argb || '';
+  return normalizeRgb(fillRgb) === 'FFFF00';
 };
 
 const readOrderingSheetData = (sheet) => {
@@ -647,6 +724,7 @@ export default function BidResultPage() {
     await workbook.xlsx.load(buffer);
     const sheet = workbook.worksheets[0];
     if (!sheet) throw new Error('개찰결과 파일 시트를 찾을 수 없습니다.');
+    removeConditionalFormatting(sheet);
 
     const entryMap = new Map();
     entries.forEach((entry) => {
@@ -672,9 +750,6 @@ export default function BidResultPage() {
       if (entryMap.get(normalizedBiz)) specialRows.add(row);
     }
 
-    for (let row = 14; row <= lastRow; row += 1) {
-      sheet.getCell(row, 2).fill = { type: 'pattern', pattern: 'none' };
-    }
     matchedRows.forEach((row) => {
       sheet.getCell(row, 2).fill = specialRows.has(row) ? AGREEMENT_SPECIAL_FILL : AGREEMENT_DEFAULT_FILL;
     });
@@ -731,7 +806,6 @@ export default function BidResultPage() {
     });
 
     for (let row = 14; row <= lastRow; row += 1) {
-      sheet.getCell(row, 2).fill = { type: 'pattern', pattern: 'none' };
       sheet.getCell(row, 15).value = null;
     }
     invalidRows.forEach((row) => {
