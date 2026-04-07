@@ -363,6 +363,46 @@ const isOrderingWinnerCell = (cell) => {
   return normalizeRgb(fillRgb) === 'FFFF00';
 };
 
+const extractBizNoFromXlsxRow = (sheet, row) => {
+  const candidateCols = [2, 3, 4, 1, 5]; // C, D, E, B, F
+  for (const col of candidateCols) {
+    const cell = sheet[XLSX.utils.encode_cell({ r: row - 1, c: col })];
+    const raw = cell ? XLSX.utils.format_cell(cell) : '';
+    const bizNo = normalizeBizNumber(raw);
+    if (bizNo.length === 10) return bizNo;
+  }
+  return '';
+};
+
+const extractNameFromXlsxRow = (sheet, row) => {
+  const candidateCols = [3, 4, 5, 2]; // D, E, F, C
+  for (const col of candidateCols) {
+    const cell = sheet[XLSX.utils.encode_cell({ r: row - 1, c: col })];
+    const raw = cell ? XLSX.utils.format_cell(cell) : '';
+    const name = String(raw || '').trim();
+    if (name) return name;
+  }
+  return '';
+};
+
+const extractBizNoFromExcelJsRow = (worksheet, row) => {
+  const candidateCols = [3, 4, 5, 2, 6]; // C, D, E, B, F
+  for (const col of candidateCols) {
+    const bizNo = normalizeBizNumber(getCellText(worksheet.getCell(row, col)));
+    if (bizNo.length === 10) return bizNo;
+  }
+  return '';
+};
+
+const extractNameFromExcelJsRow = (worksheet, row) => {
+  const candidateCols = [4, 5, 6, 3]; // D, E, F, C
+  for (const col of candidateCols) {
+    const name = getCellText(worksheet.getCell(row, col)).trim();
+    if (name) return name;
+  }
+  return '';
+};
+
 const readOrderingSheetData = (sheet) => {
   const validNumbers = new Set();
   const winnerInfos = [];
@@ -370,17 +410,15 @@ const readOrderingSheetData = (sheet) => {
   let emptyStreak = 0;
 
   const appendWinnerInfo = (row, seq) => {
-    const bizCell = sheet[XLSX.utils.encode_cell({ r: row - 1, c: 2 })];
-    const nameCell = sheet[XLSX.utils.encode_cell({ r: row - 1, c: 3 })];
-    const bizRaw = bizCell ? XLSX.utils.format_cell(bizCell) : '';
-    const nameRaw = nameCell ? XLSX.utils.format_cell(nameCell) : '';
-    const bizNo = normalizeBizNumber(bizRaw);
-    if (!bizNo) return;
-    if (winnerInfos.some((info) => info.bizNo === bizNo)) return;
+    const bizNo = extractBizNoFromXlsxRow(sheet, row);
+    const companyName = extractNameFromXlsxRow(sheet, row);
+    if (!bizNo && !seq) return;
+    if (bizNo && winnerInfos.some((info) => info.bizNo === bizNo)) return;
+    if (!bizNo && seq && winnerInfos.some((info) => !info.bizNo && info.rank === seq)) return;
     winnerInfos.push({
       bizNo,
       rank: seq || null,
-      companyName: String(nameRaw || '').trim(),
+      companyName,
       sourceRow: row,
     });
   };
@@ -419,10 +457,11 @@ const readOrderingSheetDataFromExcelJs = (worksheet) => {
   let emptyStreak = 0;
 
   const appendWinnerInfo = (row, seq) => {
-    const bizNo = normalizeBizNumber(getCellText(worksheet.getCell(row, 3)));
-    const companyName = getCellText(worksheet.getCell(row, 4)).trim();
-    if (!bizNo) return;
-    if (winnerInfos.some((info) => info.bizNo === bizNo)) return;
+    const bizNo = extractBizNoFromExcelJsRow(worksheet, row);
+    const companyName = extractNameFromExcelJsRow(worksheet, row);
+    if (!bizNo && !seq) return;
+    if (bizNo && winnerInfos.some((info) => info.bizNo === bizNo)) return;
+    if (!bizNo && seq && winnerInfos.some((info) => !info.bizNo && info.rank === seq)) return;
     winnerInfos.push({
       bizNo,
       rank: seq || null,
@@ -865,11 +904,19 @@ export default function BidResultPage() {
         validNumbers = seqFromExcelJs;
       }
       const styleParsed = readOrderingSheetDataFromExcelJs(orderingSheetByStyle);
-      const existing = new Set(winnerInfos.map((info) => info?.bizNo).filter(Boolean));
+      const buildWinnerKey = (info) => {
+        if (!info) return '';
+        if (info.bizNo) return `biz:${info.bizNo}`;
+        if (info.rank) return `rank:${info.rank}`;
+        const name = String(info.companyName || '').trim();
+        return name ? `name:${name}` : '';
+      };
+      const existing = new Set(winnerInfos.map((info) => buildWinnerKey(info)).filter(Boolean));
       styleParsed.winnerInfos.forEach((info) => {
-        if (!info?.bizNo || existing.has(info.bizNo)) return;
+        const key = buildWinnerKey(info);
+        if (!key || existing.has(key)) return;
         winnerInfos.push(info);
-        existing.add(info.bizNo);
+        existing.add(key);
       });
     }
     if (!validNumbers.size) {
@@ -890,21 +937,34 @@ export default function BidResultPage() {
       if (!validNumbers.has(seq)) invalidRows.add(row);
     }
 
-    const winnerRows = new Map();
+    const winnerRows = new Set();
+    const rankToTemplateRow = new Map();
+    for (let row = 14; row <= lastRow; row += 1) {
+      const rank = normalizeSequence(getCellText(sheet.getCell(row, 2)));
+      if (!rank || rankToTemplateRow.has(rank)) continue;
+      rankToTemplateRow.set(rank, row);
+    }
     winnerInfos.forEach((info) => {
-      if (!info?.bizNo) return;
-      for (let row = 14; row <= lastRow; row += 1) {
-        const normalizedBiz = normalizeBizNumber(getCellText(sheet.getCell(row, 3)));
-        if (normalizedBiz && normalizedBiz === info.bizNo) {
-          winnerRows.set(info.bizNo, row);
-          const templateName = getCellText(sheet.getCell(row, 4)).trim();
-          if (templateName) info.companyName = templateName;
-          if (!info.rank) {
-            const templateRank = normalizeSequence(getCellText(sheet.getCell(row, 2)));
-            if (templateRank) info.rank = templateRank;
+      let matchedRow = null;
+      if (info?.bizNo) {
+        for (let row = 14; row <= lastRow; row += 1) {
+          const normalizedBiz = normalizeBizNumber(getCellText(sheet.getCell(row, 3)));
+          if (normalizedBiz && normalizedBiz === info.bizNo) {
+            matchedRow = row;
+            break;
           }
-          break;
         }
+      }
+      if (!matchedRow && info?.rank) {
+        matchedRow = rankToTemplateRow.get(info.rank) || null;
+      }
+      if (!matchedRow) return;
+      winnerRows.add(matchedRow);
+      const templateName = getCellText(sheet.getCell(matchedRow, 4)).trim();
+      if (templateName) info.companyName = templateName;
+      if (!info.rank) {
+        const templateRank = normalizeSequence(getCellText(sheet.getCell(matchedRow, 2)));
+        if (templateRank) info.rank = templateRank;
       }
     });
 
