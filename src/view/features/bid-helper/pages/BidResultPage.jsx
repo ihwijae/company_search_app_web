@@ -379,6 +379,21 @@ const rowHasYellowInXlsxSheet = (sheet, row, maxCol = 32) => {
   return false;
 };
 
+const isWinnerMarkerY = (value) => String(value || '').trim().toUpperCase() === 'Y';
+
+const rowHasWinnerMarkerInK = (sheet, row) => {
+  const kCell = sheet[XLSX.utils.encode_cell({ r: row - 1, c: 10 })]; // K열
+  const raw = kCell ? XLSX.utils.format_cell(kCell) : '';
+  return isWinnerMarkerY(raw);
+};
+
+const hasAnyWinnerMarkerInK = (sheet, startRow = 5, endRow = 5000) => {
+  for (let row = startRow; row <= endRow; row += 1) {
+    if (rowHasWinnerMarkerInK(sheet, row)) return true;
+  }
+  return false;
+};
+
 
 const extractBizNoFromXlsxRow = (sheet, row) => {
   const candidateCols = [2, 3, 4, 1, 5]; // C, D, E, B, F
@@ -407,6 +422,7 @@ const readOrderingSheetData = (sheet) => {
   const winnerInfos = [];
   let started = false;
   let emptyStreak = 0;
+  const useKMarker = hasAnyWinnerMarkerInK(sheet);
 
   const appendWinnerInfo = (row, seq) => {
     const bizNo = extractBizNoFromXlsxRow(sheet, row);
@@ -426,7 +442,10 @@ const readOrderingSheetData = (sheet) => {
     const seqRaw = seqCell ? XLSX.utils.format_cell(seqCell) : '';
     const seq = normalizeSequence(seqRaw);
 
-    if (rowHasYellowInXlsxSheet(sheet, row)) {
+    const isWinnerRow = useKMarker
+      ? rowHasWinnerMarkerInK(sheet, row)
+      : rowHasYellowInXlsxSheet(sheet, row);
+    if (isWinnerRow) {
       appendWinnerInfo(row, seq);
     }
 
@@ -440,7 +459,31 @@ const readOrderingSheetData = (sheet) => {
     }
   }
 
-  return { validNumbers, winnerInfos };
+  return { validNumbers, winnerInfos, winnerSource: useKMarker ? 'k-marker' : 'yellow-fill' };
+};
+
+const collectOrderingStyleSamples = (sheet, maxRows = 200, maxCols = 12, maxSamples = 30) => {
+  const samples = [];
+  let yellowLikeCount = 0;
+  for (let row = 5; row <= maxRows; row += 1) {
+    for (let col = 0; col < maxCols; col += 1) {
+      const addr = XLSX.utils.encode_cell({ r: row - 1, c: col });
+      const cell = sheet[addr];
+      if (!cell) continue;
+      if (isOrderingWinnerCell(cell)) {
+        yellowLikeCount += 1;
+      }
+      if (!cell.s) continue;
+      if (samples.length >= maxSamples) continue;
+      samples.push({
+        addr,
+        v: cell.v,
+        t: cell.t,
+        s: cell.s,
+      });
+    }
+  }
+  return { samples, yellowLikeCount };
 };
 
 const isYellowFill = (fill) => {
@@ -627,7 +670,7 @@ const ORDERING_INVALID_FILL = {
 };
 
 export default function BidResultPage() {
-  const { notify } = useFeedback();
+  const { notify, confirm } = useFeedback();
   const [ownerId, setOwnerId] = React.useState('');
   const [fileType, setFileType] = React.useState('');
   const [bidAmountOwnerId, setBidAmountOwnerId] = React.useState('');
@@ -978,10 +1021,18 @@ export default function BidResultPage() {
     const parsedBase = readOrderingSheetData(orderingSheet);
     let validNumbers = parsedBase.validNumbers;
     let winnerInfos = Array.isArray(parsedBase.winnerInfos) ? [...parsedBase.winnerInfos] : [];
-    console.log('[bid-result:web] ordering parsed(xlsx) validNumbers:', validNumbers.size, 'winners:', winnerInfos.length);
+    console.log(
+      '[bid-result:web] ordering parsed(xlsx) validNumbers:',
+      validNumbers.size,
+      'winners:',
+      winnerInfos.length,
+      'winnerSource:',
+      parsedBase?.winnerSource || 'unknown',
+    );
 
     const lowerName = String(orderingFile?.name || '').toLowerCase();
-    if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xlsm')) {
+    console.log('[bid-result:web] ordering file name/ext:', orderingFile?.name, lowerName);
+    if ((lowerName.endsWith('.xlsx') || lowerName.endsWith('.xlsm')) && parsedBase?.winnerSource !== 'k-marker') {
       const orderingBookForStyle = new ExcelJS.Workbook();
       await orderingBookForStyle.xlsx.load(orderingBuffer);
       const orderingSheetByStyle = orderingBookForStyle.worksheets.find(
@@ -1009,6 +1060,15 @@ export default function BidResultPage() {
         winnerInfos.push(info);
         existing.add(key);
       });
+    }
+    if (winnerInfos.length === 0) {
+      const styleDebug = collectOrderingStyleSamples(orderingSheet);
+      console.log(
+        '[bid-result:web] no winners from parser. yellowLikeCount:',
+        styleDebug.yellowLikeCount,
+        'style samples:',
+        styleDebug.samples,
+      );
     }
     console.log(
       '[bid-result:web] merged winners:',
@@ -1808,6 +1868,13 @@ export default function BidResultPage() {
       notify({ type: 'info', message: '개찰결과파일을 먼저 선택하세요.' });
       return;
     }
+    const confirmed = await confirm({
+      title: '발주처 결과 확인',
+      message: '발주처 결과 파일에 실제낙찰사를 표시 하였습니까?',
+      confirmText: '예',
+      cancelText: '아니오',
+    });
+    if (!confirmed) return;
     setIsOrderingProcessing(true);
     try {
       const response = await applyOrderingInBrowser({
