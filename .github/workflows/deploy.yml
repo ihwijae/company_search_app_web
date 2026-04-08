@@ -1,15 +1,17 @@
-  set -euo pipefail
+  name: Deploy
 
-  APP_DIR="/home/ihwijae/projects/company_search_app_web"
-  PM2_NAME="company-search"
+  on:
+    push:
+      branches: [main]
+    workflow_dispatch:
 
-  cd "$APP_DIR"
+  concurrency:
+    group: prod-deploy
+    cancel-in-progress: true
 
-  git checkout main
-  git pull --ff-only origin main
-
-  npm ci
-  npm run build
-
-  pm2 restart "$PM2_NAME" --update-env
-  pm2 save
+  jobs:
+    deploy:
+      runs-on: [self-hosted, linux]
+      steps:
+        - name: Run deploy script on server
+          run: /home/ihwijae/projects/company_search_app_web/scripts/deploy-prod.sh
