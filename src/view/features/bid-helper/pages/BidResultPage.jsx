@@ -559,6 +559,34 @@ const extractOrderingStyleContextFromXml = async (buffer, sheetName) => {
   return { styleMap, winnerRows };
 };
 
+const buildActualWinnerLinePrefix = (k3Text = '') => {
+  const source = String(k3Text || '').trim();
+  if (!source) return '실제낙찰사:';
+  const replaced = source
+    .replace(/예상\s*낙찰사/gi, '실제낙찰사')
+    .replace(/예상낙찰사/gi, '실제낙찰사');
+  const colonIdx = replaced.indexOf(':');
+  if (colonIdx >= 0) return replaced.slice(0, colonIdx + 1).trim();
+  if (replaced.includes('실제낙찰사')) return `${replaced}:`;
+  return '실제낙찰사:';
+};
+
+const buildActualWinnerSummaryText = (winnerList = []) => {
+  const normalized = (Array.isArray(winnerList) ? winnerList : [])
+    .filter((info) => info && typeof info === 'object');
+  if (!normalized.length) return '';
+  const sorted = normalized
+    .slice()
+    .sort((a, b) => (Number(a?.templateRow) || Number.MAX_SAFE_INTEGER) - (Number(b?.templateRow) || Number.MAX_SAFE_INTEGER));
+  const first = sorted[0] || {};
+  const rankText = first?.rank ? `${first.rank}순위 ` : '';
+  const nameText = String(first?.companyName || first?.bizNo || '').trim();
+  if (!nameText) return '';
+  const extraCount = sorted.length - 1;
+  const tail = extraCount > 0 ? ` 외 ${extraCount}개사` : '';
+  return `균형근접 ${rankText}${nameText}${tail}`.replace(/\s+/g, ' ').trim();
+};
+
 const downloadBlob = (blob, fileName) => {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -943,7 +971,7 @@ export default function BidResultPage() {
     const lowerName = String(orderingFile?.name || '').toLowerCase();
     let styleMap = null;
     let winnerRowsFromXml = [];
-    if (lowerName.endsWith('.xlsx')) {
+    if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xlsm')) {
       try {
         const styleContext = await extractOrderingStyleContextFromXml(orderingBuffer, orderingSheetName);
         styleMap = styleContext?.styleMap || null;
@@ -1001,6 +1029,7 @@ export default function BidResultPage() {
     }
 
     const winnerRows = new Set();
+    const matchedWinnerInfos = [];
     const unmatchedWinnerBizNos = [];
     winnerInfos.forEach((info) => {
       if (!info?.bizNo) return;
@@ -1016,6 +1045,7 @@ export default function BidResultPage() {
             const templateRank = normalizeSequence(getCellText(sheet.getCell(row, 2)));
             if (templateRank) info.rank = templateRank;
           }
+          matchedWinnerInfos.push({ ...info, templateRow: row });
           break;
         }
       }
@@ -1042,11 +1072,13 @@ export default function BidResultPage() {
     const b4 = sheet.getCell('B4');
     b4.value = `무효 ${invalidRows.size}건`;
 
-    const winnerParts = winnerInfos
-      .filter((info) => info?.rank && info?.companyName)
-      .map((info) => `${info.rank}순위 ${info.companyName}`);
-    if (winnerParts.length > 0) {
-      sheet.getCell('K4').value = `실제낙찰사: 균형근접 ${winnerParts.join(', ')}`;
+    const k3Text = getCellText(sheet.getCell('K3'));
+    const k4Prefix = buildActualWinnerLinePrefix(k3Text);
+    const actualWinnerSummary = buildActualWinnerSummaryText(matchedWinnerInfos);
+    if (actualWinnerSummary) {
+      sheet.getCell('K4').value = `${k4Prefix} ${actualWinnerSummary}`.replace(/\s+/g, ' ').trim();
+    } else if (k3Text) {
+      sheet.getCell('K4').value = buildActualWinnerLinePrefix(k3Text);
     }
 
     const output = await workbook.xlsx.writeBuffer();
@@ -1774,6 +1806,18 @@ export default function BidResultPage() {
       notify({ type: 'info', message: '개찰결과파일을 먼저 선택하세요.' });
       return;
     }
+    const orderingFileName = String(orderingResultFile?.name || orderingResultFile?.path || '').trim();
+    const isLegacyXls = /\.xls$/i.test(orderingFileName) && !/\.xlsx$/i.test(orderingFileName);
+    if (isLegacyXls) {
+      const proceedWithXls = await confirm({
+        title: '발주처결과 파일 형식 안내',
+        message: '현재 업로드한 파일은 무효표 체크만 가능합니다. 실제낙찰사 표시를 하려면 xlsx 파일을 업로드하세요. 그래도 진행하시겠습니까?',
+        confirmText: '예',
+        cancelText: '아니오',
+        tone: 'warning',
+      });
+      if (!proceedWithXls) return;
+    }
     const confirmed = await confirm({
       title: '발주처 결과 확인',
       message: '발주처 결과 파일에 실제낙찰사를 표시 하였습니까?',
@@ -1792,11 +1836,9 @@ export default function BidResultPage() {
       const summary = invalidCount !== null ? ` (무효 ${invalidCount}건)` : '';
       const winnerInfo = response?.winnerInfo;
       const winnerList = Array.isArray(winnerInfo) ? winnerInfo : (winnerInfo ? [winnerInfo] : []);
-      const winnerParts = winnerList
-        .filter((info) => info?.rank && info?.companyName)
-        .map((info) => `${info.rank}순위 ${info.companyName}`);
-      const winnerSummary = winnerParts.length > 0
-        ? ` 실제낙찰사: 균형근접 ${winnerParts.join(', ')}`
+      const winnerSummaryText = buildActualWinnerSummaryText(winnerList);
+      const winnerSummary = winnerSummaryText
+        ? ` 실제낙찰사: ${winnerSummaryText}`
         : '';
       notify({ type: 'success', message: `발주처결과 처리 완료: 무효 업체가 표시되었습니다.${summary}${winnerSummary}` });
     } catch (err) {
