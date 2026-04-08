@@ -356,42 +356,29 @@ const removeConditionalFormatting = (worksheet) => {
 
 const normalizeRgb = (rgb) => String(rgb || '').replace(/^FF/i, '').toUpperCase();
 
-const isOrderingWinnerCell = (cell) => {
+const isYellowStyleId = (styleId, styleMap) => {
+  if (styleId === null || styleId === undefined || !styleMap) return false;
+  const xf = styleMap.xfStyles?.[styleId];
+  if (!xf) return false;
+  const fillRgb = xf.fillId !== null ? styleMap.fillColors?.[xf.fillId] || '' : '';
+  return normalizeRgb(fillRgb) === 'FFFF00';
+};
+
+const isYellowStyleCell = (cell, styleMap) => {
   if (!cell) return false;
   const style = cell.s;
-  if (!style || typeof style !== 'object') return false;
-  const fillRgb = style.fill?.fgColor?.rgb || style.fill?.fgColor?.argb
-    || style.fgColor?.rgb || style.fgColor?.argb
-    || style.bgColor?.rgb || style.bgColor?.argb || '';
-  if (normalizeRgb(fillRgb) === 'FFFF00') return true;
-  const fgIndexed = Number(style.fill?.fgColor?.indexed ?? style.fgColor?.indexed);
-  const bgIndexed = Number(style.fill?.bgColor?.indexed ?? style.bgColor?.indexed);
-  if (fgIndexed === 6 || fgIndexed === 13) return true;
-  if (bgIndexed === 6 || bgIndexed === 13) return true;
-  return false;
-};
-
-const rowHasYellowInXlsxSheet = (sheet, row, maxCol = 32) => {
-  for (let col = 0; col < maxCol; col += 1) {
-    const cell = sheet[XLSX.utils.encode_cell({ r: row - 1, c: col })];
-    if (isOrderingWinnerCell(cell)) return true;
+  let fillRgb = '';
+  if (style && typeof style === 'object') {
+    fillRgb = style.fill?.fgColor?.rgb || style.fgColor?.rgb || '';
+    if (!fillRgb && style.fill?.fgColor?.theme !== undefined) {
+      fillRgb = String(style.fill.fgColor.theme || '');
+    }
+  } else if (typeof style === 'number' && styleMap?.xfStyles?.length) {
+    const xf = styleMap.xfStyles[style];
+    const fillId = xf?.fillId;
+    fillRgb = fillId !== null ? styleMap.fillColors?.[fillId] || '' : '';
   }
-  return false;
-};
-
-const isWinnerMarkerY = (value) => String(value || '').trim().toUpperCase() === 'Y';
-
-const rowHasWinnerMarkerInK = (sheet, row) => {
-  const kCell = sheet[XLSX.utils.encode_cell({ r: row - 1, c: 10 })]; // K열
-  const raw = kCell ? XLSX.utils.format_cell(kCell) : '';
-  return isWinnerMarkerY(raw);
-};
-
-const hasAnyWinnerMarkerInK = (sheet, startRow = 5, endRow = 5000) => {
-  for (let row = startRow; row <= endRow; row += 1) {
-    if (rowHasWinnerMarkerInK(sheet, row)) return true;
-  }
-  return false;
+  return normalizeRgb(fillRgb) === 'FFFF00';
 };
 
 
@@ -417,12 +404,11 @@ const extractNameFromXlsxRow = (sheet, row) => {
   return '';
 };
 
-const readOrderingSheetData = (sheet) => {
+const readOrderingSheetData = (sheet, styleMap, winnerRowsFromXml = []) => {
   const validNumbers = new Set();
   const winnerInfos = [];
   let started = false;
   let emptyStreak = 0;
-  const useKMarker = hasAnyWinnerMarkerInK(sheet);
 
   const appendWinnerInfo = (row, seq) => {
     const bizNo = extractBizNoFromXlsxRow(sheet, row);
@@ -437,15 +423,20 @@ const readOrderingSheetData = (sheet) => {
     });
   };
 
+  winnerRowsFromXml.forEach((row) => {
+    const seqCell = sheet[XLSX.utils.encode_cell({ r: row - 1, c: 0 })];
+    const seqRaw = seqCell ? XLSX.utils.format_cell(seqCell) : '';
+    const seq = normalizeSequence(seqRaw);
+    appendWinnerInfo(row, seq);
+  });
+
   for (let row = 5; row <= 5000; row += 1) {
     const seqCell = sheet[XLSX.utils.encode_cell({ r: row - 1, c: 0 })];
     const seqRaw = seqCell ? XLSX.utils.format_cell(seqCell) : '';
     const seq = normalizeSequence(seqRaw);
 
-    const isWinnerRow = useKMarker
-      ? rowHasWinnerMarkerInK(sheet, row)
-      : rowHasYellowInXlsxSheet(sheet, row);
-    if (isWinnerRow) {
+    const aCell = sheet[XLSX.utils.encode_cell({ r: row - 1, c: 0 })];
+    if (isYellowStyleCell(aCell, styleMap)) {
       appendWinnerInfo(row, seq);
     }
 
@@ -459,7 +450,7 @@ const readOrderingSheetData = (sheet) => {
     }
   }
 
-  return { validNumbers, winnerInfos, winnerSource: useKMarker ? 'k-marker' : 'yellow-fill' };
+  return { validNumbers, winnerInfos, winnerSource: 'yellow-a-col' };
 };
 
 const collectOrderingStyleSamples = (sheet, maxRows = 200, maxCols = 12, maxSamples = 30) => {
@@ -470,7 +461,7 @@ const collectOrderingStyleSamples = (sheet, maxRows = 200, maxCols = 12, maxSamp
       const addr = XLSX.utils.encode_cell({ r: row - 1, c: col });
       const cell = sheet[addr];
       if (!cell) continue;
-      if (isOrderingWinnerCell(cell)) {
+      if (isYellowStyleCell(cell, null)) {
         yellowLikeCount += 1;
       }
       if (!cell.s) continue;
@@ -484,29 +475,6 @@ const collectOrderingStyleSamples = (sheet, maxRows = 200, maxCols = 12, maxSamp
     }
   }
   return { samples, yellowLikeCount };
-};
-
-const isYellowFill = (fill) => {
-  if (!fill || typeof fill !== 'object') return false;
-  const rgb = fill?.fgColor?.argb || fill?.fgColor?.rgb || fill?.bgColor?.argb || fill?.bgColor?.rgb || '';
-  if (normalizeRgb(rgb) === 'FFFF00') return true;
-  const fgIndexed = Number(fill?.fgColor?.indexed);
-  const bgIndexed = Number(fill?.bgColor?.indexed);
-  if (fgIndexed === 6 || fgIndexed === 13) return true;
-  if (bgIndexed === 6 || bgIndexed === 13) return true;
-  return false;
-};
-
-const readOrderingSequencesFromExcelJs = (worksheet) => {
-  const validNumbers = new Set();
-  const maxRow = Math.max(worksheet?.rowCount || 0, 5);
-  for (let row = 5; row <= maxRow; row += 1) {
-    const seqA = normalizeSequence(getCellText(worksheet.getCell(row, 1)));
-    const seqB = normalizeSequence(getCellText(worksheet.getCell(row, 2)));
-    const seq = seqA || seqB;
-    if (seq) validNumbers.add(seq);
-  }
-  return validNumbers;
 };
 
 const readZipText = async (zip, path) => {
@@ -532,109 +500,63 @@ const resolveSheetPathFromXml = (workbookXml, relsXml, sheetName) => {
 };
 
 const parseStyleMapFromXml = (stylesXml) => {
-  if (!stylesXml) return { fills: [], xfs: [] };
+  if (!stylesXml) return { fillColors: [], xfStyles: [] };
   const fillsBlock = stylesXml.match(/<fills[^>]*>[\s\S]*?<\/fills>/i);
   const xfsBlock = stylesXml.match(/<cellXfs[^>]*>[\s\S]*?<\/cellXfs>/i);
   const fillList = fillsBlock ? (fillsBlock[0].match(/<fill>[\s\S]*?<\/fill>/gi) || []) : [];
   const xfList = xfsBlock ? (xfsBlock[0].match(/<xf[^>]*\/>|<xf[^>]*>[\s\S]*?<\/xf>/gi) || []) : [];
 
-  const fills = fillList.map((fill) => {
-    const rgbMatch = fill.match(/<fgColor[^>]*rgb="([^"]+)"/i) || fill.match(/<bgColor[^>]*rgb="([^"]+)"/i);
-    const indexedMatch = fill.match(/<fgColor[^>]*indexed="([^"]+)"/i) || fill.match(/<bgColor[^>]*indexed="([^"]+)"/i);
+  const fillColors = fillList.map((fill) => {
+    const rgbMatch = fill.match(/<fgColor[^>]*rgb="([^"]+)"/i);
+    return rgbMatch ? rgbMatch[1] : '';
+  });
+  const xfStyles = xfList.map((xf) => {
+    const fillIdMatch = xf.match(/fillId="(\d+)"/i);
     return {
-      rgb: rgbMatch ? normalizeRgb(rgbMatch[1]) : '',
-      indexed: indexedMatch ? Number(indexedMatch[1]) : null,
+      fillId: fillIdMatch ? Number(fillIdMatch[1]) : null,
     };
   });
 
-  const xfs = xfList.map((xf) => {
-    const fillIdMatch = xf.match(/fillId="(\d+)"/i);
-    return { fillId: fillIdMatch ? Number(fillIdMatch[1]) : null };
-  });
-
-  return { fills, xfs };
+  return { fillColors, xfStyles };
 };
 
-const isYellowStyleId = (styleId, styleMap) => {
-  if (!Number.isFinite(styleId)) return false;
-  const xf = styleMap?.xfs?.[styleId];
-  if (!xf || xf.fillId === null || xf.fillId === undefined) return false;
-  const fill = styleMap?.fills?.[xf.fillId];
-  if (!fill) return false;
-  if (fill.rgb === 'FFFF00') return true;
-  if (fill.indexed === 6 || fill.indexed === 13) return true;
-  return false;
-};
-
-const findYellowRowsFromSheetXml = (sheetXml, styleMap) => {
+const findWinnerRowsBySheetXml = (sheetXml, styleMap) => {
   if (!sheetXml) return [];
   const rows = new Set();
-  const cellRegex = /<c[^>]*r=['"]([A-Z]+)(\d+)['"][^>]*s=['"](\d+)['"][^>]*>/gi;
+  const cellRegex = /<c[^>]*r=['"]A(\d+)['"][^>]*s=['"](\d+)['"][^>]*>/gi;
   let match = cellRegex.exec(sheetXml);
   while (match) {
-    const row = Number(match[2]);
-    const styleId = Number(match[3]);
+    const row = Number(match[1]);
+    const styleId = Number(match[2]);
     if (!Number.isNaN(row) && isYellowStyleId(styleId, styleMap)) {
       rows.add(row);
     }
     match = cellRegex.exec(sheetXml);
   }
+  const rowRegex = /<row[^>]*r=['"](\d+)['"][^>]*s=['"](\d+)['"][^>]*>/gi;
+  match = rowRegex.exec(sheetXml);
+  while (match) {
+    const row = Number(match[1]);
+    const styleId = Number(match[2]);
+    if (!Number.isNaN(row) && isYellowStyleId(styleId, styleMap)) {
+      rows.add(row);
+    }
+    match = rowRegex.exec(sheetXml);
+  }
   return Array.from(rows.values());
 };
 
-const extractWinnerInfosFromOrderingXml = async (buffer, sheetName, orderingSheet) => {
+const extractOrderingStyleContextFromXml = async (buffer, sheetName) => {
   const zip = await JSZip.loadAsync(buffer);
   const workbookXml = await readZipText(zip, 'xl/workbook.xml');
   const relsXml = await readZipText(zip, 'xl/_rels/workbook.xml.rels');
   const stylesXml = await readZipText(zip, 'xl/styles.xml');
   const sheetPath = resolveSheetPathFromXml(workbookXml, relsXml, sheetName) || 'xl/worksheets/sheet1.xml';
   const sheetXml = await readZipText(zip, sheetPath);
-  if (!sheetXml) return [];
-
+  if (!sheetXml) return { styleMap: null, winnerRows: [] };
   const styleMap = parseStyleMapFromXml(stylesXml);
-  const rows = findYellowRowsFromSheetXml(sheetXml, styleMap);
-  const winnerInfos = [];
-  rows.forEach((row) => {
-    const bizNo = extractBizNoFromXlsxRow(orderingSheet, row); // C열 우선
-    if (!bizNo) return;
-    if (winnerInfos.some((info) => info.bizNo === bizNo)) return;
-    const seqCell = orderingSheet[XLSX.utils.encode_cell({ r: row - 1, c: 0 })];
-    const seqRaw = seqCell ? XLSX.utils.format_cell(seqCell) : '';
-    const rank = normalizeSequence(seqRaw);
-    const companyName = extractNameFromXlsxRow(orderingSheet, row);
-    winnerInfos.push({ bizNo, rank: rank || null, companyName, sourceRow: row });
-  });
-  return winnerInfos;
-};
-
-const rowHasYellowFill = (worksheet, row, maxCol = 32) => {
-  if (!worksheet) return false;
-  const rowStyleFill = worksheet.getRow(row)?.style?.fill;
-  if (isYellowFill(rowStyleFill)) return true;
-  for (let col = 1; col <= maxCol; col += 1) {
-    if (isYellowFill(worksheet.getCell(row, col).fill)) return true;
-  }
-  return false;
-};
-
-const readWinnerInfosByYellowRowExcelJs = (worksheet) => {
-  const winnerInfos = [];
-  const maxRow = Math.max(worksheet?.rowCount || 0, 5);
-  for (let row = 5; row <= maxRow; row += 1) {
-    if (!rowHasYellowFill(worksheet, row)) continue;
-    const bizNo = normalizeBizNumber(getCellText(worksheet.getCell(row, 3))); // C열 고정
-    if (!bizNo) continue;
-    if (winnerInfos.some((info) => info.bizNo === bizNo)) continue;
-    const rank = normalizeSequence(getCellText(worksheet.getCell(row, 1)));
-    const companyName = getCellText(worksheet.getCell(row, 4)).trim(); // D열
-    winnerInfos.push({
-      bizNo,
-      rank: rank || null,
-      companyName,
-      sourceRow: row,
-    });
-  }
-  return winnerInfos;
+  const winnerRows = findWinnerRowsBySheetXml(sheetXml, styleMap);
+  return { styleMap, winnerRows };
 };
 
 const downloadBlob = (blob, fileName) => {
@@ -1018,7 +940,19 @@ export default function BidResultPage() {
     if (!orderingSheetName) throw new Error('발주처결과 파일에서 "입찰금액점수" 시트를 찾을 수 없습니다.');
     const orderingSheet = orderingWorkbook.Sheets[orderingSheetName];
     if (!orderingSheet) throw new Error('발주처결과 파일에서 "입찰금액점수" 시트를 찾을 수 없습니다.');
-    const parsedBase = readOrderingSheetData(orderingSheet);
+    const lowerName = String(orderingFile?.name || '').toLowerCase();
+    let styleMap = null;
+    let winnerRowsFromXml = [];
+    if (lowerName.endsWith('.xlsx')) {
+      try {
+        const styleContext = await extractOrderingStyleContextFromXml(orderingBuffer, orderingSheetName);
+        styleMap = styleContext?.styleMap || null;
+        winnerRowsFromXml = Array.isArray(styleContext?.winnerRows) ? styleContext.winnerRows : [];
+      } catch {
+        styleMap = null;
+      }
+    }
+    const parsedBase = readOrderingSheetData(orderingSheet, styleMap, winnerRowsFromXml);
     let validNumbers = parsedBase.validNumbers;
     let winnerInfos = Array.isArray(parsedBase.winnerInfos) ? [...parsedBase.winnerInfos] : [];
     console.log(
@@ -1029,37 +963,9 @@ export default function BidResultPage() {
       'winnerSource:',
       parsedBase?.winnerSource || 'unknown',
     );
-
-    const lowerName = String(orderingFile?.name || '').toLowerCase();
-    console.log('[bid-result:web] ordering file name/ext:', orderingFile?.name, lowerName);
-    if ((lowerName.endsWith('.xlsx') || lowerName.endsWith('.xlsm')) && parsedBase?.winnerSource !== 'k-marker') {
-      const orderingBookForStyle = new ExcelJS.Workbook();
-      await orderingBookForStyle.xlsx.load(orderingBuffer);
-      const orderingSheetByStyle = orderingBookForStyle.worksheets.find(
-        (ws) => String(ws?.name || '').replace(/\s+/g, '') === '입찰금액점수',
-      );
-      if (!orderingSheetByStyle) throw new Error('발주처결과 파일에서 "입찰금액점수" 시트를 찾을 수 없습니다.');
-      const seqFromExcelJs = readOrderingSequencesFromExcelJs(orderingSheetByStyle);
-      if (seqFromExcelJs.size > validNumbers.size) {
-        validNumbers = seqFromExcelJs;
-      }
-      let yellowRowWinners = [];
-      try {
-        yellowRowWinners = await extractWinnerInfosFromOrderingXml(orderingBuffer, orderingSheetName, orderingSheet);
-      } catch (error) {
-        console.warn('[bid-result:web] xml winner parse failed:', error);
-      }
-      if (yellowRowWinners.length === 0) {
-        yellowRowWinners = readWinnerInfosByYellowRowExcelJs(orderingSheetByStyle);
-      }
-      console.log('[bid-result:web] ordering parsed(exceljs/xml) validNumbers:', seqFromExcelJs.size, 'yellow winners:', yellowRowWinners.length);
-      const existing = new Set(winnerInfos.map((info) => info?.bizNo).filter(Boolean));
-      yellowRowWinners.forEach((info) => {
-        const key = info?.bizNo;
-        if (!key || existing.has(key)) return;
-        winnerInfos.push(info);
-        existing.add(key);
-      });
+    console.log('[bid-result:web] ordering styles:', styleMap ? 'xlsx-style' : 'none/xls');
+    if (winnerRowsFromXml.length > 0) {
+      console.log('[bid-result:web] winner rows from xml:', winnerRowsFromXml);
     }
     if (winnerInfos.length === 0) {
       const styleDebug = collectOrderingStyleSamples(orderingSheet);
