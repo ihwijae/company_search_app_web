@@ -1349,6 +1349,7 @@ export default function AgreementBoardWindow({
       if (isMoisUnderOr30To50 && kind === 'management') return 4;
       if (isMoisUnderOr30To50 && kind === 'performance') return 2;
       if (isMoisUnderOr30To50 && kind === 'total') return 4;
+      if (isMois50To100 && kind === 'performance') return 4;
       if (isLHOwner && kind === 'performance') return 2;
       if (isLHOwner && kind === 'credibility') return 2;
       if (isLHOwner && kind === 'total') return 2;
@@ -1357,7 +1358,7 @@ export default function AgreementBoardWindow({
       if (kind === 'quality') return 2;
       return 3;
     },
-    [isKrailUnder50, isLHOwner, isMoisUnderOr30To50, isPpsUnder50, technicianEnabled],
+    [isKrailUnder50, isLHOwner, isMois50To100, isMoisUnderOr30To50, isPpsUnder50, technicianEnabled],
   );
   const ownerDisplayLabel = selectedGroup?.label || '발주처 미지정';
   const rangeDisplayLabel = selectedRangeOption?.label || '금액대 선택';
@@ -4113,16 +4114,6 @@ export default function AgreementBoardWindow({
         lh50To100BidScore: LH_50_TO_100_BID_SCORE,
         mois50To100BidScore: MOIS_50_TO_100_BID_SCORE,
       });
-      if (process.env.NODE_ENV !== 'production' && isMois50To100) {
-        console.debug('[MOIS50-100][performance-debug]', results.map((row) => ({
-          groupIndex: row.groupIndex,
-          shareSum: row.shareSum,
-          performanceAmount: row.performanceAmount,
-          performanceBase: row.performanceBase,
-          performanceRatio: row.performanceRatio,
-          performanceScore: row.performanceScore,
-        })));
-      }
       if (!canceled) {
         setGroupSummaries((prev) => (equalGroupSummaries(prev, results) ? prev : results));
       }

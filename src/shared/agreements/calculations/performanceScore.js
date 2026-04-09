@@ -52,20 +52,6 @@ export async function evaluateAgreementPerformanceScore(perfAmount, {
     }
   }
 
-  const ratioDigits = Number.isFinite(Number(roundRatioDigits)) ? Number(roundRatioDigits) : null;
-  const computeRoundedRatioScore = (cap) => {
-    const ratioBase = Number(roundRatioBaseAmount);
-    const denominator = Number.isFinite(ratioBase) && ratioBase > 0 ? ratioBase : perfBase;
-    if (!performanceBaseReady || denominator <= 0) return null;
-    const ratio = perfAmount / denominator;
-    if (!Number.isFinite(ratio)) return null;
-    const normalizedRatio = ratioDigits != null
-      ? Number(ratio.toFixed(ratioDigits))
-      : ratio;
-    const fallback = Math.max(1, normalizedRatio * cap);
-    return clampScore(fallback, cap);
-  };
-
   const payload = {
     agencyId,
     fileType,
@@ -105,16 +91,6 @@ export async function evaluateAgreementPerformanceScore(perfAmount, {
       if (response?.success && response.data?.performance) {
         const perfData = response.data.performance;
         const perfMax = updatePerformanceCap(perfData.maxScore);
-        if (ratioDigits != null) {
-          const roundedRatioScore = computeRoundedRatioScore(perfMax);
-          if (isKrailUnder50SobangDebug) {
-            console.warn('[KRAIL_UNDER50_SOBANG][performanceScore] rounded ratio override', {
-              perfMax,
-              roundedRatioScore,
-            });
-          }
-          if (roundedRatioScore != null) return roundedRatioScore;
-        }
         const { score, capped, raw } = perfData;
         const numericCandidates = [score, capped, raw]
           .map((value) => toNumber(value))
@@ -137,16 +113,10 @@ export async function evaluateAgreementPerformanceScore(perfAmount, {
     } catch (err) {
       console.warn('[AgreementBoard] performance evaluate failed:', err?.message || err);
     }
+    // Formula evaluation exists but did not yield a valid score.
+    // Do not fallback to alternate equations to avoid silent rule drift.
+    return null;
   }
 
-  if (!performanceBaseReady || perfBase <= 0) return null;
-  const cap = getPerformanceCap();
-  const fallbackScore = computeRoundedRatioScore(cap);
-  if (isKrailUnder50SobangDebug) {
-    console.warn('[KRAIL_UNDER50_SOBANG][performanceScore] fallback score', {
-      cap,
-      fallbackScore,
-    });
-  }
-  return fallbackScore;
+  return null;
 }
