@@ -81,5 +81,7 @@ export function getCandidatePerformanceAmountForCurrentRange(candidate, {
   const parsed3y = toNumber(extracted3y);
   if (parsed3y != null) return parsed3y;
 
-  return getBasePerformanceAmount(candidate, { toNumber, extractAmountValue });
+  // MOIS 50~100 must use 3-year performance only.
+  // Do not fallback to 5-year values here.
+  return null;
 }

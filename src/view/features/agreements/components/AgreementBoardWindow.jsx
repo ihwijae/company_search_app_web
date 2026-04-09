@@ -152,7 +152,7 @@ const COLUMN_WIDTHS = {
   qualityPoints: 42,
   constructionExperience: 70,
   performanceCell: 64,
-  performanceSummary: 42,
+  performanceSummary: 48,
   performanceCoefficient: 50,
   technicianCell: 90,
   technicianSummary: 55,
@@ -187,7 +187,7 @@ const COLLAPSED_COLUMN_WIDTHS = {
   qualityPoints: 20,
   constructionExperience: 32,
   performanceCell: 18,
-  performanceSummary: 24,
+  performanceSummary: 28,
   performanceCoefficient: 24,
   technicianCell: 26,
   technicianSummary: 28,
@@ -4113,6 +4113,16 @@ export default function AgreementBoardWindow({
         lh50To100BidScore: LH_50_TO_100_BID_SCORE,
         mois50To100BidScore: MOIS_50_TO_100_BID_SCORE,
       });
+      if (process.env.NODE_ENV !== 'production' && isMois50To100) {
+        console.debug('[MOIS50-100][performance-debug]', results.map((row) => ({
+          groupIndex: row.groupIndex,
+          shareSum: row.shareSum,
+          performanceAmount: row.performanceAmount,
+          performanceBase: row.performanceBase,
+          performanceRatio: row.performanceRatio,
+          performanceScore: row.performanceScore,
+        })));
+      }
       if (!canceled) {
         setGroupSummaries((prev) => (equalGroupSummaries(prev, results) ? prev : results));
       }
