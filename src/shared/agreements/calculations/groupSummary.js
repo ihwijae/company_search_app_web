@@ -168,6 +168,7 @@ export async function computeGroupSummaries({
   performanceBaseReady = false,
   perfBase = null,
   groupManagementBonus = [],
+  managementBonusMultiplier = 1.1,
   managementScale = 1,
   managementMax,
   managementScoreMax,
@@ -205,6 +206,9 @@ export async function computeGroupSummaries({
   lh50To100BidScore,
   mois50To100BidScore,
 }) {
+  const safeManagementBonusMultiplier = Number.isFinite(Number(managementBonusMultiplier))
+    ? Number(managementBonusMultiplier)
+    : 1.1;
   const results = await Promise.all(metrics.map(async (metric) => {
     const shareReady = metric.memberCount > 0 && metric.shareValid;
     const managementScoreBase = shareReady && !metric.managementMissing
@@ -212,7 +216,7 @@ export async function computeGroupSummaries({
       : null;
     const bonusEnabled = Boolean(groupManagementBonus[metric.groupIndex]);
     const managementWithBonus = (managementScoreBase != null && bonusEnabled)
-      ? clampScore(managementScoreBase * 1.1, managementScoreMax)
+      ? clampScore(managementScoreBase * safeManagementBonusMultiplier, managementScoreMax)
       : managementScoreBase;
     let managementScore = managementWithBonus != null
       ? clampScore(managementWithBonus * managementScale, managementMax)
@@ -222,12 +226,20 @@ export async function computeGroupSummaries({
     managementScore = roundForExManagement(managementScore);
 
     let performanceScore = null;
+    let performanceScoreRaw = null;
     let performanceRatio = null;
     let technicianScore = null;
     let technicianAbilityScore = null;
 
     if (shareReady && !metric.performanceMissing && metric.performanceAmount != null && performanceBaseReady) {
-      performanceScore = await evaluatePerformanceScore(metric.performanceAmount);
+      const performanceEval = await evaluatePerformanceScore(metric.performanceAmount);
+      if (performanceEval != null && typeof performanceEval === 'object') {
+        performanceScore = performanceEval.score ?? null;
+        performanceScoreRaw = performanceEval.rawScore ?? performanceEval.score ?? null;
+      } else {
+        performanceScore = performanceEval;
+        performanceScoreRaw = performanceEval;
+      }
       if (perfBase && perfBase > 0) {
         performanceRatio = metric.performanceAmount / perfBase;
       }
@@ -253,7 +265,9 @@ export async function computeGroupSummaries({
     }
 
     performanceScore = roundForLhTotals(roundUpForPpsUnder50(roundForKrailUnder50(performanceScore)));
+    performanceScoreRaw = roundForLhTotals(roundUpForPpsUnder50(roundForKrailUnder50(performanceScoreRaw)));
     performanceScore = roundForPerformanceTotals(performanceScore);
+    performanceScoreRaw = roundForPerformanceTotals(performanceScoreRaw);
     performanceRatio = roundForKrailUnder50(performanceRatio);
     if (isKrailUnder50SobangDebug) {
       console.warn('[KRAIL_UNDER50_SOBANG][groupSummary] after rounding', {
@@ -357,6 +371,7 @@ export async function computeGroupSummaries({
       performanceScore,
       performanceMissing: metric.performanceMissing,
       performanceRatio,
+      performanceScoreRaw,
       performanceBase: perfBase,
       performanceBaseReady,
       technicianMissing: metric.technicianMissing,

@@ -24,6 +24,7 @@ export async function evaluateAgreementPerformanceScore(perfAmount, {
   getPerformanceCap,
   toNumber,
   clampScore,
+  returnDetails = false,
 } = {}) {
   if (!performanceBaseReady || perfAmount == null) return null;
   const isKrailUnder50SobangDebug = String(agencyId || '').toLowerCase() === 'krail'
@@ -96,6 +97,7 @@ export async function evaluateAgreementPerformanceScore(perfAmount, {
           .map((value) => toNumber(value))
           .filter((value) => value !== null);
         if (numericCandidates.length > 0) {
+          const resolvedRaw = toNumber(raw) ?? Math.max(...numericCandidates);
           const resolved = clampScore(Math.max(...numericCandidates), perfMax);
           if (isKrailUnder50SobangDebug) {
             console.warn('[KRAIL_UNDER50_SOBANG][performanceScore] resolved from formulas', {
@@ -104,10 +106,20 @@ export async function evaluateAgreementPerformanceScore(perfAmount, {
               raw,
               perfMax,
               numericCandidates,
+              resolvedRaw,
               resolved,
             });
           }
-          if (resolved != null) return resolved;
+          if (resolved != null) {
+            if (returnDetails) {
+              return {
+                score: resolved,
+                rawScore: resolvedRaw,
+                maxScore: perfMax,
+              };
+            }
+            return resolved;
+          }
         }
       }
     } catch (err) {

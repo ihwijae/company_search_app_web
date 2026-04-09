@@ -887,14 +887,13 @@ const clampScore = (value, max = MANAGEMENT_SCORE_MAX) => {
   return number;
 };
 
-const resolveConstructionExperienceScore = (performanceScore, qualityPoints) => {
+const resolveConstructionExperienceScore = (performanceScore, qualityPoints, { cap = true } = {}) => {
   const performanceValue = toNumber(performanceScore);
   if (performanceValue == null) return null;
   const qualityValue = toNumber(qualityPoints);
-  return clampScore(
-    performanceValue + (qualityValue == null ? 0 : qualityValue),
-    CONSTRUCTION_EXPERIENCE_SCORE_MAX,
-  );
+  const rawScore = performanceValue + (qualityValue == null ? 0 : qualityValue);
+  if (!cap) return rawScore;
+  return clampScore(rawScore, CONSTRUCTION_EXPERIENCE_SCORE_MAX);
 };
 
 const getCandidateManagementScore = (candidate) => resolveCandidateManagementScore(candidate, {
@@ -1271,6 +1270,7 @@ export default function AgreementBoardWindow({
     });
   }, [isKrailOwner]);
   const managementScale = isMois30To50 ? (10 / 15) : 1;
+  const managementBonusMultiplier = isLh50To100 ? 1.05 : 1.1;
   const performanceAmountLabel = isMois50To100 ? '3년 실적' : '5년 실적';
   const getCandidatePerformanceAmountForCurrentRange = React.useCallback((candidate) => {
     return resolveCandidatePerformanceAmountForCurrentRange(candidate, {
@@ -4067,6 +4067,7 @@ export default function AgreementBoardWindow({
         getPerformanceCap,
         toNumber,
         clampScore,
+        returnDetails: true,
       });
     };
 
@@ -4077,6 +4078,7 @@ export default function AgreementBoardWindow({
         performanceBaseReady,
         perfBase,
         groupManagementBonus: effectiveGroupManagementBonus,
+        managementBonusMultiplier,
         managementScale,
         managementMax,
         managementScoreMax: MANAGEMENT_SCORE_MAX,
@@ -4124,7 +4126,7 @@ export default function AgreementBoardWindow({
     return () => {
       canceled = true;
     };
-  }, [open, participantSignature, groupAssignments, groupShares, groupCredibility, groupTechnicianScores, participantMap, ownerId, ownerKeyUpper, selectedRangeOption?.key, selectedRangeOption?.label, estimatedAmount, baseAmount, entryAmount, entryModeResolved, getSharePercent, getEffectiveCredibilityValue, getTechnicianValue, credibilityEnabled, ownerCredibilityMax, candidateMetricsVersion, derivedMaxScores, effectiveGroupManagementBonus, effectiveNetCostBonusScore, managementScale, managementMax, isMois30To50, isMois50To100, isMoisUnderOr30To50, isKrailUnder50, isKrail50To100, isPpsUnder50, isLh50To100, isLh100To300, isDutyRegionCompany, roundForLhTotals, roundForMoisManagement, roundForKrailUnder50, roundUpForPpsUnder50, roundForExManagement, resolveKrailTechnicianAbilityScore, resolveSummaryDigits, technicianEditable, technicianEnabled, technicianAbilityMax, getCandidatePerformanceAmountForCurrentRange]);
+  }, [open, participantSignature, groupAssignments, groupShares, groupCredibility, groupTechnicianScores, participantMap, ownerId, ownerKeyUpper, selectedRangeOption?.key, selectedRangeOption?.label, estimatedAmount, baseAmount, entryAmount, entryModeResolved, getSharePercent, getEffectiveCredibilityValue, getTechnicianValue, credibilityEnabled, ownerCredibilityMax, candidateMetricsVersion, derivedMaxScores, effectiveGroupManagementBonus, effectiveNetCostBonusScore, managementScale, managementBonusMultiplier, managementMax, isMois30To50, isMois50To100, isMoisUnderOr30To50, isKrailUnder50, isKrail50To100, isPpsUnder50, isLh50To100, isLh100To300, isDutyRegionCompany, roundForLhTotals, roundForMoisManagement, roundForKrailUnder50, roundUpForPpsUnder50, roundForExManagement, resolveKrailTechnicianAbilityScore, resolveSummaryDigits, technicianEditable, technicianEnabled, technicianAbilityMax, getCandidatePerformanceAmountForCurrentRange]);
 
   React.useEffect(() => {
     attemptPendingPlacement();
@@ -5458,10 +5460,18 @@ export default function AgreementBoardWindow({
       ? summaryInfo?.totalMaxWithCred
       : summaryInfo?.totalMaxBase;
     const qualityPoints = isLHOwner ? resolveQualityPoints(qualityTotal, selectedRangeOption?.key) : null;
-    const constructionExperienceScore = showConstructionExperience
-      ? resolveConstructionExperienceScore(summaryInfo?.performanceScore, qualityPoints)
+    const cappedPerformanceScoreForTotal = toNumber(summaryInfo?.performanceScore);
+    const rawPerformanceScoreForTotal = toNumber(summaryInfo?.performanceScoreRaw);
+    const performanceScoreForConstructionRaw = showConstructionExperience
+      ? (rawPerformanceScoreForTotal ?? cappedPerformanceScoreForTotal)
       : null;
-    const performanceScoreForTotal = summaryInfo?.performanceScore;
+    const constructionExperienceScoreRaw = showConstructionExperience
+      ? resolveConstructionExperienceScore(performanceScoreForConstructionRaw, qualityPoints, { cap: false })
+      : null;
+    const constructionExperienceScore = showConstructionExperience
+      ? resolveConstructionExperienceScore(cappedPerformanceScoreForTotal, qualityPoints)
+      : null;
+    const performanceScoreForTotal = cappedPerformanceScoreForTotal;
     const miscScore = showMiscScore ? 17 : null;
     const lhSimpleTotalScore = showMiscScore
       ? (
@@ -5477,7 +5487,7 @@ export default function AgreementBoardWindow({
       : (baseTotalScore != null
         ? (isLHOwner
           ? (showConstructionExperience
-            ? baseTotalScore - (performanceScoreForTotal || 0) + (constructionExperienceScore || 0)
+            ? baseTotalScore - (performanceScoreForTotal || 0) + (constructionExperienceScoreRaw || 0)
             : baseTotalScore)
           : baseTotalScore)
         : null);
