@@ -4660,14 +4660,22 @@ export default function AgreementBoardWindow({
         candidate._agreementPerformanceInput = formattedAmountInput;
         candidate._agreementPerformanceCleared = false;
         if (parsed != null) {
-          candidate._agreementPerformance5y = parsed;
+          if (isMois50To100) {
+            candidate._agreementPerformance3y = parsed;
+            delete candidate._agreementPerformance5y;
+          } else {
+            candidate._agreementPerformance5y = parsed;
+            delete candidate._agreementPerformance3y;
+          }
         } else {
           delete candidate._agreementPerformance5y;
+          delete candidate._agreementPerformance3y;
         }
         updateCandidateOverride(candidate, {
           _agreementPerformanceInput: formattedAmountInput,
           _agreementPerformanceCleared: false,
-          _agreementPerformance5y: parsed != null ? parsed : null,
+          _agreementPerformance5y: !isMois50To100 && parsed != null ? parsed : null,
+          _agreementPerformance3y: isMois50To100 && parsed != null ? parsed : null,
           _agreementPerformanceScore: undefined,
           _agreementPerformanceMax: undefined,
           _agreementPerformanceCapVersion: undefined,
@@ -4676,10 +4684,12 @@ export default function AgreementBoardWindow({
         candidate._agreementPerformanceInput = '';
         candidate._agreementPerformanceCleared = true;
         delete candidate._agreementPerformance5y;
+        delete candidate._agreementPerformance3y;
         updateCandidateOverride(candidate, {
           _agreementPerformanceInput: '',
           _agreementPerformanceCleared: true,
           _agreementPerformance5y: null,
+          _agreementPerformance3y: null,
           _agreementPerformanceScore: undefined,
           _agreementPerformanceMax: undefined,
           _agreementPerformanceCapVersion: undefined,
@@ -4746,7 +4756,7 @@ export default function AgreementBoardWindow({
     }
     candidateScoreCacheRef.current.clear();
     setCandidateMetricsVersion((prev) => prev + 1);
-  }, [resolveCandidateBySlot, updateCandidateOverride, managementMax]);
+  }, [resolveCandidateBySlot, updateCandidateOverride, managementMax, isMois50To100]);
 
   const handleAmountBlur = React.useCallback((groupIndex, slotIndex, kind) => {
     const candidate = resolveCandidateBySlot(groupIndex, slotIndex);
@@ -4762,14 +4772,21 @@ export default function AgreementBoardWindow({
     if (kind === 'performance') {
       candidate._agreementPerformanceInput = formatted;
       candidate._agreementPerformanceCleared = false;
-      candidate._agreementPerformance5y = parsed;
+      if (isMois50To100) {
+        candidate._agreementPerformance3y = parsed;
+        delete candidate._agreementPerformance5y;
+      } else {
+        candidate._agreementPerformance5y = parsed;
+        delete candidate._agreementPerformance3y;
+      }
       delete candidate._agreementPerformanceScore;
       delete candidate._agreementPerformanceMax;
       delete candidate._agreementPerformanceCapVersion;
       updateCandidateOverride(candidate, {
         _agreementPerformanceInput: formatted,
         _agreementPerformanceCleared: false,
-        _agreementPerformance5y: parsed,
+        _agreementPerformance5y: isMois50To100 ? null : parsed,
+        _agreementPerformance3y: isMois50To100 ? parsed : null,
         _agreementPerformanceScore: undefined,
         _agreementPerformanceMax: undefined,
         _agreementPerformanceCapVersion: undefined,
@@ -4800,7 +4817,7 @@ export default function AgreementBoardWindow({
     }
     candidateScoreCacheRef.current.clear();
     setCandidateMetricsVersion((prev) => prev + 1);
-  }, [resolveCandidateBySlot, updateCandidateOverride, managementMax]);
+  }, [resolveCandidateBySlot, updateCandidateOverride, managementMax, isMois50To100]);
 
   const {
     isInlineEditing: isAmountCellEditing,

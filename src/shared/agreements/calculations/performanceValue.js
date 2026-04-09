@@ -52,7 +52,9 @@ export function getCandidatePerformanceAmountForCurrentRange(candidate, {
   if (candidate._agreementPerformanceCleared) return null;
   const hasManualOverride = Object.prototype.hasOwnProperty.call(candidate, '_agreementPerformanceInput');
   if (hasManualOverride) {
-    const manual = toNumber(candidate._agreementPerformance5y ?? candidate._agreementPerformanceInput);
+    // For MOIS 50~100, manual override must use the explicit input only.
+    // Do not fallback to cached 5-year fields, which can leak stale values.
+    const manual = toNumber(candidate._agreementPerformanceInput);
     if (manual != null) return manual;
   }
 
