@@ -5,6 +5,8 @@ import AgreementBoardWindow from '../components/AgreementBoardWindow.jsx';
 import { useAgreementBoard } from '../context/AgreementBoardContext.jsx';
 import { BASE_ROUTES } from '../../../../shared/navigation.js';
 
+const BOARD_HEALTHCHECK_INTERVAL_MS = 4000;
+
 export default function AgreementBoardPage() {
   const {
     boardState,
@@ -13,6 +15,7 @@ export default function AgreementBoardPage() {
     removeCandidate,
     closeBoard,
   } = useAgreementBoard();
+  const [serverReachable, setServerReachable] = React.useState(true);
 
   React.useEffect(() => {
     if (!boardState.open || !boardState.inlineMode) {
@@ -39,12 +42,56 @@ export default function AgreementBoardPage() {
     document.title = boardState.title || '협정보드';
   }, [boardState.inlineMode, boardState.open, updateBoard]);
 
+  React.useEffect(() => {
+    let active = true;
+    let initialized = false;
+    let previousReachable = true;
+
+    const checkServerHealth = async () => {
+      try {
+        const response = await fetch(`/api/auth?action=session&_ts=${Date.now()}`, {
+          method: 'GET',
+          credentials: 'same-origin',
+          cache: 'no-store',
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!active) return;
+
+        if (initialized && !previousReachable) {
+          window.location.reload();
+          return;
+        }
+
+        initialized = true;
+        previousReachable = true;
+        setServerReachable(true);
+      } catch (error) {
+        if (!active) return;
+        initialized = true;
+        previousReachable = false;
+        setServerReachable(false);
+      }
+    };
+
+    checkServerHealth();
+    const timer = window.setInterval(checkServerHealth, BOARD_HEALTHCHECK_INTERVAL_MS);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
   return (
     <div className="app-shell">
       <div className="main">
         <div className="title-drag" />
         <div className="topbar" />
         <div className="stage agreement-board-stage">
+          {!serverReachable && (
+            <div className="agreement-board-connection-banner">
+              서버 연결이 끊겼습니다. 서버가 복구되면 이 탭이 자동 새로고침됩니다.
+            </div>
+          )}
           <AgreementBoardWindow
             inlineMode={true}
             open={true}
