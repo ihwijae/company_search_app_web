@@ -4007,15 +4007,17 @@ export default function AgreementBoardWindow({
     }
     const baseValue = parseAmountValue(baseAmount);
     const estimatedValue = parseAmountValue(estimatedAmount);
-    const perfBase = isPpsUnder50
-      ? (baseValue != null && baseValue > 0 ? baseValue : null)
-      : isLh50To100
+    const perfBase = isMois50To100
+      ? (estimatedValue != null && estimatedValue > 0 ? estimatedValue : null)
+      : isPpsUnder50
         ? (baseValue != null && baseValue > 0 ? baseValue : null)
-      : (ownerKeyUpper === 'EX'
-        ? (baseValue != null && baseValue > 0 ? baseValue : (estimatedValue != null && estimatedValue > 0 ? estimatedValue : null))
-        : ((estimatedValue != null && estimatedValue > 0)
-          ? estimatedValue
-          : (baseValue != null && baseValue > 0 ? baseValue : null)));
+        : isLh50To100
+          ? (baseValue != null && baseValue > 0 ? baseValue : null)
+        : (ownerKeyUpper === 'EX'
+          ? (baseValue != null && baseValue > 0 ? baseValue : (estimatedValue != null && estimatedValue > 0 ? estimatedValue : null))
+          : ((estimatedValue != null && estimatedValue > 0)
+            ? estimatedValue
+            : (baseValue != null && baseValue > 0 ? baseValue : null)));
     const rangeAmountHint = parseRangeAmountHint(ownerKeyUpper, selectedRangeOption?.label);
     const evaluationAmount = rangeAmountHint > 0 ? rangeAmountHint : 0;
     const ownerKey = String(ownerId || 'lh').toLowerCase();
@@ -4131,13 +4133,15 @@ export default function AgreementBoardWindow({
     if (!open) return;
     const baseValue = parseAmountValue(baseAmount);
     const estimatedValue = parseAmountValue(estimatedAmount);
-    const perfBase = isPpsUnder50
-      ? (baseValue != null && baseValue > 0 ? baseValue : null)
-      : isLh50To100
+    const perfBase = isMois50To100
+      ? (estimatedValue != null && estimatedValue > 0 ? estimatedValue : null)
+      : isPpsUnder50
         ? (baseValue != null && baseValue > 0 ? baseValue : null)
-      : ((estimatedValue != null && estimatedValue > 0)
-        ? estimatedValue
-        : (baseValue != null && baseValue > 0 ? baseValue : null));
+        : isLh50To100
+          ? (baseValue != null && baseValue > 0 ? baseValue : null)
+        : ((estimatedValue != null && estimatedValue > 0)
+          ? estimatedValue
+          : (baseValue != null && baseValue > 0 ? baseValue : null));
     const rangeAmountHint = parseRangeAmountHint(ownerKeyUpper, selectedRangeOption?.label);
     const evaluationAmount = rangeAmountHint > 0 ? rangeAmountHint : 0;
     const ownerKey = String(ownerId || 'lh').toLowerCase();

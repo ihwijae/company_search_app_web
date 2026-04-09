@@ -12,6 +12,12 @@ export default defineConfig({
   server: {
     port: 5173,        // 개발 서버 포트를 Electron dev URL과 통일
     strictPort: true,  // 이미 사용 중이면 에러 내고 종료 (다른 포트로 자동 변경 방지)
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:4173',
+        changeOrigin: true,
+      },
+    },
   },
   preview: {
     port: 4173,

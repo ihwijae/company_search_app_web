@@ -14,7 +14,7 @@
     "serve:prod": "npm run build && npm run serve",
     "serve:prod:lan": "npm run build && npm run serve:lan",
     "start": "npm run build && electron .",
-    "start:dev": "concurrently \"vite\" \"electron .\"",
+    "start:dev": "concurrently \"npm run serve:lan\" \"vite --host 0.0.0.0\"",
     "migrate:agreement-boards": "node scripts/migrate-agreement-boards.js",
     "auth:create-user": "node scripts/create-user.js",
     "dist:win": "npm run build && electron-builder --win nsis",

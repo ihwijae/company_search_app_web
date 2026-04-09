@@ -2066,8 +2066,8 @@
               ],
               "maxScore": 15,
               "rounding": {
-                "method": "truncate",
-                "digits": 2
+                "method": "round",
+                "digits": 4
               }
             },
             "notes": "행안부 50억~100억 기본값",
