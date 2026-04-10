@@ -4207,6 +4207,7 @@ export default function AgreementBoardWindow({
         isMois50To100,
         isEx50To100,
         isKrail50To100,
+        isLhUnder50: selectedRangeKey === LH_UNDER_50_KEY,
         isLh50To100,
         technicianEnabled,
         technicianEditable,

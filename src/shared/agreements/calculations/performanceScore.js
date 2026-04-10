@@ -67,6 +67,23 @@ export async function evaluateAgreementPerformanceScore(perfAmount, {
     },
   };
 
+  const parseRatioDetails = () => {
+    const amount = Number(perfAmount);
+    if (!Number.isFinite(amount)) return { ratioRaw: null, ratioRounded: null };
+    const preferredBase = Number(roundRatioBaseAmount);
+    const fallbackBase = Number(perfBase);
+    const denominator = (Number.isFinite(preferredBase) && preferredBase > 0)
+      ? preferredBase
+      : ((Number.isFinite(fallbackBase) && fallbackBase > 0) ? fallbackBase : null);
+    if (!(denominator > 0)) return { ratioRaw: null, ratioRounded: null };
+    const ratioRaw = amount / denominator;
+    if (!Number.isFinite(ratioRaw)) return { ratioRaw: null, ratioRounded: null };
+    const digits = Number(roundRatioDigits);
+    const useDigits = Number.isInteger(digits) && digits >= 0;
+    const ratioRounded = useDigits ? Number(ratioRaw.toFixed(digits)) : ratioRaw;
+    return { ratioRaw, ratioRounded };
+  };
+
   if (isKrailUnder50SobangDebug) {
     console.warn('[KRAIL_UNDER50_SOBANG][performanceScore] request', {
       perfAmount,
@@ -112,10 +129,13 @@ export async function evaluateAgreementPerformanceScore(perfAmount, {
           }
           if (resolved != null) {
             if (returnDetails) {
+              const { ratioRaw, ratioRounded } = parseRatioDetails();
               return {
                 score: resolved,
                 rawScore: resolvedRaw,
                 maxScore: perfMax,
+                ratioRaw,
+                ratioRounded,
               };
             }
             return resolved;

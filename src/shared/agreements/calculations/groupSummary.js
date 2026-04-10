@@ -188,6 +188,7 @@ export async function computeGroupSummaries({
   isMois50To100 = false,
   isEx50To100 = false,
   isKrail50To100 = false,
+  isLhUnder50 = false,
   isLh50To100 = false,
   technicianEnabled = false,
   technicianEditable = false,
@@ -228,6 +229,7 @@ export async function computeGroupSummaries({
     let performanceScore = null;
     let performanceScoreRaw = null;
     let performanceRatio = null;
+    let performanceRatioRounded = null;
     let technicianScore = null;
     let technicianAbilityScore = null;
 
@@ -236,6 +238,9 @@ export async function computeGroupSummaries({
       if (performanceEval != null && typeof performanceEval === 'object') {
         performanceScore = performanceEval.score ?? null;
         performanceScoreRaw = performanceEval.rawScore ?? performanceEval.score ?? null;
+        performanceRatioRounded = Number.isFinite(Number(performanceEval.ratioRounded))
+          ? Number(performanceEval.ratioRounded)
+          : null;
       } else {
         performanceScore = performanceEval;
         performanceScoreRaw = performanceEval;
@@ -243,6 +248,13 @@ export async function computeGroupSummaries({
       if (perfBase && perfBase > 0) {
         performanceRatio = metric.performanceAmount / perfBase;
       }
+    }
+
+    if ((isLhUnder50 || isLh50To100) && performanceRatioRounded != null) {
+      const lhRawScore = performanceRatioRounded * 13;
+      const perfCapCurrent = getPerformanceCap() || derivedPerformanceMax;
+      performanceScoreRaw = lhRawScore;
+      performanceScore = clampScore(lhRawScore, perfCapCurrent);
     }
 
     const isKrailUnder50SobangDebug = !isKrail50To100
