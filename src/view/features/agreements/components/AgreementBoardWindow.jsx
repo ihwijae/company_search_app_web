@@ -1003,6 +1003,14 @@ const stripAgreementAmountOverrides = (candidate) => {
 };
 
 const CANDIDATE_POOL_FLAG = '_agreementCandidateListed';
+const CANDIDATE_REFRESH_PRESERVE_KEYS = new Set([
+  'id',
+  CANDIDATE_POOL_FLAG,
+  'regionSelected',
+  'isRegionSelected',
+  '_regionSelected',
+  'selectedRegion',
+]);
 
 const getBizNo = (company = {}) => {
   const raw = company.bizNo
@@ -1023,6 +1031,16 @@ const getBizNo = (company = {}) => {
 };
 
 const normalizeBizNo = (value) => (value ? String(value).replace(/[^0-9]/g, '') : '');
+
+const pickCandidateRefreshPreservedFields = (candidate = {}) => {
+  const preserved = {};
+  Object.keys(candidate || {}).forEach((key) => {
+    if (CANDIDATE_REFRESH_PRESERVE_KEYS.has(key) || key.startsWith('_agreement')) {
+      preserved[key] = candidate[key];
+    }
+  });
+  return preserved;
+};
 
 const isRegionExplicitlySelected = (candidate) => {
   if (!candidate || typeof candidate !== 'object') return false;
@@ -1663,6 +1681,7 @@ export default function AgreementBoardWindow({
   const prevAssignmentsRef = React.useRef(groupAssignments);
   const [representativeSearchOpen, setRepresentativeSearchOpen] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
+  const [candidateRefreshing, setCandidateRefreshing] = React.useState(false);
   const [editableBidAmount, setEditableBidAmount] = React.useState(bidAmount);
   const [editableEntryAmount, setEditableEntryAmount] = React.useState(entryAmount);
   const [excelCopying, setExcelCopying] = React.useState(false);
@@ -2177,6 +2196,93 @@ export default function AgreementBoardWindow({
   }, [loadFilters.ownerId]);
 
   const isSmsCompleted = String(smsStatus || '').trim().toLowerCase() === 'sent';
+
+  const handleRefreshCandidateInfo = React.useCallback(async () => {
+    if (candidateRefreshing) return;
+    if (!Array.isArray(candidates) || candidates.length === 0) {
+      notify({ type: 'info', message: '갱신할 업체가 없습니다.', portalTarget: portalContainer || null });
+      return;
+    }
+    const nameSet = new Set();
+    candidates.forEach((candidate) => {
+      const rawName = String(getCompanyName(candidate) || '').trim();
+      if (rawName) nameSet.add(rawName);
+      const cleanedName = sanitizeCompanyName(rawName);
+      if (cleanedName) nameSet.add(cleanedName);
+    });
+    const queryNames = Array.from(nameSet);
+    if (queryNames.length === 0) {
+      notify({ type: 'warning', message: '업체명을 찾지 못해 갱신할 수 없습니다.', portalTarget: portalContainer || null });
+      return;
+    }
+
+    setCandidateRefreshing(true);
+    showLoading({
+      title: '업체정보 갱신',
+      message: '최신 업체 정보를 불러오는 중입니다...',
+      portalTarget: portalContainer || null,
+    });
+    try {
+      const response = await searchClient.searchManyCompanies(queryNames, fileType || 'all', { pagination: null });
+      const fetched = Array.isArray(response?.data) ? response.data : [];
+      if (!response?.success || fetched.length === 0) {
+        throw new Error('no results');
+      }
+
+      const byBiz = new Map();
+      const byName = new Map();
+      fetched.forEach((item) => {
+        if (!item || typeof item !== 'object') return;
+        const biz = normalizeBizNo(getBizNo(item));
+        if (biz) {
+          if (!byBiz.has(biz)) byBiz.set(biz, []);
+          byBiz.get(biz).push(item);
+        }
+        const nameKey = normalizeCompanyKey(getCompanyName(item));
+        if (nameKey) {
+          if (!byName.has(nameKey)) byName.set(nameKey, []);
+          byName.get(nameKey).push(item);
+        }
+      });
+
+      let refreshedCount = 0;
+      let unmatchedCount = 0;
+      const nextCandidates = candidates.map((candidate) => {
+        if (!candidate || typeof candidate !== 'object') return candidate;
+        const biz = normalizeBizNo(getBizNo(candidate));
+        const nameKey = normalizeCompanyKey(getCompanyName(candidate));
+        let matched = null;
+        if (biz && byBiz.has(biz)) {
+          matched = byBiz.get(biz)[0] || null;
+        }
+        if (!matched && nameKey && byName.has(nameKey)) {
+          matched = byName.get(nameKey)[0] || null;
+        }
+        if (!matched) {
+          unmatchedCount += 1;
+          return candidate;
+        }
+        refreshedCount += 1;
+        return {
+          ...matched,
+          ...pickCandidateRefreshPreservedFields(candidate),
+        };
+      });
+
+      onUpdateBoard({ candidates: nextCandidates });
+      notify({
+        type: 'success',
+        message: `업체정보 갱신 완료: ${refreshedCount}건${unmatchedCount > 0 ? `, 미매칭 ${unmatchedCount}건` : ''}`,
+        portalTarget: portalContainer || null,
+      });
+    } catch (error) {
+      console.error('[AgreementBoard] candidate refresh failed:', error);
+      notify({ type: 'warning', message: '업체정보 갱신에 실패했습니다.', portalTarget: portalContainer || null });
+    } finally {
+      setCandidateRefreshing(false);
+      hideLoading();
+    }
+  }, [candidateRefreshing, candidates, notify, portalContainer, showLoading, hideLoading, fileType, onUpdateBoard]);
 
   const toggleColumnCollapse = React.useCallback((key) => {
     setCollapsedColumns((prev) => ({
@@ -6113,6 +6219,14 @@ export default function AgreementBoardWindow({
                   onClick={() => handleSetSmsStatus(isSmsCompleted ? 'pending' : 'sent')}
                 >
                   {isSmsCompleted ? '문자전송완료 해제' : '문자전송완료'}
+                </button>
+                <button
+                  type="button"
+                  className="excel-btn"
+                  onClick={handleRefreshCandidateInfo}
+                  disabled={candidateRefreshing}
+                >
+                  {candidateRefreshing ? '업체정보갱신 중...' : '업체정보갱신'}
                 </button>
                 {isLh100To300 && (
                   <button
