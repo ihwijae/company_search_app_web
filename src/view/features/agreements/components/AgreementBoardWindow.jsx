@@ -1270,7 +1270,7 @@ export default function AgreementBoardWindow({
   const showNetCostBonus = !isLh100To300;
   const showBidScore = !isLh100To300;
   const showMiscScore = isLh100To300;
-  const showPerformanceCoefficient = isLHOwner;
+  const showPerformanceCoefficient = isLHOwner || isPpsUnder50 || isExUnder50 || isEx50To100;
   const showConstructionExperience = isLHOwner && !isLh100To300;
   const placeCredibilityAfterQuality = isLh100To300;
   const effectiveGroupManagementBonus = showManagementBonus ? groupManagementBonus : [];
@@ -5630,14 +5630,28 @@ export default function AgreementBoardWindow({
         return performanceAmount / (baseValue * multiplier);
       }
       if (isLh100To300) {
-        const ratio = toNumber(summaryInfo?.performanceRatio);
-        if (ratio != null) return ratio;
-        if (perfectPerformanceAmount > 0) return performanceAmount / perfectPerformanceAmount;
+        return performanceAmount / (baseValue * 3);
+      }
+      if (selectedRangeKey === PPS_UNDER_50_KEY) {
+        return performanceAmount / (baseValue * 1);
+      }
+      if (selectedRangeKey === EX_UNDER_50_KEY) {
+        return performanceAmount / (baseValue * 1);
+      }
+      if (selectedRangeKey === EX_50_TO_100_KEY) {
+        return performanceAmount / (baseValue * 2);
       }
       return null;
     })();
     const performanceCoefficientDisplay = showPerformanceCoefficient
-      ? (performanceCoefficientValue != null ? formatScore(performanceCoefficientValue, 2) : '-')
+      ? (() => {
+        if (performanceCoefficientValue == null) return '-';
+        if (isLh100To300) {
+          const truncated = Math.trunc(Number(performanceCoefficientValue) * 10000) / 10000;
+          return Number.isFinite(truncated) ? truncated.toFixed(4) : '-';
+        }
+        return formatScore(performanceCoefficientValue, 2);
+      })()
       : null;
     const technicianScoreThreshold = isKrailUnder50 ? 2 : (isKrail50To100 ? 3 : null);
     const technicianScoreWarn = technicianScoreThreshold != null
