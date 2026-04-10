@@ -1270,7 +1270,6 @@ export default function AgreementBoardWindow({
   const showNetCostBonus = !isLh100To300;
   const showBidScore = !isLh100To300;
   const showMiscScore = isLh100To300;
-  const showPerformanceCoefficient = isLHOwner || isPpsUnder50 || isExUnder50 || isEx50To100;
   const showConstructionExperience = isLHOwner && !isLh100To300;
   const placeCredibilityAfterQuality = isLh100To300;
   const effectiveGroupManagementBonus = showManagementBonus ? groupManagementBonus : [];
@@ -2372,7 +2371,7 @@ export default function AgreementBoardWindow({
       + (showConstructionExperience ? constructionExperienceColWidth : 0)
       + (credibilityEnabled ? COLUMN_WIDTHS.credibility : 0)
       + COLUMN_WIDTHS.performanceSummary
-      + (showPerformanceCoefficient ? COLUMN_WIDTHS.performanceCoefficient : 0)
+      + (isLh100To300 ? COLUMN_WIDTHS.performanceCoefficient : 0)
       + (technicianEnabled
         ? (collapsedColumns.technicianSummary ? COLLAPSED_COLUMN_WIDTHS.technicianSummary : COLUMN_WIDTHS.technicianSummary)
           + (collapsedColumns.technicianAbility ? COLLAPSED_COLUMN_WIDTHS.technicianAbilitySummary : COLUMN_WIDTHS.technicianAbilitySummary)
@@ -2399,8 +2398,8 @@ export default function AgreementBoardWindow({
     showManagementBonus,
     showBidScore,
     showConstructionExperience,
-    showPerformanceCoefficient,
     showNetCostBonus,
+    isLh100To300,
     isMois30To50,
     isEx50To100,
     isKrail50To100,
@@ -5610,47 +5609,21 @@ export default function AgreementBoardWindow({
     const managementSummary = summaryInfo?.managementScore != null
       ? formatScore(summaryInfo.managementScore, resolveSummaryDigits('management'))
       : '-';
-    const performanceSummary = summaryInfo?.performanceScore != null
-      ? formatScore(summaryInfo.performanceScore, resolveSummaryDigits('performance'))
+    const performanceSummaryRaw = toNumber(summaryInfo?.performanceScoreRaw);
+    const performanceSummaryCapped = toNumber(summaryInfo?.performanceScore);
+    const performanceSummaryValue = performanceSummaryRaw ?? performanceSummaryCapped;
+    const performanceSummary = performanceSummaryValue != null
+      ? formatScore(performanceSummaryValue, resolveSummaryDigits('performance'))
       : '-';
-    const performanceCoefficientValue = (() => {
-      const performanceAmount = toNumber(summaryInfo?.performanceAmount);
-      const baseValue = parseAmountValue(baseAmount);
-      if (performanceAmount == null || !(baseValue > 0)) {
-        if (!isLh100To300) return null;
-        const ratioFallback = toNumber(summaryInfo?.performanceRatio);
-        return ratioFallback;
-      }
-      if (selectedRangeKey === LH_UNDER_50_KEY) {
-        return performanceAmount / (baseValue * 1);
-      }
-      if (selectedRangeKey === LH_50_TO_100_KEY) {
-        const normalizedType = String(fileType || '').toLowerCase();
-        const multiplier = normalizedType === 'sobang' ? 3 : 2;
-        return performanceAmount / (baseValue * multiplier);
-      }
-      if (isLh100To300) {
-        return performanceAmount / (baseValue * 3);
-      }
-      if (selectedRangeKey === PPS_UNDER_50_KEY) {
-        return performanceAmount / (baseValue * 1);
-      }
-      if (selectedRangeKey === EX_UNDER_50_KEY) {
-        return performanceAmount / (baseValue * 1);
-      }
-      if (selectedRangeKey === EX_50_TO_100_KEY) {
-        return performanceAmount / (baseValue * 2);
-      }
-      return null;
-    })();
-    const performanceCoefficientDisplay = showPerformanceCoefficient
+    const performanceCoefficientDisplay = isLh100To300
       ? (() => {
-        if (performanceCoefficientValue == null) return '-';
-        if (isLh100To300) {
-          const truncated = Math.trunc(Number(performanceCoefficientValue) * 10000) / 10000;
-          return Number.isFinite(truncated) ? truncated.toFixed(4) : '-';
-        }
-        return formatScore(performanceCoefficientValue, 2);
+        const performanceAmount = toNumber(summaryInfo?.performanceAmount);
+        const baseValue = parseAmountValue(baseAmount);
+        if (performanceAmount == null || !(baseValue > 0)) return '-';
+        const value = performanceAmount / (baseValue * 3);
+        if (!Number.isFinite(value)) return '-';
+        const truncated = Math.trunc(value * 10000) / 10000;
+        return truncated.toFixed(4);
       })()
       : null;
     const technicianScoreThreshold = isKrailUnder50 ? 2 : (isKrail50To100 ? 3 : null);
@@ -5823,7 +5796,7 @@ export default function AgreementBoardWindow({
         {collapsedColumns.performance
           ? renderCollapsedStubCell('performance', rightRowSpan)
           : slotMetas.map((meta) => renderPerformanceCell(meta, rightRowSpan))}
-        {showPerformanceCoefficient && (
+        {isLh100To300 && (
           <td className="excel-cell total-cell performance-coefficient-cell" rowSpan={rightRowSpan}>
             {performanceCoefficientDisplay}
           </td>
@@ -6385,7 +6358,7 @@ export default function AgreementBoardWindow({
                   />
                 ))
               )}
-              {showPerformanceCoefficient && <col className="col-performance-coefficient" style={{ width: `${COLUMN_WIDTHS.performanceCoefficient}px` }} />}
+              {isLh100To300 && <col className="col-performance-coefficient" style={{ width: `${COLUMN_WIDTHS.performanceCoefficient}px` }} />}
               <col className="col-performance-summary" style={{ width: `${COLUMN_WIDTHS.performanceSummary}px` }} />
               {technicianEnabled && (
                 collapsedColumns.technician ? (
@@ -6523,7 +6496,7 @@ export default function AgreementBoardWindow({
                 >
                   {renderColToggle('performance', '시공실적')}
                 </th>
-                {showPerformanceCoefficient && (
+                {isLh100To300 && (
                   <th rowSpan="2" className="col-header performance-coefficient-header">
                     실적계수
                   </th>
