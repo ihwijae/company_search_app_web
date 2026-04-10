@@ -24,7 +24,8 @@ const MENU_ROUTES = {
 };
 
 const TEAM_LEAD_BUCKET_ID = 'team-lead';
-const TEAM_LEAD_EXCLUDE = ['윤명숙', '이동훈', '김희준', '김대열', '김기성', '박성균'];
+const TEAM_LEAD_EXCLUDE_MANAGERS = ['윤명숙', '이동훈', '김희준', '김대열', '김기성', '박성균'];
+const TEAM_LEAD_EXCLUDE_COMPANIES = ['아람이엔테크', '우진일렉트', '에코엠이엔씨', '지음쏠라테크'];
 const BIZ_FIELDS = ['사업자번호', 'bizNo', '사업자 번호'];
 const NAME_FIELDS = ['업체명', '회사명', 'name', '검색된 회사'];
 const REPRESENTATIVE_FIELDS = ['대표자', '대표자명'];
@@ -53,7 +54,7 @@ const normalizeCompanyName = (name) => {
   let normalized = String(name || '').replace(/\s+/g, '').toLowerCase();
   normalized = normalized.replace(/이앤/g, '이엔');
   normalized = normalized.replace(/앤/g, '엔');
-  normalized = normalized.replace(/[^a-z0-9가-힣㈜\(\)]/g, '');
+  normalized = normalized.replace(/[^a-z0-9가-힣㈜()]/g, '');
   return normalized;
 };
 
@@ -100,6 +101,16 @@ const extractCompanyNameFromLine = (line) => {
 };
 
 const normalizeManagerName = (name) => String(name || '').replace(/\s+/g, '').toLowerCase();
+const normalizeTeamLeadCompanyName = (name) => {
+  const normalized = normalizeCompanyName(name);
+  return normalized
+    .replace(/주식회사/g, '')
+    .replace(/(주)/g, '')
+    .replace(/㈜/g, '')
+    .replace(/[()]/g, '');
+};
+const TEAM_LEAD_EXCLUDE_MANAGER_KEYS = new Set(TEAM_LEAD_EXCLUDE_MANAGERS.map((name) => normalizeManagerName(name)));
+const TEAM_LEAD_EXCLUDE_COMPANY_KEYS = new Set(TEAM_LEAD_EXCLUDE_COMPANIES.map((name) => normalizeTeamLeadCompanyName(name)));
 
 const getCandidateName = (candidate) => {
   const raw = getCandidateTextField(candidate, COMPANY_NAME_FIELDS);
@@ -203,9 +214,11 @@ export default function KakaoSendPage() {
     blockMap.forEach((entries) => {
       const shouldInclude = entries.some((entry) => {
         if (entry.managerId === 'exclude') return false;
+        const normalizedCompany = normalizeTeamLeadCompanyName(entry.companyName || entry.company);
+        if (normalizedCompany && TEAM_LEAD_EXCLUDE_COMPANY_KEYS.has(normalizedCompany)) return false;
         if (entry.managerId === 'none') return true;
         const normalized = normalizeManagerName(entry.managerId);
-        return !TEAM_LEAD_EXCLUDE.some((name) => normalizeManagerName(name) === normalized);
+        return !TEAM_LEAD_EXCLUDE_MANAGER_KEYS.has(normalized);
       });
       if (!shouldInclude) return;
       const overrideEntry = entries.find((entry) => messageOverrides[entry.id]);
