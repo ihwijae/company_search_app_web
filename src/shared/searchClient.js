@@ -1,4 +1,5 @@
 import webSearchStore from './webSearchStore.js';
+import { normalizeRegionList } from './regionNormalizer.js';
 
 const getElectronApi = () => {
   if (typeof window === 'undefined') return null;
@@ -76,9 +77,11 @@ const syncSharedDatasetsIfNeeded = async (fileType) => {
 };
 
 const normalizeRegionsResponse = (payload) => {
-  if (Array.isArray(payload)) return payload;
-  if (payload && Array.isArray(payload.data)) return payload.data;
-  return ['전체'];
+  const source = Array.isArray(payload)
+    ? payload
+    : (payload && Array.isArray(payload.data) ? payload.data : []);
+  const normalized = normalizeRegionList(source);
+  return ['전체', ...normalized];
 };
 
 const copyRowsToClipboard = async (rows) => {

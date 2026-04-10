@@ -22,6 +22,7 @@ import { isWomenOwnedCompany, getQualityBadgeText, extractManagerNames } from '.
 import { generateMany } from '../../../../shared/agreements/generator.js';
 import { AGREEMENT_GROUPS } from '../../../../shared/navigation.js';
 import { sanitizeHtml } from '../../../../shared/sanitizeHtml.js';
+import { normalizeRegionName } from '../../../../shared/regionNormalizer.js';
 import searchClient from '../../../../shared/searchClient.js';
 import formulasClient from '../../../../shared/formulasClient.js';
 import { AGREEMENT_BAN_CONFIG } from '../../../../shared/agreements/banConfig.js';
@@ -690,8 +691,7 @@ const getRegionLabel = (company) => (
 );
 
 const normalizeRegion = (value) => {
-  if (!value) return '';
-  return String(value).replace(/\s+/g, '').trim();
+  return normalizeRegionName(value);
 };
 
 const toNumber = (value) => {

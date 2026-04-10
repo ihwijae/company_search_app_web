@@ -12,6 +12,7 @@ import {
 import { useAgreementBoard } from '../context/AgreementBoardContext.jsx';
 import { BASE_ROUTES, AGREEMENT_GROUPS, AGREEMENT_MENU_ITEMS, findMenuByKey } from '../../../../shared/navigation.js';
 import { loadPersisted, savePersisted } from '../../../../shared/persistence.js';
+import { normalizeRegionName, normalizeRegionList } from '../../../../shared/regionNormalizer.js';
 import searchClient from '../../../../shared/searchClient.js';
 
 const createDefaultForm = () => {
@@ -142,7 +143,7 @@ export default function AgreementFlowPage({
 
   React.useEffect(() => {
     const saved = loadPersisted(`${storageKey}:dutyRegions`, []);
-    setDutyRegions(Array.isArray(saved) ? saved.filter((name) => typeof name === 'string') : []);
+    setDutyRegions(normalizeRegionList(Array.isArray(saved) ? saved : []));
   }, [storageKey]);
   const regionSearchSessionRef = React.useRef(null);
 
@@ -239,10 +240,10 @@ export default function AgreementFlowPage({
         const fileType = toFileType(form.industry);
         const data = await searchClient.getRegions(fileType);
         if (!Array.isArray(data)) return;
-        const list = data.filter((name) => name && name !== '전체').sort((a, b) => a.localeCompare(b, 'ko-KR'));
+        const list = normalizeRegionList(data);
         if (!canceled) {
           setRegionList(list);
-          setDutyRegions((prev) => prev.filter((name) => list.includes(name)));
+          setDutyRegions((prev) => normalizeRegionList(prev).filter((name) => list.includes(name)));
         }
       } catch {
         /* ignore */
@@ -252,7 +253,13 @@ export default function AgreementFlowPage({
   }, [form.industry]);
 
   const toggleRegion = (name) => {
-    setDutyRegions((prev) => (prev.includes(name) ? prev.filter((value) => value !== name) : [...prev, name]));
+    const normalized = normalizeRegionName(name);
+    if (!normalized) return;
+    setDutyRegions((prev) => (
+      prev.includes(normalized)
+        ? prev.filter((value) => value !== normalized)
+        : normalizeRegionList([...prev, normalized])
+    ));
   };
 
   const [checkQuery, setCheckQuery] = React.useState('');
@@ -485,7 +492,7 @@ export default function AgreementFlowPage({
     const base = parseAmount(form.baseAmount);
     const perf5y = parseAmount(company['5년 실적']);
     const sipyung = parseAmount(company['시평']);
-    const region = String(company['대표지역'] || company['지역'] || '').trim();
+    const region = normalizeRegionName(company['대표지역'] || company['지역']);
     if (isPPS) {
       const moneyOk = hasEntry && entry > 0 ? sipyung >= entry : true;
       const perfOk = base > 0 && perf5y >= base;
