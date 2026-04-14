@@ -428,19 +428,12 @@ async function exportAgreementExcel({
     }
     if (managementBonusColumn) {
       const bonusCell = worksheet.getCell(`${managementBonusColumn}${rowIndex}`);
-      const bonusValue = group?.summary?.managementBonusApplied ? managementBonusValue : null;
-      bonusCell.value = bonusValue;
-      if (bonusValue != null) {
+      if (group?.summary?.managementBonusApplied) {
         const baseStyle = bonusCell.style ? { ...bonusCell.style } : {};
+        bonusCell.value = managementBonusValue;
         bonusCell.style = {
           ...baseStyle,
           fill: cloneFill(YELLOW_FILL),
-        };
-      } else {
-        const baseStyle = bonusCell.style ? { ...bonusCell.style } : {};
-        bonusCell.style = {
-          ...baseStyle,
-          fill: undefined,
         };
       }
     }
