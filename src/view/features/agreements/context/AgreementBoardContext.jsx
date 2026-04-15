@@ -38,6 +38,8 @@ const initialState = {
   noticeNo: '',
   noticeTitle: '',
   industryLabel: '',
+  splitIndustryLabel: '',
+  splitEntryAmount: '',
   baseAmount: '',
   estimatedAmount: '',
   bidAmount: '',
@@ -138,10 +140,11 @@ const buildCandidateFromSearchEntry = (entry) => {
     || '')
     .toString()
     .trim();
+  const forcedCandidateId = String(entry?._force_candidate_id || '').trim();
   const baseId = bizNoNormalized || resolvedName || `search-${Date.now()}`;
   const typePrefix = entryType ? `${entryType}:` : '';
   const candidate = {
-    id: `search:${typePrefix}${baseId}`,
+    id: forcedCandidateId || `search:${typePrefix}${baseId}`,
     bizNo: bizNoNormalized,
     name: resolvedName || baseId || '대표사',
     snapshot,
@@ -480,6 +483,9 @@ const appendCandidates = React.useCallback((entries = []) => {
     const expectedType = normalizeFileTypeToken(boardState.fileType || DEFAULT_FILE_TYPE);
     const normalized = entries
       .filter((entry) => {
+        if (entry?._bypass_file_type_filter === true || entry?.snapshot?._bypass_file_type_filter === true) {
+          return true;
+        }
         const entryType = normalizeFileTypeToken(entry?.fileType || entry?._file_type || entry?.snapshot?._file_type);
         if (!entryType || entryType === 'all') return true;
         return entryType === expectedType;

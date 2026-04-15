@@ -89,6 +89,8 @@ export function buildAgreementExportPayload({
   getQualityScoreValue,
   resolveQualityPoints,
   hasRecentAwardHistory = () => false,
+  shouldTreatAsSplitMember = () => false,
+  splitMemberColumn = '',
 }) {
   const isLh100To300 = isLHOwner && selectedRangeKey === LH_100_TO_300_KEY;
   let exportIndex = 1;
@@ -148,16 +150,20 @@ export function buildAgreementExportPayload({
         && Number.isFinite(Number(qualityScore))
         && Number(qualityScore) > LH_QUALITY_DEFAULT_OVER_100B
       );
-      const displayName = buildExportDisplayName({
-        companyName,
-        managerName,
-        shareLabel,
-        qualityScore,
-        includeQuality,
-      });
+      const isSplitMember = shouldTreatAsSplitMember(groupIndex, slotIndex, candidate);
+      const displayName = isSplitMember
+        ? companyName
+        : buildExportDisplayName({
+          companyName,
+          managerName,
+          shareLabel,
+          qualityScore,
+          includeQuality,
+        });
       return {
         slotIndex,
         role: slotIndex === 0 ? 'representative' : 'member',
+        isSplitMember: Boolean(isSplitMember),
         type: entry.type,
         isRegion: Boolean(isRegionMember),
         hasRecentAwardHistory: hasRecentAwardHistory(getCompanyName(candidate), bidDeadline),
@@ -264,6 +270,7 @@ export function buildAgreementExportPayload({
     context: {
       ownerId,
       rangeId,
+      splitMemberColumn: String(splitMemberColumn || '').trim(),
     },
     header: {
       noticeNo,

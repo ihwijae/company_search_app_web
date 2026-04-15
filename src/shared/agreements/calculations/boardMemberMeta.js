@@ -37,6 +37,8 @@ export function buildBoardMemberMeta({
   hasRecentAwardHistory = () => false,
   noticeDate = '',
   possibleShareFormatMode = 'round',
+  isSplitAssignedSlot = () => false,
+  splitEntryLimitValue = null,
 }) {
   const memberIds = Array.isArray(group?.memberIds) ? group.memberIds : [];
   const uid = memberIds[slotIndex];
@@ -91,6 +93,17 @@ export function buildBoardMemberMeta({
   }
   if (isWomenOwnedCompany(candidate)) {
     tags.push({ key: 'female', label: '女' });
+  }
+  const splitEntryLimit = Number(splitEntryLimitValue);
+  const splitQualificationEnabled = isSplitAssignedSlot(slotIndex)
+    && Number.isFinite(splitEntryLimit)
+    && splitEntryLimit > 0;
+  if (splitQualificationEnabled) {
+    const sipyungNumeric = Number(sipyungAmount);
+    const splitQualified = Number.isFinite(sipyungNumeric) && sipyungNumeric >= (splitEntryLimit - 1e-6);
+    if (!splitQualified) {
+      tags.push({ key: 'entry-fail', label: '참가자격미달' });
+    }
   }
   const managerName = getCandidateManagerName(candidate);
   const managementScore = getCandidateManagementScore(candidate);

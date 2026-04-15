@@ -234,6 +234,7 @@ async function exportAgreementExcel({
   const { header = {}, groups = [], candidates = [] } = payload;
   const ownerId = String(payload?.context?.ownerId || '').toUpperCase();
   const rangeId = String(payload?.context?.rangeId || '').toLowerCase();
+  const splitMemberColumn = String(payload?.context?.splitMemberColumn || '').trim().toUpperCase();
   const templateKey = String(payload?.templateKey || '').toLowerCase();
   const isLh100To300 = ownerId === 'LH'
     && (rangeId === 'lh-100to300' || templateKey === 'lh-100to300');
@@ -469,6 +470,19 @@ async function exportAgreementExcel({
         if (performanceCell) { performanceCell.value = null; performanceCell.fill = undefined; }
         if (abilityCell) { abilityCell.value = null; abilityCell.fill = undefined; }
         if (technicianCell) { technicianCell.value = null; technicianCell.fill = undefined; }
+        continue;
+      }
+
+      if (member.isSplitMember && splitMemberColumn) {
+        const splitNameCell = worksheet.getCell(`${splitMemberColumn}${rowIndex}`);
+        splitNameCell.value = typeof member.name === 'string' ? member.name : '';
+        if (shareCell) { shareCell.value = null; shareCell.fill = undefined; }
+        if (managementCell) { managementCell.value = null; managementCell.fill = undefined; }
+        if (performanceCell) { performanceCell.value = null; performanceCell.fill = undefined; }
+        if (abilityCell) { abilityCell.value = null; abilityCell.fill = undefined; }
+        if (technicianCell) { technicianCell.value = null; technicianCell.fill = undefined; }
+        nameCell.value = '';
+        nameCell.fill = undefined;
         continue;
       }
 

@@ -1,6 +1,7 @@
 export function buildGroupSummaryMetrics({
   groupAssignments = [],
   participantMap,
+  shouldIncludeSlot = () => true,
   getSharePercent,
   getCandidateManagementScore,
   getCandidatePerformanceAmountForCurrentRange,
@@ -21,6 +22,7 @@ export function buildGroupSummaryMetrics({
 }) {
   return groupAssignments.map((memberIds, groupIndex) => {
     const members = memberIds.map((uid, slotIndex) => {
+      if (!shouldIncludeSlot(groupIndex, slotIndex, uid)) return null;
       if (!uid) return null;
       const entry = participantMap.get(uid);
       if (!entry || !entry.candidate) return null;

@@ -125,6 +125,8 @@ export default function AgreementBoardPage() {
             noticeTitle={boardState.noticeTitle || ''}
             noticeDate={boardState.noticeDate || ''}
             industryLabel={boardState.industryLabel || ''}
+            splitIndustryLabel={boardState.splitIndustryLabel || ''}
+            splitEntryAmount={boardState.splitEntryAmount || ''}
             entryAmount={boardState.entryAmount || ''}
             entryMode={boardState.entryMode || 'ratio'}
             baseAmount={boardState.baseAmount || ''}

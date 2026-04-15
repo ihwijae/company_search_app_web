@@ -121,6 +121,8 @@ const LH_SIMPLE_REGION_ADJUSTMENT_COEFFICIENT = 1;
 const LH_UNDER_50_KEY = 'lh-under50';
 const LH_50_TO_100_KEY = 'lh-50to100';
 const LH_100_TO_300_KEY = 'lh-100to300';
+const LH_UNDER_50_SHARE_KEY = 'lh-under50-share';
+const LH_50_TO_100_SHARE_KEY = 'lh-50to100-share';
 const PPS_UNDER_50_KEY = 'pps-under50';
 const MOIS_UNDER_30_KEY = 'mois-under30';
 const MOIS_30_TO_50_KEY = 'mois-30to50';
@@ -312,7 +314,12 @@ const deriveManagementMax = (managementRules) => {
 
 const resolveTemplateKey = (ownerId, rangeId, fileType) => {
   const ownerKey = String(ownerId || '').toUpperCase();
-  const rangeKey = String(rangeId || '').toLowerCase();
+  const rawRangeKey = String(rangeId || '').toLowerCase();
+  const rangeKey = ownerKey === 'LH'
+    ? (rawRangeKey === LH_UNDER_50_SHARE_KEY
+      ? LH_UNDER_50_KEY
+      : (rawRangeKey === LH_50_TO_100_SHARE_KEY ? LH_50_TO_100_KEY : rawRangeKey))
+    : rawRangeKey;
   const normalizedType = String(fileType || '').toLowerCase();
   if (ownerKey === 'MOIS' && rangeKey === 'mois-under30') return 'mois-under30';
   if (ownerKey === 'MOIS' && rangeKey === MOIS_30_TO_50_KEY) return 'mois-30to50';
@@ -336,6 +343,18 @@ const resolveTemplateKey = (ownerId, rangeId, fileType) => {
   }
   if (ownerKey === 'EX' && rangeKey === EX_UNDER_50_KEY) return 'ex-under50';
   return null;
+};
+
+const isLhSplitRange = (rangeKey) => (
+  String(rangeKey || '').toLowerCase() === LH_UNDER_50_SHARE_KEY
+  || String(rangeKey || '').toLowerCase() === LH_50_TO_100_SHARE_KEY
+);
+
+const normalizeLhRangeKey = (rangeKey) => {
+  const normalized = String(rangeKey || '').toLowerCase();
+  if (normalized === LH_UNDER_50_SHARE_KEY) return LH_UNDER_50_KEY;
+  if (normalized === LH_50_TO_100_SHARE_KEY) return LH_50_TO_100_KEY;
+  return normalized;
 };
 
 const parseNumeric = (value) => {
@@ -1106,6 +1125,8 @@ export default function AgreementBoardWindow({
   noticeTitle = '',
   noticeDate = '',
   industryLabel = '',
+  splitIndustryLabel = '',
+  splitEntryAmount = '',
   entryAmount = '',
   entryMode = 'ratio',
   baseAmount = '',
@@ -1231,18 +1252,51 @@ export default function AgreementBoardWindow({
   const isKrailOwner = ownerKeyUpper === 'KRAIL';
   const isMoisOwner = ownerKeyUpper === 'MOIS';
   const isExOwner = ownerKeyUpper === 'EX';
+  const agreementGroupsForBoard = React.useMemo(() => (
+    AGREEMENT_GROUPS.map((group) => {
+      if (String(group.ownerId || '').toUpperCase() !== 'LH') return group;
+      const baseItems = Array.isArray(group.items) ? group.items : [];
+      const withSplit = [];
+      baseItems.forEach((item) => {
+        withSplit.push(item);
+        if (item.key === LH_UNDER_50_KEY) {
+          withSplit.push({
+            ...item,
+            key: LH_UNDER_50_SHARE_KEY,
+            label: '50억 미만 - 분담이행방식',
+            rangeLabel: '50억 미만',
+          });
+        }
+        if (item.key === LH_50_TO_100_KEY) {
+          withSplit.push({
+            ...item,
+            key: LH_50_TO_100_SHARE_KEY,
+            label: '50억~100억 - 분담이행방식',
+            rangeLabel: '50억~100억',
+          });
+        }
+      });
+      return {
+        ...group,
+        items: withSplit,
+      };
+    })
+  ), []);
   const selectedGroup = React.useMemo(
-    () => AGREEMENT_GROUPS.find((group) => String(group.ownerId || '').toUpperCase() === ownerKeyUpper) || AGREEMENT_GROUPS[0],
-    [ownerKeyUpper],
+    () => agreementGroupsForBoard.find((group) => String(group.ownerId || '').toUpperCase() === ownerKeyUpper) || agreementGroupsForBoard[0],
+    [agreementGroupsForBoard, ownerKeyUpper],
   );
-  const ownerSelectValue = selectedGroup?.id || AGREEMENT_GROUPS[0]?.id || '';
+  const ownerSelectValue = selectedGroup?.id || agreementGroupsForBoard[0]?.id || '';
   const ownerLabel = selectedGroup?.label || '';
   const rangeOptions = React.useMemo(() => selectedGroup?.items || [], [selectedGroup]);
   const selectedRangeOption = React.useMemo(() => (
     rangeOptions.find((item) => item.key === rangeId) || rangeOptions[0] || null
   ), [rangeId, rangeOptions]);
   const selectedRangeKey = selectedRangeOption?.key || '';
-  const isLh100To300 = isLHOwner && selectedRangeKey === LH_100_TO_300_KEY;
+  const effectiveSelectedRangeKey = isLHOwner ? normalizeLhRangeKey(selectedRangeKey) : selectedRangeKey;
+  const isLhSplitMode = isLHOwner && isLhSplitRange(selectedRangeKey);
+  const isLhUnder50 = isLHOwner && effectiveSelectedRangeKey === LH_UNDER_50_KEY;
+  const isLh100To300 = isLHOwner && effectiveSelectedRangeKey === LH_100_TO_300_KEY;
   const [currentAuthUser, setCurrentAuthUser] = React.useState(() => {
     if (typeof window === 'undefined') return null;
     return window.__companySearchAuth?.user || null;
@@ -1263,7 +1317,7 @@ export default function AgreementBoardWindow({
   const isPpsUnder50 = ownerKeyUpper === 'PPS' && selectedRangeKey === PPS_UNDER_50_KEY;
   const isKrailUnder50 = ownerKeyUpper === 'KRAIL' && selectedRangeKey === KRAIL_UNDER_50_KEY;
   const isKrail50To100 = ownerKeyUpper === 'KRAIL' && selectedRangeKey === KRAIL_50_TO_100_KEY;
-  const isLh50To100 = isLHOwner && selectedRangeKey === LH_50_TO_100_KEY;
+  const isLh50To100 = isLHOwner && effectiveSelectedRangeKey === LH_50_TO_100_KEY;
   const isExUnder50 = isExOwner && selectedRangeKey === EX_UNDER_50_KEY;
   const isEx50To100 = isExOwner && selectedRangeKey === EX_50_TO_100_KEY;
   const showManagementBonus = !isLh100To300;
@@ -1384,11 +1438,11 @@ export default function AgreementBoardWindow({
 
   const handleOwnerSelectChange = React.useCallback((event) => {
     const groupId = event.target.value;
-    const group = AGREEMENT_GROUPS.find((item) => item.id === groupId);
+    const group = agreementGroupsForBoard.find((item) => item.id === groupId);
     if (!group) return;
     const nextRange = group.items && group.items.length > 0 ? group.items[0].key : null;
     if (typeof onUpdateBoard === 'function') onUpdateBoard({ ownerId: group.ownerId, rangeId: nextRange });
-  }, [onUpdateBoard]);
+  }, [agreementGroupsForBoard, onUpdateBoard]);
 
   const handleRangeSelectChange = React.useCallback((event) => {
     const nextKey = event.target.value || null;
@@ -1412,6 +1466,23 @@ export default function AgreementBoardWindow({
     if (nextFileType) payload.fileType = nextFileType;
     onUpdateBoard(payload);
   }, [onUpdateBoard]);
+
+  const handleSplitIndustryLabelChange = React.useCallback((event) => {
+    if (typeof onUpdateBoard !== 'function') return;
+    onUpdateBoard({ splitIndustryLabel: event.target.value || '' });
+  }, [onUpdateBoard]);
+
+  const handleSplitEntryAmountChange = React.useCallback((value) => {
+    if (typeof onUpdateBoard !== 'function') return;
+    onUpdateBoard({ splitEntryAmount: value || '' });
+  }, [onUpdateBoard]);
+
+  React.useEffect(() => {
+    if (isLhSplitMode) return;
+    if (!splitIndustryLabel && !splitEntryAmount) return;
+    if (typeof onUpdateBoard !== 'function') return;
+    onUpdateBoard({ splitIndustryLabel: '', splitEntryAmount: '' });
+  }, [isLhSplitMode, onUpdateBoard, splitIndustryLabel, splitEntryAmount]);
 
   const searchFileType = React.useMemo(
     () => industryToFileType(industryLabel),
@@ -1680,6 +1751,7 @@ export default function AgreementBoardWindow({
   const [candidateMetricsVersion, setCandidateMetricsVersion] = React.useState(0);
   const prevAssignmentsRef = React.useRef(groupAssignments);
   const [representativeSearchOpen, setRepresentativeSearchOpen] = React.useState(false);
+  const [representativeSearchFileType, setRepresentativeSearchFileType] = React.useState('');
   const [exporting, setExporting] = React.useState(false);
   const [candidateRefreshing, setCandidateRefreshing] = React.useState(false);
   const [editableBidAmount, setEditableBidAmount] = React.useState(bidAmount);
@@ -1736,7 +1808,9 @@ export default function AgreementBoardWindow({
   }, [ownerKeyUpper, selectedRangeKey, ratioBaseAmount, editableBidAmount, bidAmount, baseAmount, bidRate, adjustmentRate]);
 
   const { perfectPerformanceAmount, perfectPerformanceBasis } = React.useMemo(() => {
-    const rangeKey = String(selectedRangeOption?.key || '').toLowerCase();
+    const rangeKey = ownerKeyUpper === 'LH'
+      ? normalizeLhRangeKey(selectedRangeOption?.key)
+      : String(selectedRangeOption?.key || '').toLowerCase();
     const estimated = parseAmountValue(estimatedAmount) || 0;
     const base = parseAmountValue(baseAmount) || 0;
 
@@ -1760,7 +1834,7 @@ export default function AgreementBoardWindow({
     }
 
     if (ownerKeyUpper === 'LH') {
-      if (rangeKey === 'lh-under50') {
+      if (rangeKey === LH_UNDER_50_KEY) {
         return base > 0
           ? { perfectPerformanceAmount: base, perfectPerformanceBasis: '기초금액 × 1배' }
           : { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
@@ -1771,7 +1845,7 @@ export default function AgreementBoardWindow({
           ? { perfectPerformanceAmount: base * multiplier, perfectPerformanceBasis: `기초금액 × ${multiplier}배` }
           : { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
       }
-      if (rangeKey === 'lh-50to100') {
+      if (rangeKey === LH_50_TO_100_KEY) {
         const normalizedType = String(fileType || '').toLowerCase();
         const multiplier = normalizedType === 'sobang' ? 3 : 2;
         return base > 0
@@ -1930,19 +2004,20 @@ export default function AgreementBoardWindow({
   const isLH = ownerId === 'LH';
   const lhQualityDefault = React.useMemo(() => {
     if (!isLHOwner) return null;
-    return resolveLhQualityDefaultByRange(selectedRangeOption?.label, selectedRangeOption?.key);
-  }, [isLHOwner, selectedRangeOption?.label, selectedRangeOption?.key]);
+    return resolveLhQualityDefaultByRange(selectedRangeOption?.label, effectiveSelectedRangeKey);
+  }, [effectiveSelectedRangeKey, isLHOwner, selectedRangeOption?.label]);
 
   const resolveQualityPoints = React.useCallback((qualityTotal, rangeKey) => {
     if (!Number.isFinite(qualityTotal)) return null;
-    if (rangeKey === LH_100_TO_300_KEY) {
+    const normalizedRangeKey = normalizeLhRangeKey(rangeKey);
+    if (normalizedRangeKey === LH_100_TO_300_KEY) {
       if (qualityTotal >= 94) return 4;
       if (qualityTotal >= 91) return 3.9;
       if (qualityTotal >= 88) return 3.8;
       if (qualityTotal >= 85) return 3.7;
       return 3.6;
     }
-    if (rangeKey === LH_50_TO_100_KEY) {
+    if (normalizedRangeKey === LH_50_TO_100_KEY) {
       if (qualityTotal >= 90) return 5;
       if (qualityTotal >= 88) return 3;
       if (qualityTotal >= 85) return 2;
@@ -1958,12 +2033,12 @@ export default function AgreementBoardWindow({
   }, []);
 
   const resolveQualityPointsMax = React.useCallback((rangeKey) => (
-    rangeKey === LH_100_TO_300_KEY ? 4 : (rangeKey === LH_50_TO_100_KEY ? 5 : 3)
+    normalizeLhRangeKey(rangeKey) === LH_100_TO_300_KEY ? 4 : (normalizeLhRangeKey(rangeKey) === LH_50_TO_100_KEY ? 5 : 3)
   ), []);
 
   const netCostBonusScore = React.useMemo(() => {
     if (!isLHOwner) return 0;
-    const rangeKey = selectedRangeOption?.key;
+    const rangeKey = effectiveSelectedRangeKey;
     if (rangeKey !== LH_UNDER_50_KEY && rangeKey !== LH_50_TO_100_KEY) return 0;
     const base = toNumber(baseAmount);
     const netCost = toNumber(netCostAmount);
@@ -1993,11 +2068,11 @@ export default function AgreementBoardWindow({
     if (!(conservative > 0)) return 0;
     const truncated = truncateScore(conservative, 2);
     return truncated != null ? clampScore(truncated, 999) : 0;
-  }, [isLHOwner, selectedRangeOption?.key, baseAmount, netCostAmount, aValue]);
+  }, [isLHOwner, effectiveSelectedRangeKey, baseAmount, netCostAmount, aValue]);
 
   const netCostBonusNotice = React.useMemo(() => {
     if (!isLHOwner) return '';
-    const rangeKey = selectedRangeOption?.key;
+    const rangeKey = effectiveSelectedRangeKey;
     if (rangeKey !== LH_50_TO_100_KEY) return '';
     const base = toNumber(baseAmount);
     const netCost = toNumber(netCostAmount);
@@ -2006,11 +2081,11 @@ export default function AgreementBoardWindow({
     if (!expectedMax) return '';
     if (expectedMax >= 10000000000) return '예정가격 100억 초과로 순공사원가 적용 안됨';
     return '';
-  }, [isLHOwner, selectedRangeOption?.key, baseAmount, netCostAmount]);
+  }, [isLHOwner, effectiveSelectedRangeKey, baseAmount, netCostAmount]);
 
   const netCostPenaltyNotice = React.useMemo(() => {
     if (!isLHOwner) return false;
-    const rangeKey = selectedRangeOption?.key;
+    const rangeKey = effectiveSelectedRangeKey;
     if (rangeKey !== LH_UNDER_50_KEY && rangeKey !== LH_50_TO_100_KEY) return false;
     const base = toNumber(baseAmount);
     const netCost = toNumber(netCostAmount);
@@ -2026,7 +2101,7 @@ export default function AgreementBoardWindow({
     const rMin = roundTo((bidMin - aValueNumber) / (expectedMin - aValueNumber), 4);
     const rMax = roundTo((bidMax - aValueNumber) / (expectedMax - aValueNumber), 4);
     return Number.isFinite(rMin) && Number.isFinite(rMax) && (rMin > 0.9 || rMax > 0.9);
-  }, [isLHOwner, selectedRangeOption?.key, baseAmount, netCostAmount, aValue]);
+  }, [isLHOwner, effectiveSelectedRangeKey, baseAmount, netCostAmount, aValue]);
   const effectiveNetCostBonusScore = React.useMemo(() => {
     const manualValue = parseNumeric(netCostBonusOverride);
     if (manualValue != null && showNetCostBonus) return manualValue;
@@ -2075,6 +2150,11 @@ export default function AgreementBoardWindow({
     const clamped = Math.min(Math.max(Math.floor(parsed), 2), Math.min(5, safeGroupSize));
     return clamped;
   }, [participantLimit, safeGroupSize]);
+  const isSplitAssignedSlot = React.useCallback((slotIndex) => (
+    isLhSplitMode
+    && safeParticipantLimit === 5
+    && Number(slotIndex) === 4
+  ), [isLhSplitMode, safeParticipantLimit]);
 
   React.useEffect(() => {
     if (typeof onUpdateBoard !== 'function') return;
@@ -2101,8 +2181,15 @@ export default function AgreementBoardWindow({
   ]);
 
   const slotLabels = React.useMemo(() => (
-    Array.from({ length: safeGroupSize }, (_, index) => (index === 0 ? '대표사' : `구성원${index}`))
-  ), [safeGroupSize]);
+    Array.from({ length: safeGroupSize }, (_, index) => {
+      if (index === 0) return '대표사';
+      if (isLhSplitMode && safeParticipantLimit === 5 && index === 4) {
+        const splitLabel = String(splitIndustryLabel || '').trim();
+        return splitLabel ? `${splitLabel}분담` : '분담';
+      }
+      return `구성원${index}`;
+    })
+  ), [isLhSplitMode, safeGroupSize, safeParticipantLimit, splitIndustryLabel]);
 
   const {
     loadModalOpen,
@@ -2127,6 +2214,8 @@ export default function AgreementBoardWindow({
     ownerDisplayLabel,
     selectedRangeOption,
     industryLabel,
+    splitIndustryLabel,
+    splitEntryAmount,
     estimatedAmount,
     noticeDate,
     baseAmount,
@@ -2181,11 +2270,11 @@ export default function AgreementBoardWindow({
 
   const loadRangeOptions = React.useMemo(() => {
     if (loadFilters.ownerId) {
-      const group = AGREEMENT_GROUPS.find((item) => item.ownerId === loadFilters.ownerId);
+      const group = agreementGroupsForBoard.find((item) => item.ownerId === loadFilters.ownerId);
       return group?.items || [];
     }
     const map = new Map();
-    AGREEMENT_GROUPS.forEach((group) => {
+    agreementGroupsForBoard.forEach((group) => {
       (group.items || []).forEach((item) => {
         if (!map.has(item.key)) {
           map.set(item.key, { key: item.key, label: item.label });
@@ -2193,7 +2282,7 @@ export default function AgreementBoardWindow({
       });
     });
     return Array.from(map.values());
-  }, [loadFilters.ownerId]);
+  }, [agreementGroupsForBoard, loadFilters.ownerId]);
 
   const isSmsCompleted = String(smsStatus || '').trim().toLowerCase() === 'sent';
 
@@ -2464,7 +2553,7 @@ export default function AgreementBoardWindow({
       const shareRatio = Math.max(0, Math.min(effectiveShare / 100, 1));
       const managementScore = roundForLhTotals(managementMaxValue * shareRatio) || 0;
       const qualityTotal = 85 * shareRatio;
-      const qualityPoints = resolveQualityPoints(qualityTotal, selectedRangeOption?.key) || 0;
+      const qualityPoints = resolveQualityPoints(qualityTotal, effectiveSelectedRangeKey) || 0;
       const constructionExperienceScore = resolveConstructionExperienceScore(performanceMax, qualityPoints) || 0;
       const totalScore = roundForLhTotals(
         managementScore
@@ -2523,7 +2612,7 @@ export default function AgreementBoardWindow({
     ratioBaseAmount,
     resolveQualityPoints,
     roundForLhTotals,
-    selectedRangeOption?.key,
+    effectiveSelectedRangeKey,
   ]);
 
   React.useEffect(() => {
@@ -2705,12 +2794,26 @@ export default function AgreementBoardWindow({
       showHeaderAlert('공종을 먼저 선택해 주세요.');
       return;
     }
+    const isSplitSlotTarget = isSplitAssignedSlot(target?.slotIndex);
+    const splitFileType = industryToFileType(splitIndustryLabel);
+    if (isSplitSlotTarget && !splitFileType) {
+      showHeaderAlert('분담이행방식 공종을 먼저 선택해 주세요.');
+      return;
+    }
     searchTargetRef.current = target;
+    setRepresentativeSearchFileType(isSplitSlotTarget ? splitFileType : searchFileType);
     setRepresentativeSearchOpen(true);
-  }, [industryLabel, showHeaderAlert]);
+  }, [
+    industryLabel,
+    isSplitAssignedSlot,
+    searchFileType,
+    showHeaderAlert,
+    splitIndustryLabel,
+  ]);
 
   const closeRepresentativeSearch = React.useCallback(() => {
     setRepresentativeSearchOpen(false);
+    setRepresentativeSearchFileType('');
     searchTargetRef.current = null;
   }, []);
 
@@ -2757,6 +2860,7 @@ export default function AgreementBoardWindow({
   React.useEffect(() => {
     if (!open) {
       setRepresentativeSearchOpen(false);
+      setRepresentativeSearchFileType('');
       setCandidateSearchOpen(false);
       setSelectedCandidateUid(null);
     }
@@ -3479,22 +3583,45 @@ export default function AgreementBoardWindow({
   const handleRepresentativePicked = React.useCallback((picked) => {
     if (!picked) return;
     const target = searchTargetRef.current;
+    const isSplitSlotTarget = isSplitAssignedSlot(target?.slotIndex);
+    const splitDuplicateId = isSplitSlotTarget
+      ? `search:split:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+      : '';
+    const pickedForInsert = isSplitSlotTarget
+      ? { ...picked, _bypass_file_type_filter: true, _force_candidate_id: splitDuplicateId }
+      : picked;
     if (target) {
-      const hints = derivePendingPlacementHint(picked);
-      pendingPlacementRef.current = {
-        candidateId: hints.candidateId,
-        matchBizNo: hints.matchBizNo,
-        matchNameKey: hints.matchNameKey,
-        groupIndex: target.groupIndex,
-        slotIndex: target.slotIndex,
-      };
+      if (isSplitSlotTarget) {
+        pendingPlacementRef.current = {
+          candidateId: splitDuplicateId,
+          matchBizNo: '',
+          matchNameKey: '',
+          groupIndex: target.groupIndex,
+          slotIndex: target.slotIndex,
+        };
+      } else {
+        const hints = derivePendingPlacementHint(pickedForInsert);
+        pendingPlacementRef.current = {
+          candidateId: hints.candidateId,
+          matchBizNo: hints.matchBizNo,
+          matchNameKey: hints.matchNameKey,
+          groupIndex: target.groupIndex,
+          slotIndex: target.slotIndex,
+        };
+      }
     }
-    const placed = attemptPendingPlacement();
+    const placed = isSplitSlotTarget ? false : attemptPendingPlacement();
     if (!placed) {
-      onAddRepresentatives?.([picked]);
+      onAddRepresentatives?.([pickedForInsert]);
     }
     closeRepresentativeSearch();
-  }, [onAddRepresentatives, closeRepresentativeSearch, derivePendingPlacementHint, attemptPendingPlacement]);
+  }, [
+    onAddRepresentatives,
+    closeRepresentativeSearch,
+    derivePendingPlacementHint,
+    attemptPendingPlacement,
+    isSplitAssignedSlot,
+  ]);
 
   const handleCandidatePicked = React.useCallback((picked) => {
     if (!picked) return;
@@ -3672,7 +3799,7 @@ export default function AgreementBoardWindow({
 
     groupAssignments.forEach((memberIds, groupIndex) => {
       const members = [];
-      memberIds.forEach((uid) => {
+      memberIds.forEach((uid, slotIndex) => {
         if (!uid) return;
         const entry = participantMap.get(uid);
         if (!entry?.candidate) return;
@@ -3687,15 +3814,17 @@ export default function AgreementBoardWindow({
           companyName,
           companyKey: normalizeCompanyKey(companyName),
           bizNo: normalizeBizNo(getBizNo(candidate)),
+          isSplitSlot: isSplitAssignedSlot(slotIndex),
         });
       });
 
-      if (members.length === 0) return;
+      const membersForRules = members.filter((member) => !member.isSplitSlot);
+      if (membersForRules.length === 0) return;
       const messages = new Set();
 
       if (rules.banSameManager) {
         const managerMap = new Map();
-        members.forEach((member) => {
+        membersForRules.forEach((member) => {
           if (!member.managerKey) return;
           const list = managerMap.get(member.managerKey) || [];
           list.push(member);
@@ -3714,8 +3843,8 @@ export default function AgreementBoardWindow({
         const leftKey = normalizeManagerKey(left);
         const rightKey = normalizeManagerKey(right);
         if (!leftKey || !rightKey) return;
-        const leftMembers = members.filter((member) => member.managerKey && member.managerKey === leftKey);
-        const rightMembers = members.filter((member) => member.managerKey && member.managerKey === rightKey);
+        const leftMembers = membersForRules.filter((member) => member.managerKey && member.managerKey === leftKey);
+        const rightMembers = membersForRules.filter((member) => member.managerKey && member.managerKey === rightKey);
         if (leftMembers.length === 0 || rightMembers.length === 0) return;
         messages.add(`담당자조합금지: ${left} + ${right}`);
       });
@@ -3724,8 +3853,8 @@ export default function AgreementBoardWindow({
         const left = pair?.[0];
         const right = pair?.[1];
         if (!left || !right) return;
-        const leftMembers = members.filter((member) => matchesEntry(member, left));
-        const rightMembers = members.filter((member) => matchesEntry(member, right));
+        const leftMembers = membersForRules.filter((member) => matchesEntry(member, left));
+        const rightMembers = membersForRules.filter((member) => matchesEntry(member, right));
         if (leftMembers.length === 0 || rightMembers.length === 0) return;
         messages.add(`협정금지조합: ${resolveEntryLabel(left, leftMembers)} + ${resolveEntryLabel(right, rightMembers)}`);
       });
@@ -3734,7 +3863,7 @@ export default function AgreementBoardWindow({
     });
 
     return result;
-  }, [agreementConstraintRules, groupAssignments, participantMap]);
+  }, [agreementConstraintRules, getCandidateManagerName, getCompanyName, getBizNo, groupAssignments, isSplitAssignedSlot, participantMap]);
 
   React.useEffect(() => {
     setGroupApprovals((prev) => (
@@ -3795,20 +3924,18 @@ export default function AgreementBoardWindow({
         ? ratioBaseValue
         : (bidAmountValue != null ? bidAmountValue : null);
       const includePossibleShare = (ownerKeyUpper === 'PPS' && rangeId === PPS_UNDER_50_KEY)
-        || (ownerKeyUpper === 'LH' && rangeId === LH_UNDER_50_KEY)
-        || (ownerKeyUpper === 'LH' && rangeId === LH_50_TO_100_KEY)
-        || (ownerKeyUpper === 'LH' && rangeId === LH_100_TO_300_KEY)
+        || (ownerKeyUpper === 'LH' && (isLhUnder50 || isLh50To100 || isLh100To300))
         || (ownerKeyUpper === 'MOIS' && (rangeId === MOIS_30_TO_50_KEY || rangeId === MOIS_50_TO_100_KEY));
       const dutyRateNumber = parseNumeric(regionDutyRate);
       const dutySummaryText = buildExportDutySummary(dutyRegions, dutyRateNumber, safeParticipantLimit, {
-        compact: ownerKeyUpper === 'LH' && rangeId === LH_100_TO_300_KEY,
+        compact: isLh100To300,
       });
       const formattedDeadline = formatBidDeadline(bidDeadline);
       const payload = buildAgreementExportPayload({
         templateKey,
         sheetName: options.sheetName || '',
         ownerId,
-        rangeId,
+        rangeId: ownerKeyUpper === 'LH' ? effectiveSelectedRangeKey : rangeId,
         noticeNo,
         noticeTitle,
         industryLabel,
@@ -3838,7 +3965,7 @@ export default function AgreementBoardWindow({
         netCostBonusScore: effectiveNetCostBonusScore,
         isLHOwner,
         technicianEnabled,
-        selectedRangeKey: selectedRangeOption?.key,
+        selectedRangeKey: ownerKeyUpper === 'LH' ? effectiveSelectedRangeKey : selectedRangeOption?.key,
         includePossibleShare,
         possibleShareBase,
         candidateDrawerEntries,
@@ -3858,6 +3985,8 @@ export default function AgreementBoardWindow({
         getQualityScoreValue,
         resolveQualityPoints,
         hasRecentAwardHistory: isRecentAwardHistoryCompany,
+        shouldTreatAsSplitMember: (_groupIndex, slotIndex) => isSplitAssignedSlot(slotIndex),
+        splitMemberColumn: isLhSplitMode ? 'H' : '',
       });
 
       const result = await exportAgreementWorkbook({
@@ -4046,13 +4175,13 @@ export default function AgreementBoardWindow({
         });
       });
       return groupAssignments.map((group) => (
-        group.map((id) => {
+        group.map((id, idx) => {
           if (!id) return '';
           const preserved = shareMap.get(id);
           if (preserved !== undefined && preserved !== null && preserved !== '') return preserved;
           if (prevAssignedIds.has(id)) return preserved ?? '';
           const candidate = participantMap.get(id)?.candidate;
-          return getDefaultShareValue(candidate);
+          return isSplitAssignedSlot(idx) ? '' : getDefaultShareValue(candidate);
         })
       ));
     });
@@ -4067,13 +4196,13 @@ export default function AgreementBoardWindow({
         });
       });
       return groupAssignments.map((group) => (
-        group.map((id) => {
+        group.map((id, idx) => {
           if (!id) return '';
           const preserved = rawMap.get(id);
           if (preserved !== undefined && preserved !== null && preserved !== '') return preserved;
           if (prevAssignedIds.has(id)) return preserved ?? '';
           const candidate = participantMap.get(id)?.candidate;
-          return getDefaultShareValue(candidate);
+          return isSplitAssignedSlot(idx) ? '' : getDefaultShareValue(candidate);
         })
       ));
     });
@@ -4106,7 +4235,7 @@ export default function AgreementBoardWindow({
       ));
     });
     prevAssignmentsRef.current = groupAssignments;
-  }, [groupAssignments, participantMap, getDefaultShareValue]);
+  }, [groupAssignments, participantMap, getDefaultShareValue, isSplitAssignedSlot]);
 
   React.useEffect(() => {
     if (!open) {
@@ -4142,6 +4271,7 @@ export default function AgreementBoardWindow({
     const metrics = buildGroupSummaryMetrics({
       groupAssignments,
       participantMap,
+      shouldIncludeSlot: (_groupIndex, slotIndex) => !isSplitAssignedSlot(slotIndex),
       getSharePercent,
       getCandidateManagementScore,
       getCandidatePerformanceAmountForCurrentRange,
@@ -4167,10 +4297,10 @@ export default function AgreementBoardWindow({
         fileType,
         evaluationAmount,
         perfBase,
-        roundRatioBaseAmount: (isLh50To100 || selectedRangeKey === LH_UNDER_50_KEY) ? perfectPerformanceAmount : null,
+        roundRatioBaseAmount: (isLh50To100 || isLhUnder50) ? perfectPerformanceAmount : null,
         estimatedValue,
         perfCoefficient: null,
-        roundRatioDigits: (isLh50To100 || selectedRangeKey === LH_UNDER_50_KEY) ? 2 : null,
+        roundRatioDigits: (isLh50To100 || isLhUnder50) ? 2 : null,
         formulasEvaluate: formulasClient.evaluate,
         updatePerformanceCap,
         getPerformanceCap,
@@ -4207,7 +4337,7 @@ export default function AgreementBoardWindow({
         isMois50To100,
         isEx50To100,
         isKrail50To100,
-        isLhUnder50: selectedRangeKey === LH_UNDER_50_KEY,
+        isLhUnder50,
         isLh50To100,
         technicianEnabled,
         technicianEditable,
@@ -4336,7 +4466,7 @@ export default function AgreementBoardWindow({
         perfBase,
         ownerKey,
         fileType,
-        selectedRangeKey: selectedRangeOption?.key || '',
+        selectedRangeKey: ownerKeyUpper === 'LH' ? effectiveSelectedRangeKey : (selectedRangeOption?.key || ''),
         evaluationAmount,
         candidateScoreCache: candidateScoreCacheRef.current,
         buildCandidateKey,
@@ -4711,7 +4841,7 @@ export default function AgreementBoardWindow({
     const sanitized = original.replace(/[^0-9.]/g, '');
     if ((sanitized.match(/\./g) || []).length > 1) return;
     const candidate = resolveCandidateBySlot(groupIndex, slotIndex);
-    const possibleShareLimit = getPossibleShareLimit(candidate);
+    const possibleShareLimit = isSplitAssignedSlot(slotIndex) ? null : getPossibleShareLimit(candidate);
     const numeric = sanitized === '' ? null : toNumber(sanitized);
     const exceedsLimit = numeric != null && possibleShareLimit != null && numeric > possibleShareLimit;
     const nextValue = exceedsLimit
@@ -5011,6 +5141,7 @@ export default function AgreementBoardWindow({
   ]);
 
   const buildSlotMeta = (group, groupIndex, slotIndex, label) => {
+    const splitEntryLimitValue = parseAmountValue(splitEntryAmount);
     return buildBoardMemberMeta({
       group,
       groupIndex,
@@ -5048,6 +5179,8 @@ export default function AgreementBoardWindow({
       hasRecentAwardHistory: isRecentAwardHistoryCompany,
       noticeDate,
       possibleShareFormatMode: isLh100To300 ? 'truncate' : 'round',
+      isSplitAssignedSlot,
+      splitEntryLimitValue,
     });
   };
 
@@ -5120,7 +5253,7 @@ export default function AgreementBoardWindow({
                 )}
               </div>
             )}
-            {meta.possibleShareText && (
+            {!isSplitAssignedSlot(meta.slotIndex) && meta.possibleShareText && (
               <div className="excel-member-hint">가능 {meta.possibleShareText}</div>
             )}
             {meta.overLimit && (
@@ -5443,11 +5576,11 @@ export default function AgreementBoardWindow({
 
   const renderQualityRow = (group, groupIndex, slotMetas, qualityTotal, entryFailed) => {
     if (!isLHOwner) return null;
-    const emphasizeQuality = selectedRangeOption?.key === LH_100_TO_300_KEY;
+    const emphasizeQuality = effectiveSelectedRangeKey === LH_100_TO_300_KEY;
     const highlightQualityStyle = { backgroundColor: '#fff3b0' };
-    const qualityGuide = (selectedRangeOption?.key === LH_100_TO_300_KEY)
+    const qualityGuide = (effectiveSelectedRangeKey === LH_100_TO_300_KEY)
       ? '94점이상:4점/91점이상:3.5점/88점이상:3점/85점이상:2.5점/85점미만:2점'
-      : (selectedRangeOption?.key === 'lh-50to100')
+      : (effectiveSelectedRangeKey === LH_50_TO_100_KEY)
       ? '90점이상:5점/88점이상:3점/85점이상:2점/83점이상:1.5점/80점이상:1점'
       : '품질 88점이상:3점/85점이상:2점/83점이상:1.5점/80점이상:1점';
     const nameSpan = columnSpans.nameSpan;
@@ -5569,7 +5702,7 @@ export default function AgreementBoardWindow({
     const baseTotalMax = credibilityEnabled
       ? summaryInfo?.totalMaxWithCred
       : summaryInfo?.totalMaxBase;
-    const qualityPoints = isLHOwner ? resolveQualityPoints(qualityTotal, selectedRangeOption?.key) : null;
+    const qualityPoints = isLHOwner ? resolveQualityPoints(qualityTotal, effectiveSelectedRangeKey) : null;
     const cappedPerformanceScoreForTotal = toNumber(summaryInfo?.performanceScore);
     const constructionExperienceScore = showConstructionExperience
       ? resolveConstructionExperienceScore(cappedPerformanceScoreForTotal, qualityPoints)
@@ -5967,7 +6100,7 @@ export default function AgreementBoardWindow({
                 <div className="excel-select-block">
                   <label>발주처</label>
                   <select value={ownerSelectValue} onChange={handleOwnerSelectChange}>
-                    {AGREEMENT_GROUPS.map((group) => (
+                    {agreementGroupsForBoard.map((group) => (
                       <option key={group.id} value={group.id}>{group.label}</option>
                     ))}
                   </select>
@@ -5989,6 +6122,17 @@ export default function AgreementBoardWindow({
                     ))}
                   </select>
                 </div>
+                {isLhSplitMode && (
+                  <div className="excel-field-block size-xs">
+                    <span className="field-label">분담이행방식 공종</span>
+                    <select className="input" value={splitIndustryLabel || ''} onChange={handleSplitIndustryLabelChange}>
+                      <option value="">선택</option>
+                      {INDUSTRY_OPTIONS.map((option) => (
+                        <option key={`split-${option}`} value={option}>{option}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="excel-field-block size-xs">
                   <span className="field-label">지역사</span>
                   <button type="button" className="excel-btn excel-btn-region" onClick={handleOpenRegionSearch}>
@@ -6168,6 +6312,14 @@ export default function AgreementBoardWindow({
                       </div>
                     </div>
                   </div>
+                  {isLhSplitMode && (
+                    <div className="entry-amount-body" style={{ marginTop: 8 }}>
+                      <div className="entry-amount-input">
+                        <div className="field-label" style={{ marginBottom: 4 }}>분담이행 참가자격</div>
+                        <AmountInput value={splitEntryAmount || ''} onChange={handleSplitEntryAmountChange} placeholder="0" />
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="excel-field-block size-xs">
                   <span className="field-label">참여업체수</span>
@@ -6691,7 +6843,7 @@ export default function AgreementBoardWindow({
           open={representativeSearchOpen}
           onClose={closeRepresentativeSearch}
           onPick={handleRepresentativePicked}
-          fileType={searchFileType}
+          fileType={representativeSearchFileType || searchFileType}
           allowAll={false}
         />
       )}
@@ -6901,7 +7053,7 @@ export default function AgreementBoardWindow({
         onPickRoot={handlePickRoot}
         dutyRegionOptions={dutyRegionOptions}
         rangeOptions={loadRangeOptions}
-        agreementGroups={AGREEMENT_GROUPS}
+        agreementGroups={agreementGroupsForBoard}
         industryOptions={INDUSTRY_OPTIONS}
         items={filteredLoadItems}
         busy={loadBusy}
