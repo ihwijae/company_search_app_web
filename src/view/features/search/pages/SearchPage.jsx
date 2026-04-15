@@ -9,6 +9,7 @@ import { INDUSTRY_AVERAGES, DEBT_RATIO_WARN_FACTOR, CURRENT_RATIO_WARN_FACTOR } 
 import { loadPersisted, savePersisted } from '../../../../shared/persistence.js';
 import searchClient from '../../../../shared/searchClient.js';
 import CREDIT_GRADE_ORDER from '../../../../shared/creditGrades.json';
+import { isCreditScoreExpired } from '../../../../shared/agreements/calculations/managementScore.js';
 
 // --- Helper Functions & Components (변경 없음) ---
 const formatNumber = (value) => { if (!value && value !== 0) return ''; const num = String(value).replace(/,/g, ''); return isNaN(num) ? String(value) : Number(num).toLocaleString(); };
@@ -300,8 +301,117 @@ function FileUploader({ type, label, isUploaded, onUploadSuccess }) {
   );
 }
 
+const extractManagerNameForCreditMessage = (company) => {
+  const direct = [
+    company?.['담당자명'],
+    company?.['담당자'],
+    company?.managerName,
+    company?.manager,
+  ];
+  for (const value of direct) {
+    if (value === null || value === undefined) continue;
+    const normalized = String(value).trim();
+    if (normalized) return normalized;
+  }
+  const notes = company?.['비고'];
+  if (!notes) return '담당자 미지정';
+  const text = String(notes).replace(/\s+/g, ' ').trim();
+  if (!text) return '담당자 미지정';
+  const firstToken = text.split(/[ ,/|·-]+/).filter(Boolean)[0] || '';
+  const cleanedFirst = firstToken.replace(/^[\[\(（【]([^\]\)）】]+)[\]\)】]?$/, '$1');
+  if (/^[가-힣]{2,4}$/.test(cleanedFirst)) return cleanedFirst;
+  let match = text.match(/담당자?\s*[:：-]?\s*([가-힣]{2,4})/);
+  if (match?.[1]) return match[1];
+  match = text.match(/([가-힣]{2,4})\s*(과장|팀장|차장|대리|사원|부장|대표|실장|소장)/);
+  if (match?.[1]) return match[1];
+  match = text.match(/\b(?!확인서|등록증|증명서|평가|서류)([가-힣]{2,4})\b\s*(?:,|\/|\(|\d|$)/);
+  return match?.[1] || '담당자 미지정';
+};
+
+const buildCompanyDedupKeyForCreditMessage = (company, fallbackIndex = 0) => {
+  const biz = normalizeBizNumber(company?.['사업자번호']);
+  if (biz) return `biz:${biz}`;
+  const name = String(company?.['검색된 회사'] || company?.['회사명'] || '').trim();
+  if (name) return `name:${name}`;
+  return `idx:${fallbackIndex}`;
+};
+
+const buildExpiredCreditMessageText = (companies) => {
+  const managerMap = new Map();
+  const seenCompanies = new Set();
+
+  (Array.isArray(companies) ? companies : []).forEach((company, index) => {
+    if (!company || typeof company !== 'object') return;
+    if (!isCreditScoreExpired(company)) return;
+    const companyKey = buildCompanyDedupKeyForCreditMessage(company, index);
+    if (seenCompanies.has(companyKey)) return;
+    seenCompanies.add(companyKey);
+    const companyName = String(company?.['검색된 회사'] || company?.['회사명'] || '').trim();
+    if (!companyName) return;
+    const managerName = extractManagerNameForCreditMessage(company);
+    if (!managerMap.has(managerName)) {
+      managerMap.set(managerName, new Set());
+    }
+    managerMap.get(managerName).add(companyName);
+  });
+
+  if (managerMap.size === 0) {
+    return {
+      text: '',
+      managerCount: 0,
+      companyCount: 0,
+    };
+  }
+
+  const sortedManagers = Array.from(managerMap.keys()).sort((a, b) => a.localeCompare(b, 'ko'));
+  const sections = [];
+  let companyCount = 0;
+  sortedManagers.forEach((managerName) => {
+    const names = Array.from(managerMap.get(managerName) || []).sort((a, b) => a.localeCompare(b, 'ko'));
+    companyCount += names.length;
+    const lines = names.map((name) => `- [${name}] 갱신된 신용평가 자료 부탁드립니다`);
+    sections.push(`[${managerName}]\n${lines.join('\n')}`);
+  });
+
+  return {
+    text: sections.join('\n\n'),
+    managerCount: sortedManagers.length,
+    companyCount,
+  };
+};
+
 function AdminUpload({ fileStatuses, onUploadSuccess }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isGeneratingCreditMessage, setIsGeneratingCreditMessage] = useState(false);
+  const [creditMessageText, setCreditMessageText] = useState('');
+  const [creditMessageStatus, setCreditMessageStatus] = useState('');
+
+  const handleGenerateCreditMessage = async () => {
+    if (isGeneratingCreditMessage) return;
+    setIsGeneratingCreditMessage(true);
+    setCreditMessageStatus('만료 업체를 조회하는 중...');
+    try {
+      const response = await searchClient.searchCompanies({}, 'all', { pagination: null });
+      if (!response?.success) {
+        throw new Error(response?.message || '업체 조회에 실패했습니다.');
+      }
+      const companies = Array.isArray(response?.data) ? response.data : [];
+      const { text, managerCount, companyCount } = buildExpiredCreditMessageText(companies);
+      if (!text) {
+        setCreditMessageText('');
+        setCreditMessageStatus('신용평가 만료 업체가 없습니다.');
+        return;
+      }
+      setCreditMessageText(text);
+      await searchClient.copyCsvColumn(text.split('\n'));
+      setCreditMessageStatus(`완료: 담당자 ${managerCount}명, 업체 ${companyCount}개 (클립보드 복사됨)`);
+    } catch (error) {
+      setCreditMessageStatus(error?.message || '신용평가 갱신 요청 문구 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsGeneratingCreditMessage(false);
+    }
+  };
+
   return (
     <div className={`admin-upload-section ${isOpen ? 'is-open' : ''}`}>
       <div className="admin-header" onClick={() => setIsOpen(!isOpen)}>
@@ -312,6 +422,25 @@ function AdminUpload({ fileStatuses, onUploadSuccess }) {
         <FileUploader type="eung" label="전기" isUploaded={fileStatuses.eung} onUploadSuccess={onUploadSuccess} />
         <FileUploader type="tongsin" label="통신" isUploaded={fileStatuses.tongsin} onUploadSuccess={onUploadSuccess} />
         <FileUploader type="sobang" label="소방" isUploaded={fileStatuses.sobang} onUploadSuccess={onUploadSuccess} />
+        <div className="credit-refresh-request">
+          <button
+            type="button"
+            onClick={handleGenerateCreditMessage}
+            className="credit-refresh-request-button"
+            disabled={isGeneratingCreditMessage}
+          >
+            {isGeneratingCreditMessage ? '생성 중...' : '신용평가 갱신 요청'}
+          </button>
+          {creditMessageStatus && <p className="upload-message info">{creditMessageStatus}</p>}
+          {creditMessageText && (
+            <textarea
+              className="credit-refresh-request-output"
+              value={creditMessageText}
+              readOnly
+              rows={10}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

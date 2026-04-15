@@ -84,6 +84,41 @@ body {
 .upload-message.success { color: #15803d; }
 .upload-message.warning { color: #c2410c; }
 .upload-message.info { color: #1d4ed8; }
+.credit-refresh-request {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed #fcd34d;
+}
+.credit-refresh-request-button {
+  padding: 0.5rem 1rem;
+  background-color: #1d4ed8;
+  color: #ffffff;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+.credit-refresh-request-button:hover {
+  background-color: #1e40af;
+}
+.credit-refresh-request-button:disabled {
+  background-color: #93c5fd;
+  cursor: not-allowed;
+}
+.credit-refresh-request-output {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  color: #1f2937;
+  resize: vertical;
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
 
 /* --- 4. 검색 필터 섹션 (간격 수정) --- */
 .search-filter-section {
