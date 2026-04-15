@@ -4094,13 +4094,21 @@ export default function AgreementBoardWindow({
     ]);
     const items = groupAssignments
       .map((memberIds, groupIndex) => {
-        const members = memberIds.map((uid) => (uid ? participantMap.get(uid) : null)).filter(Boolean);
-        if (members.length === 0) return null;
+        const slottedMembers = memberIds
+          .map((uid, slotIndex) => ({
+            slotIndex,
+            entry: uid ? participantMap.get(uid) : null,
+          }))
+          .filter((item) => Boolean(item.entry));
+        if (slottedMembers.length === 0) return null;
 
-        const leaderEntry = members[0];
-        const memberEntries = members.slice(1);
+        const leaderEntry = slottedMembers[0]?.entry;
+        const splitSlot = slottedMembers.find((item) => isSplitAssignedSlot(item.slotIndex));
+        const memberEntries = slottedMembers
+          .filter((item, index) => index > 0 && !isSplitAssignedSlot(item.slotIndex))
+          .map((item) => ({ slotIndex: item.slotIndex, entry: item.entry }));
         const leaderName = String(getCompanyName(leaderEntry.candidate) || '').trim();
-        if (members.length === 1 && soloExclusionSet.has(leaderName)) {
+        if (slottedMembers.length === 1 && soloExclusionSet.has(leaderName)) {
           return null;
         }
         const approvalValue = String(groupApprovals[groupIndex] || '').trim();
@@ -4118,11 +4126,18 @@ export default function AgreementBoardWindow({
             bizNo: normalizeBizNo(getBizNo(leaderEntry.candidate)),
             share: groupShares[groupIndex]?.[0] || '0',
           },
-          members: memberEntries.map((entry, memberIndex) => ({
-            name: getCompanyName(entry.candidate),
-            bizNo: normalizeBizNo(getBizNo(entry.candidate)),
-            share: groupShares[groupIndex]?.[memberIndex + 1] || '0',
+          members: memberEntries.map((item) => ({
+            name: getCompanyName(item.entry.candidate),
+            bizNo: normalizeBizNo(getBizNo(item.entry.candidate)),
+            share: groupShares[groupIndex]?.[item.slotIndex] || '0',
           })),
+          splitMember: splitSlot
+            ? {
+              label: `${String(splitIndustryLabel || '').trim() || '분담'}분담`,
+              name: getCompanyName(splitSlot.entry.candidate),
+              share: groupShares[groupIndex]?.[splitSlot.slotIndex] || '0',
+            }
+            : null,
         };
       })
       .filter(Boolean);
@@ -4149,7 +4164,7 @@ export default function AgreementBoardWindow({
       console.error('Failed to copy text: ', err);
       showHeaderAlert('클립보드 복사에 실패했습니다.');
     }
-  }, [groupAssignments, participantMap, groupShares, groupApprovals, ownerId, noticeNo, noticeTitle]);
+  }, [groupAssignments, participantMap, groupShares, groupApprovals, ownerId, noticeNo, noticeTitle, isSplitAssignedSlot, splitIndustryLabel, getCompanyName, getBizNo, normalizeBizNo]);
 
   React.useEffect(() => {
     if (skipAssignmentSyncRef.current) {

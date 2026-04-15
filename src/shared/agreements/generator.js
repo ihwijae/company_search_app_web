@@ -151,9 +151,28 @@ export function generateOne(item) {
     const biz = memberNeedsBizNo(owner) && m?.bizNo ? ` [${formatBizNo(m.bizNo)}]` : '';
     lines.push(`${n} ${s}%${biz}`);
   });
+
+  const splitMember = item?.splitMember && typeof item.splitMember === 'object'
+    ? item.splitMember
+    : null;
+  if (splitMember) {
+    const splitName = String(splitMember?.name || '').trim();
+    const splitShareRaw = splitMember?.share;
+    if (splitName && splitShareRaw !== null && splitShareRaw !== undefined && splitShareRaw !== '') {
+      const splitShareValue = Number(splitShareRaw);
+      const splitShare = Number.isFinite(splitShareValue) && splitShareValue > 0 && splitShareValue <= 1
+        ? parseFloat((splitShareValue * 100).toPrecision(12))
+        : splitShareRaw;
+      const splitLabelRaw = String(splitMember?.label || '').trim();
+      const splitLabel = splitLabelRaw || '분담';
+      lines.push('');
+      lines.push(`${splitLabel} : ${splitName} ${splitShare}%`);
+    }
+  }
+
   lines.push('');
   const leaderShareNum = Number(leaderShareRaw);
-  if (Number.isFinite(leaderShareNum) && (leaderShareNum === 100 || leaderShareNum === 1) && effectiveMembers.length === 0) {
+  if (!splitMember && Number.isFinite(leaderShareNum) && (leaderShareNum === 100 || leaderShareNum === 1) && effectiveMembers.length === 0) {
     lines.push('입찰 참여 부탁드립니다.');
   } else {
     lines.push('협정 부탁드립니다.');
