@@ -382,8 +382,24 @@ const buildExpiredCreditMessageText = (companies) => {
 
 function AdminUpload({ fileStatuses, onUploadSuccess }) {
   const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className={`admin-upload-section ${isOpen ? 'is-open' : ''}`}>
+      <div className="admin-header" onClick={() => setIsOpen(!isOpen)}>
+        <h2 className="sub-title">관리자 파일 업로드</h2>
+        <span className="toggle-arrow">{isOpen ? '▲' : '▼'}</span>
+      </div>
+      <div className="uploaders-grid">
+        <FileUploader type="eung" label="전기" isUploaded={fileStatuses.eung} onUploadSuccess={onUploadSuccess} />
+        <FileUploader type="tongsin" label="통신" isUploaded={fileStatuses.tongsin} onUploadSuccess={onUploadSuccess} />
+        <FileUploader type="sobang" label="소방" isUploaded={fileStatuses.sobang} onUploadSuccess={onUploadSuccess} />
+      </div>
+    </div>
+  );
+}
+
+function CreditRefreshRequestButton() {
   const [isGeneratingCreditMessage, setIsGeneratingCreditMessage] = useState(false);
-  const [creditMessageText, setCreditMessageText] = useState('');
   const [creditMessageStatus, setCreditMessageStatus] = useState('');
 
   const handleGenerateCreditMessage = async () => {
@@ -398,13 +414,11 @@ function AdminUpload({ fileStatuses, onUploadSuccess }) {
       const companies = Array.isArray(response?.data) ? response.data : [];
       const { text, managerCount, companyCount } = buildExpiredCreditMessageText(companies);
       if (!text) {
-        setCreditMessageText('');
         setCreditMessageStatus('신용평가 만료 업체가 없습니다.');
         return;
       }
-      setCreditMessageText(text);
       await searchClient.copyCsvColumn(text.split('\n'));
-      setCreditMessageStatus(`완료: 담당자 ${managerCount}명, 업체 ${companyCount}개 (클립보드 복사됨)`);
+      setCreditMessageStatus(`클립보드 복사 완료: 담당자 ${managerCount}명, 업체 ${companyCount}개`);
     } catch (error) {
       setCreditMessageStatus(error?.message || '신용평가 갱신 요청 문구 생성 중 오류가 발생했습니다.');
     } finally {
@@ -413,35 +427,16 @@ function AdminUpload({ fileStatuses, onUploadSuccess }) {
   };
 
   return (
-    <div className={`admin-upload-section ${isOpen ? 'is-open' : ''}`}>
-      <div className="admin-header" onClick={() => setIsOpen(!isOpen)}>
-        <h2 className="sub-title">관리자 파일 업로드</h2>
-        <span className="toggle-arrow">{isOpen ? '▲' : '▼'}</span>
-      </div>
-      <div className="uploaders-grid">
-        <FileUploader type="eung" label="전기" isUploaded={fileStatuses.eung} onUploadSuccess={onUploadSuccess} />
-        <FileUploader type="tongsin" label="통신" isUploaded={fileStatuses.tongsin} onUploadSuccess={onUploadSuccess} />
-        <FileUploader type="sobang" label="소방" isUploaded={fileStatuses.sobang} onUploadSuccess={onUploadSuccess} />
-        <div className="credit-refresh-request">
-          <button
-            type="button"
-            onClick={handleGenerateCreditMessage}
-            className="credit-refresh-request-button"
-            disabled={isGeneratingCreditMessage}
-          >
-            {isGeneratingCreditMessage ? '생성 중...' : '신용평가 갱신 요청'}
-          </button>
-          {creditMessageStatus && <p className="upload-message info">{creditMessageStatus}</p>}
-          {creditMessageText && (
-            <textarea
-              className="credit-refresh-request-output"
-              value={creditMessageText}
-              readOnly
-              rows={10}
-            />
-          )}
-        </div>
-      </div>
+    <div className="credit-refresh-request">
+      <button
+        type="button"
+        onClick={handleGenerateCreditMessage}
+        className="credit-refresh-request-button"
+        disabled={isGeneratingCreditMessage}
+      >
+        {isGeneratingCreditMessage ? '생성 중...' : '신용평가 갱신 요청'}
+      </button>
+      {creditMessageStatus && <p className="upload-message info">{creditMessageStatus}</p>}
     </div>
   );
 }
@@ -1712,6 +1707,7 @@ function App() {
       />
       <Drawer open={uploadOpen} onClose={() => setUploadOpen(false)}>
         <AdminUpload fileStatuses={fileStatuses} onUploadSuccess={handleUploadSuccess} />
+        <CreditRefreshRequestButton />
       </Drawer>
     </div>
   );
