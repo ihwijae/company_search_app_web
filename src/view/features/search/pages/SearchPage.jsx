@@ -336,12 +336,43 @@ const buildCompanyDedupKeyForCreditMessage = (company, fallbackIndex = 0) => {
   return `idx:${fallbackIndex}`;
 };
 
+const hasCreditEvaluationDataForRequest = (company) => {
+  const creditCandidates = [
+    company?.creditGrade,
+    company?.creditGradeText,
+    company?.creditNote,
+    company?.creditValidityText,
+    company?.creditExpiryText,
+    company?.['신용평가'],
+    company?.['신용등급'],
+    company?.['신용평가등급'],
+    company?.snapshot?.creditGrade,
+    company?.snapshot?.creditGradeText,
+    company?.snapshot?.creditNote,
+    company?.snapshot?.creditValidityText,
+    company?.snapshot?.creditExpiryText,
+    company?.snapshot?.['신용평가'],
+    company?.snapshot?.['신용등급'],
+    company?.snapshot?.['신용평가등급'],
+  ];
+  return creditCandidates.some((value) => {
+    if (value === null || value === undefined) return false;
+    const text = String(value).trim();
+    if (!text) return false;
+    if (text === '-' || /^N\/?A$/i.test(text)) return false;
+    if (text.includes('없음')) return false;
+    return true;
+  });
+};
+
 const buildExpiredCreditMessageText = (companies) => {
   const managerMap = new Map();
   const seenCompanies = new Set();
 
   (Array.isArray(companies) ? companies : []).forEach((company, index) => {
     if (!company || typeof company !== 'object') return;
+    if (!hasCreditEvaluationDataForRequest(company)) return;
+    if (String(company?.['요약상태'] || '').trim() !== '최신') return;
     if (!isCreditScoreExpired(company)) return;
     const companyKey = buildCompanyDedupKeyForCreditMessage(company, index);
     if (seenCompanies.has(companyKey)) return;
