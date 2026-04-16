@@ -342,6 +342,7 @@ const resolveTemplateKey = (ownerId, rangeId, fileType) => {
     return null;
   }
   if (ownerKey === 'EX' && rangeKey === EX_UNDER_50_KEY) return 'ex-under50';
+  if (ownerKey === 'EX' && rangeKey === EX_50_TO_100_KEY) return 'ex-50to100';
   return null;
 };
 
@@ -1320,7 +1321,7 @@ export default function AgreementBoardWindow({
   const isLh50To100 = isLHOwner && effectiveSelectedRangeKey === LH_50_TO_100_KEY;
   const isExUnder50 = isExOwner && selectedRangeKey === EX_UNDER_50_KEY;
   const isEx50To100 = isExOwner && selectedRangeKey === EX_50_TO_100_KEY;
-  const showManagementBonus = !isLh100To300;
+  const showManagementBonus = !isLh100To300 && !isEx50To100;
   const showNetCostBonus = !isLh100To300;
   const showBidScore = !isLh100To300;
   const showMiscScore = isLh100To300;
@@ -1873,10 +1874,17 @@ export default function AgreementBoardWindow({
       return { perfectPerformanceAmount: base * multiplier, perfectPerformanceBasis: `기초금액 × ${multiplier}배` };
     }
 
-    if (ownerKeyUpper === 'EX' && rangeKey === EX_UNDER_50_KEY) {
-      return base > 0
-        ? { perfectPerformanceAmount: base, perfectPerformanceBasis: '기초금액 × 1배' }
-        : { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
+    if (ownerKeyUpper === 'EX') {
+      if (rangeKey === EX_UNDER_50_KEY) {
+        return base > 0
+          ? { perfectPerformanceAmount: base, perfectPerformanceBasis: '기초금액 × 1배' }
+          : { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
+      }
+      if (rangeKey === EX_50_TO_100_KEY) {
+        return base > 0
+          ? { perfectPerformanceAmount: base * 2, perfectPerformanceBasis: '기초금액 × 2배' }
+          : { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
+      }
     }
 
     return { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };

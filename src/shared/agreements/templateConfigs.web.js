@@ -347,6 +347,31 @@ export const AGREEMENT_TEMPLATE_CONFIGS_WEB = {
     summaryColumns: { credibility: 'AD' },
     regionFill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' }, bgColor: { indexed: 64 } },
   },
+  'ex-50to100': {
+    label: '한국도로공사 50억~100억',
+    templateUrl: buildTemplateUrl('한국도로공사50-100억_템플릿.xlsx'),
+    sheetName: '양식',
+    startRow: 5,
+    maxRows: 68,
+    slotColumns: {
+      name: ['C', 'D', 'E', 'F', 'G'],
+      share: ['I', 'J', 'K', 'L', 'M'],
+      management: ['O', 'P', 'Q', 'R', 'S'],
+      performance: ['V', 'W', 'X', 'Y', 'Z'],
+      ability: ['AO', 'AP', 'AQ', 'AR', 'AS'],
+    },
+    headerCells: {
+      estimatedAmount: 'D1',
+      baseAmount: 'D2',
+      noticeTitle: 'M1',
+      bidDeadline: 'P2',
+      dutySummary: 'AH1',
+      memo: 'W2',
+    },
+    approvalColumn: 'B',
+    summaryColumns: { credibility: 'AD', netCostBonus: 'AE' },
+    regionFill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' }, bgColor: { indexed: 64 } },
+  },
 };
 
 export const resolveWebAgreementTemplateConfig = (templateKey) => {

@@ -1377,6 +1377,124 @@
                       ]
                     }
                   }
+                },
+                {
+                  "id": "credit",
+                  "label": "신용평가",
+                  "maxScore": 15,
+                  "gradeTable": [
+                    {
+                      "grade": "AAA",
+                      "base": 35.0,
+                      "score": 15.0
+                    },
+                    {
+                      "grade": "AA+",
+                      "base": 35.0,
+                      "score": 15.0
+                    },
+                    {
+                      "grade": "AA0",
+                      "base": 35.0,
+                      "score": 15.0
+                    },
+                    {
+                      "grade": "AA-",
+                      "base": 35.0,
+                      "score": 15.0
+                    },
+                    {
+                      "grade": "A+",
+                      "base": 35.0,
+                      "score": 15.0
+                    },
+                    {
+                      "grade": "A0",
+                      "base": 35.0,
+                      "score": 15.0
+                    },
+                    {
+                      "grade": "A-",
+                      "base": 35.0,
+                      "score": 15.0
+                    },
+                    {
+                      "grade": "BBB+",
+                      "base": 35.0,
+                      "score": 15.0
+                    },
+                    {
+                      "grade": "BBB0",
+                      "base": 35.0,
+                      "score": 15.0
+                    },
+                    {
+                      "grade": "BBB-",
+                      "base": 35.0,
+                      "score": 15.0
+                    },
+                    {
+                      "grade": "BB+",
+                      "base": 35.0,
+                      "score": 15.0
+                    },
+                    {
+                      "grade": "BB0",
+                      "base": 35.0,
+                      "score": 15.0
+                    },
+                    {
+                      "grade": "BB-",
+                      "base": 34.1,
+                      "score": 14.614
+                    },
+                    {
+                      "grade": "B+",
+                      "base": 33.3,
+                      "score": 14.271
+                    },
+                    {
+                      "grade": "B0",
+                      "base": 33.3,
+                      "score": 14.271
+                    },
+                    {
+                      "grade": "B-",
+                      "base": 33.3,
+                      "score": 14.271
+                    },
+                    {
+                      "grade": "CCC+",
+                      "base": 30.0,
+                      "score": 12.857
+                    },
+                    {
+                      "grade": "CCC0",
+                      "base": 30.0,
+                      "score": 12.857
+                    },
+                    {
+                      "grade": "CCC-",
+                      "base": 30.0,
+                      "score": 12.857
+                    },
+                    {
+                      "grade": "CC",
+                      "base": 30.0,
+                      "score": 12.857
+                    },
+                    {
+                      "grade": "C",
+                      "base": 30.0,
+                      "score": 12.857
+                    },
+                    {
+                      "grade": "D",
+                      "base": 30.0,
+                      "score": 12.857
+                    }
+                  ],
+                  "note": "한국도로공사 신용평가 기본값"
                 }
               ],
               "rounding": {
