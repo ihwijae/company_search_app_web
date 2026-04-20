@@ -3445,6 +3445,7 @@ export default function AgreementBoardWindow({
   }, [representativeEntries, regionEntries]);
 
   const handleGenerateInconMemo = React.useCallback(async () => {
+    const resolvedSplitLabel = `${String(splitIndustryLabel || '').trim() || '분담'}분담`;
     const text = buildInconMemoText({
       fileType,
       dutyRegions,
@@ -3453,6 +3454,8 @@ export default function AgreementBoardWindow({
       groupApprovals,
       participantMap,
       lhLeaderBizNoFormat: isLHOwner,
+      isSplitAssignedSlot,
+      splitLabel: resolvedSplitLabel,
     });
     if (!text) {
       showHeaderAlert('아이건설넷 메모로 만들 협정 내용이 없습니다.');
@@ -3473,7 +3476,18 @@ export default function AgreementBoardWindow({
       console.error('Failed to copy incon memo: ', err);
       showHeaderAlert('클립보드 복사에 실패했습니다.');
     }
-  }, [isLHOwner, dutyRegions, fileType, groupAssignments, groupApprovals, groupShares, participantMap, showHeaderAlert]);
+  }, [
+    isLHOwner,
+    dutyRegions,
+    fileType,
+    groupAssignments,
+    groupApprovals,
+    groupShares,
+    participantMap,
+    isSplitAssignedSlot,
+    splitIndustryLabel,
+    showHeaderAlert,
+  ]);
 
   const resolveCandidateBySlot = React.useCallback((groupIndex, slotIndex) => {
     const uid = groupAssignments[groupIndex]?.[slotIndex];

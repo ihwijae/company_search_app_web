@@ -131,6 +131,15 @@ const buildGroupBlock = (members, lhLeaderBizNoFormat = false) => {
   }).join('\n');
 };
 
+const buildSplitMemberLine = (member, splitLabel = '') => {
+  if (!member) return '';
+  const name = String(member.name || '').trim();
+  if (!name) return '';
+  const shareText = getShareText(member.share);
+  const label = String(splitLabel || '').trim() || '분담';
+  return `${label}  ${name} ${shareText}%`;
+};
+
 const classifyGroup = (members) => {
   const normalizedNames = members.map((member) => normalizeCompanyKey(member.name));
   const leaderKey = normalizedNames[0] || '';
@@ -148,6 +157,8 @@ export const buildInconMemoText = ({
   groupApprovals = [],
   participantMap,
   lhLeaderBizNoFormat = false,
+  isSplitAssignedSlot = () => false,
+  splitLabel = '',
 }) => {
   const topLines = [];
   const upperBlocks = [];
@@ -167,27 +178,34 @@ export const buildInconMemoText = ({
         name: String(getCandidateName(candidate) || '').trim(),
         bizNo: getCandidateBizNo(candidate),
         share: groupShares[groupIndex]?.[slotIndex] ?? '',
+        slotIndex,
+        isSplitMember: Boolean(isSplitAssignedSlot(slotIndex)),
       };
     }).filter((member) => member.name);
 
     if (members.length === 0) return;
 
-    const section = classifyGroup(members);
+    const baseMembers = members.filter((member) => !member.isSplitMember);
+    const splitMember = members.find((member) => member.isSplitMember) || null;
+    const membersForClassify = baseMembers.length > 0 ? baseMembers : members;
+    const section = classifyGroup(membersForClassify);
     if (!section) return;
 
     if (section === 'top') {
-      topLines.push(`${getSoloDisplayName(members[0].name)} 금액`);
+      topLines.push(`${getSoloDisplayName(membersForClassify[0].name)} 금액`);
       return;
     }
 
-    const block = buildGroupBlock(members, lhLeaderBizNoFormat);
-    if (!block) return;
+    const block = buildGroupBlock(baseMembers, lhLeaderBizNoFormat);
+    const splitLine = buildSplitMemberLine(splitMember, splitLabel);
+    const mergedBlock = [block, splitLine].filter(Boolean).join('\n\n');
+    if (!mergedBlock) return;
 
     if (section === 'upper') {
-      upperBlocks.push(block);
+      upperBlocks.push(mergedBlock);
       return;
     }
-    lowerBlocks.push(block);
+    lowerBlocks.push(mergedBlock);
   });
 
   const isTongsin = String(fileType || '').trim().toLowerCase() === 'tongsin';
