@@ -165,13 +165,17 @@ export const buildInconMemoText = ({
   const lowerBlocks = [];
 
   groupAssignments.forEach((group, groupIndex) => {
-    const memberIds = Array.isArray(group) ? group.filter(Boolean) : [];
-    if (memberIds.length === 0) return;
+    const slottedMembers = Array.isArray(group)
+      ? group
+        .map((uid, slotIndex) => ({ uid, slotIndex }))
+        .filter((item) => Boolean(item.uid))
+      : [];
+    if (slottedMembers.length === 0) return;
 
     const approval = String(groupApprovals[groupIndex] || '').trim();
     if (approval === '취소') return;
 
-    const members = memberIds.map((uid, slotIndex) => {
+    const members = slottedMembers.map(({ uid, slotIndex }) => {
       const entry = participantMap?.get(uid);
       const candidate = entry?.candidate || null;
       return {
