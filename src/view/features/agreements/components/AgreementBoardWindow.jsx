@@ -5612,7 +5612,7 @@ export default function AgreementBoardWindow({
     const usedColumns = 4 + nameSpan + shareSpan;
     const fillerSpan = Math.max(tableColumnCount - usedColumns, 0);
     const resolvedQualityTotal = qualityTotal ?? slotMetas.reduce((acc, meta) => {
-      if (meta.empty) return acc;
+      if (meta.empty || isSplitAssignedSlot(meta.slotIndex)) return acc;
       const share = toNumber(meta.shareForCalc);
       const score = toNumber(meta.qualityScore);
       if (share == null || score == null) return acc;
@@ -5702,7 +5702,7 @@ export default function AgreementBoardWindow({
     }));
     const qualityTotal = isLHOwner
       ? slotMetasWithLimit.reduce((acc, meta) => {
-        if (meta.empty) return acc;
+        if (meta.empty || isSplitAssignedSlot(meta.slotIndex)) return acc;
         const share = toNumber(meta.shareForCalc);
         const score = toNumber(meta.qualityScore);
         if (share == null || score == null) return acc;

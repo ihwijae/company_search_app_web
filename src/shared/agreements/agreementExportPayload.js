@@ -186,6 +186,7 @@ export function buildAgreementExportPayload({
       let qualityTotal = 0;
       let hasQuality = false;
       members.forEach((member) => {
+        if (member.isSplitMember) return;
         const shareValue = Number(member.sharePercent);
         const scoreValue = Number(member.qualityScore);
         if (!Number.isFinite(shareValue) || !Number.isFinite(scoreValue)) return;
