@@ -39,6 +39,10 @@ export default function Sidebar({ active, onSelect, fileStatuses, collapsed = tr
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [authMenuOpen]);
   const handleSelect = (key) => {
+    if (key === 'excel-web-edit' && typeof window !== 'undefined') {
+      window.location.hash = '#/excel-web-edit';
+      return;
+    }
     if (key === 'agreements' && typeof window !== 'undefined') {
       const opener = window.__openAgreementBoard;
       if (typeof opener === 'function') {
@@ -91,6 +95,7 @@ export default function Sidebar({ active, onSelect, fileStatuses, collapsed = tr
         />
       ),
     },
+    { key: 'excel-web-edit', label: '엑셀수정(웹)', icon: '🧩' },
     {
       key: 'kakao-send',
       label: '카카오전송',

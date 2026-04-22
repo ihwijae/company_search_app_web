@@ -85,7 +85,7 @@ export async function runAgreementCandidateScoreEvaluation({
       [['품질', 'quality']]
     );
     const creditGradeRaw = extractCreditGrade(candidate);
-    const creditExpired = isCreditScoreExpired(candidate);
+    const creditExpired = isCreditScoreExpired(candidate, { evaluationDate: noticeDate });
     const creditGrade = creditExpired ? '' : creditGradeRaw;
     const candidatePerfAmount = performanceAmount;
 

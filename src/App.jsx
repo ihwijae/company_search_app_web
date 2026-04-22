@@ -25,6 +25,7 @@ import FeedbackProvider from './components/FeedbackProvider.jsx';
 import CompanyNotesPage from './view/features/notes/pages/CompanyNotesPage.jsx';
 import TempCompaniesPage from './view/features/temp-companies/pages/TempCompaniesPage.jsx';
 import LoginPage from './view/features/auth/pages/LoginPage.jsx';
+import ExcelWebEditPage from './view/features/excel-web/pages/ExcelWebEditPage.jsx';
 import authClient from './shared/authClient.js';
 
 export default function App() {
@@ -172,6 +173,9 @@ export default function App() {
       break;
     case '/temp-companies':
       Screen = TempCompaniesPage;
+      break;
+    case '/excel-web-edit':
+      Screen = ExcelWebEditPage;
       break;
     case '/login':
       Screen = LoginPage;

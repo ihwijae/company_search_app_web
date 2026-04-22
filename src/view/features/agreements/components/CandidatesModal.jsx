@@ -1392,7 +1392,7 @@ const industryToLabel = (type) => {
                   const creditGradeTextRaw = c.creditGradeText || creditGradePure;
                   const creditGradeTextLower = creditGradeTextRaw.trim().toLowerCase();
                   const creditScoreValue = Number.isFinite(creditScore) ? Number(creditScore) : null;
-                  const creditExpiredFlag = isCreditScoreExpired(c);
+                  const creditExpiredFlag = isCreditScoreExpired(c, { evaluationDate: noticeDate });
                   const creditOverAge = /over-age|기간\s*초과|인정\s*기간\s*초과|인정기간\s*초과/.test(creditNoteLower)
                     || /기간\s*초과|인정\s*기간\s*초과|인정기간\s*초과/.test(creditGradeTextLower)
                     || /기간\s*초과|인정\s*기간\s*초과|인정기간\s*초과/.test(creditNoteTextLower);

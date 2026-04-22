@@ -74,7 +74,22 @@ export function extractCreditGrade(candidate) {
   return '';
 }
 
-export function isCreditScoreExpired(candidate) {
+function parseEvaluationDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : new Date(value.getTime());
+  }
+  if (typeof value === 'number') {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  const parsedToken = parseExpiryDateToken(value);
+  if (parsedToken) return parsedToken;
+  const parsed = new Date(String(value));
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+export function isCreditScoreExpired(candidate, { evaluationDate } = {}) {
   if (!candidate || typeof candidate !== 'object') return false;
   const flagFields = [
     candidate.creditExpired,
@@ -164,11 +179,11 @@ export function isCreditScoreExpired(candidate) {
 
   const finalExpiry = parsedExplicit || expiryFromText;
   if (finalExpiry) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const baseDate = parseEvaluationDate(evaluationDate) || new Date();
+    baseDate.setHours(0, 0, 0, 0);
     const expiry = new Date(finalExpiry.getTime());
     expiry.setHours(0, 0, 0, 0);
-    if (expiry < today) return true;
+    if (expiry < baseDate) return true;
   }
 
   if (textSources.some((text) => CREDIT_EXPIRED_REGEX.test(text) || CREDIT_OVERAGE_REGEX.test(text))) {

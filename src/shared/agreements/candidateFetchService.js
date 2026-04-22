@@ -240,7 +240,7 @@ export async function fetchAgreementCandidates(params = {}) {
     const { years: bizYears, startDate: bizYearsStartDate } = computeBizYears(company['영업기간'], evaluationDate);
     const qualityEval = toNumber(company['품질평가']);
     const creditGrade = extractCreditGrade({ ...company, snapshot: company });
-    const creditExpired = isCreditScoreExpired({ ...company, snapshot: company });
+    const creditExpired = isCreditScoreExpired({ ...company, snapshot: company }, { evaluationDate });
 
     const evaluation = evaluateScores({
       agencyId: normalizedOwnerId,

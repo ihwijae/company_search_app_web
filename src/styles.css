@@ -3275,6 +3275,479 @@ button.primary:hover { background: var(--accent-2); }
   width: 100%;
 }
 
+.excel-web-main {
+  padding: 20px 24px 28px;
+}
+
+.excel-web-header h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.excel-web-header p {
+  margin: 8px 0 0;
+  color: #475569;
+}
+
+.excel-web-badges {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.excel-web-badge {
+  background: #0f766e;
+  color: #fff;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.excel-web-badge.muted {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.excel-web-tabs {
+  margin-top: 16px;
+  display: flex;
+  gap: 8px;
+}
+
+.excel-web-tabs button {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.excel-web-tabs button.active {
+  background: #0f766e;
+  color: #fff;
+  border-color: #0f766e;
+}
+
+.excel-web-grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 12px;
+}
+
+.excel-web-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.excel-web-card h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.excel-web-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.excel-web-card-head button {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.excel-web-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.excel-web-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.excel-web-form-grid input,
+.excel-web-textarea-label textarea,
+.excel-web-file-uploader input {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 11px;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.excel-web-textarea-label {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.excel-web-preview {
+  margin-top: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.excel-web-preview h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.excel-web-preview pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 14px;
+}
+
+.excel-web-file-uploader p {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.excel-web-file-list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.excel-web-file-list li {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.excel-web-file-list li div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.excel-web-file-list li span {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.excel-web-file-list li button,
+.excel-web-actions button {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px 9px;
+  cursor: pointer;
+}
+
+.excel-web-file-list li.empty {
+  color: #64748b;
+}
+
+.excel-web-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.excel-web-actions p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.excel-web-log ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.excel-web-log li {
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 8px;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+@media (max-width: 1100px) {
+  .excel-web-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .excel-web-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.excel-web-v2-main {
+  padding: 14px 14px 20px;
+}
+
+.excel-web-v2-layout {
+  display: grid;
+  grid-template-columns: 1.4fr 0.95fr 0.85fr;
+  gap: 10px;
+  min-height: calc(100vh - 96px);
+}
+
+.excel-web-v2-pane {
+  background: #f8fafc;
+  border: 1px solid #dbe2ea;
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.excel-web-v2-pane h2 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.excel-web-v2-pane h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.excel-web-v2-upload-row input[type='file'] {
+  width: 100%;
+  font-size: 12px;
+}
+
+.excel-web-v2-file-list {
+  margin-top: 8px;
+  border: 1px solid #dbe2ea;
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 150px;
+  overflow: auto;
+}
+
+.excel-web-v2-file-list button {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.excel-web-v2-file-list button.active {
+  border-color: #0f766e;
+  background: #ecfdf5;
+}
+
+.excel-web-v2-file-list .remove {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.excel-web-v2-preview {
+  margin-top: 8px;
+  background: #fff;
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  flex: 1;
+  min-height: 380px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.excel-web-v2-preview iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.excel-web-v2-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.excel-web-v2-pane .muted {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.excel-web-v2-pane-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.excel-web-v2-pane-head button {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.excel-web-v2-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  min-height: 0;
+  flex: 1;
+}
+
+.excel-web-v2-compare > div {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.excel-web-v2-compare table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid #dbe2ea;
+  table-layout: fixed;
+}
+
+.excel-web-v2-compare th,
+.excel-web-v2-compare td {
+  border: 1px solid #e2e8f0;
+  padding: 6px 7px;
+  font-size: 12px;
+  vertical-align: top;
+  word-break: break-all;
+}
+
+.excel-web-v2-compare th {
+  width: 34%;
+  text-align: left;
+  background: #f1f5f9;
+}
+
+.excel-web-v2-settings {
+  border: 1px solid #dbe2ea;
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 8px;
+}
+
+.excel-web-v2-settings label,
+.excel-web-v2-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.excel-web-v2-settings select,
+.excel-web-v2-form input {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 6px 7px;
+  font-size: 12px;
+}
+
+.excel-web-v2-form {
+  border: 1px solid #dbe2ea;
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: 500px;
+  overflow: auto;
+}
+
+.excel-web-v2-form .inline-dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.excel-web-v2-actions {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.excel-web-v2-actions button {
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  padding: 8px 10px;
+  font-size: 13px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.excel-web-v2-actions button.primary {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+  font-weight: 700;
+}
+
+@media (max-width: 1400px) {
+  .excel-web-v2-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .excel-web-v2-preview {
+    min-height: 260px;
+  }
+}
+
 .excel-performance .perf-label {
   font-size: 11px;
   color: #94a3b8;
