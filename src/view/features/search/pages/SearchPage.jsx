@@ -277,6 +277,17 @@ function FileUploader({ type, label, isUploaded, onUploadSuccess }) {
     }
   };
 
+  const handleDownloadFile = async () => {
+    if (!isUploaded) return;
+    setMessage('파일 다운로드를 준비하는 중...');
+    try {
+      const result = await searchClient.downloadDataset(type);
+      setMessage(`다운로드 완료: ${result?.fileName || `${label}.xlsx`}`);
+    } catch (error) {
+      setMessage(error?.message || '다운로드 중 오류가 발생했습니다.');
+    }
+  };
+
   return (
     <div className="file-uploader">
       <label>{label} 엑셀 파일</label>
@@ -295,6 +306,7 @@ function FileUploader({ type, label, isUploaded, onUploadSuccess }) {
           />
         )}
         <button onClick={handleSelectFile}>{browserUploadEnabled ? '파일 업로드' : '경로 설정'}</button>
+        <button onClick={handleDownloadFile} disabled={!isUploaded}>파일 다운로드</button>
       </div>
       {message && <p className="upload-message info">{message}</p>}
     </div>
@@ -617,6 +629,37 @@ function App() {
   const currentSmppResult = selectedBizNumber ? smppResults[selectedBizNumber] : null;
   const smppBusyForSelected = smppStatus.busy && smppStatus.bizNo === selectedBizNumber;
   const smppSupported = searchClient.supportsSmppLookup();
+
+  const handleCloseUploadDrawer = React.useCallback(() => {
+    setUploadOpen(false);
+    if (typeof window === 'undefined') return;
+    const rawHash = String(window.location.hash || '');
+    const normalized = rawHash.startsWith('#') ? rawHash.slice(1) : rawHash;
+    const [pathname, query = ''] = normalized.split('?');
+    if (pathname !== '/search') return;
+    const params = new URLSearchParams(query);
+    if (params.get('upload') !== '1') return;
+    params.delete('upload');
+    const nextQuery = params.toString();
+    window.location.hash = nextQuery ? `#/search?${nextQuery}` : '#/search';
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const syncUploadStateFromHash = () => {
+      const rawHash = String(window.location.hash || '');
+      const normalized = rawHash.startsWith('#') ? rawHash.slice(1) : rawHash;
+      const [pathname, query = ''] = normalized.split('?');
+      if (pathname !== '/search') return;
+      const params = new URLSearchParams(query);
+      if (params.get('upload') === '1') {
+        setUploadOpen(true);
+      }
+    };
+    syncUploadStateFromHash();
+    window.addEventListener('hashchange', syncUploadStateFromHash);
+    return () => window.removeEventListener('hashchange', syncUploadStateFromHash);
+  }, []);
   useEffect(() => {
     selectedCompanyKeyRef.current = selectedCompanyKey;
   }, [selectedCompanyKey]);
@@ -1736,7 +1779,7 @@ function App() {
         message={dialog.message}
         onClose={() => setDialog({ isOpen: false, message: '' })}
       />
-      <Drawer open={uploadOpen} onClose={() => setUploadOpen(false)}>
+      <Drawer open={uploadOpen} onClose={handleCloseUploadDrawer}>
         <AdminUpload fileStatuses={fileStatuses} onUploadSuccess={handleUploadSuccess} />
         <CreditRefreshRequestButton />
       </Drawer>

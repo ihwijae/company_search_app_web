@@ -115,6 +115,52 @@ async function uploadDataset({ fileType, fileName, buffer, contentType }) {
   };
 }
 
+async function refreshDataset(fileType) {
+  if (!DATASET_TYPES.includes(fileType)) throw new Error('Invalid dataset type');
+
+  const manifest = await readManifest();
+  const current = manifest.datasets && manifest.datasets[fileType] ? manifest.datasets[fileType] : null;
+  if (!current || !current.pathname) {
+    throw new Error(`${fileType} dataset is not available`);
+  }
+
+  const sourcePath = toAbsolutePath(current.pathname);
+  const buffer = await fs.promises.readFile(sourcePath);
+  const parsedDataset = await parseDatasetBuffer(buffer, fileType, current.fileName || path.basename(sourcePath));
+  const parsedMeta = await storeParsedDataset(fileType, {
+    ...parsedDataset,
+    updatedAt: new Date().toISOString(),
+  });
+
+  const refreshedAt = new Date().toISOString();
+  manifest.datasets[fileType] = {
+    ...current,
+    parsedPathname: parsedMeta.pathname,
+    parsedFilePath: parsedMeta.filePath,
+    parsedContentType: parsedMeta.contentType,
+    companyCount: Array.isArray(parsedDataset.companies) ? parsedDataset.companies.length : 0,
+    sheetCount: Array.isArray(parsedDataset.sheetNames) ? parsedDataset.sheetNames.length : 0,
+    uploadedAt: refreshedAt,
+    refreshedAt,
+  };
+  const nextManifest = await writeManifest(manifest);
+  datasetCache.set(fileType, {
+    version: getDatasetVersion(nextManifest.datasets[fileType]),
+    dataset: {
+      ...parsedDataset,
+      updatedAt: refreshedAt,
+    },
+  });
+
+  return {
+    fileType,
+    refreshedAt,
+    companyCount: manifest.datasets[fileType].companyCount || 0,
+    sheetCount: manifest.datasets[fileType].sheetCount || 0,
+    manifest: nextManifest,
+  };
+}
+
 async function getDatasetMeta(fileType) {
   const manifest = await readManifest();
   return manifest.datasets && manifest.datasets[fileType] ? manifest.datasets[fileType] : null;
@@ -193,6 +239,7 @@ module.exports = {
   readManifest,
   writeManifest,
   uploadDataset,
+  refreshDataset,
   getDatasetMeta,
   getStatuses,
   parseSharedDataset,

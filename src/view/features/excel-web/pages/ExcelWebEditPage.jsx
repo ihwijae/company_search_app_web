@@ -2,6 +2,7 @@ import React from 'react';
 import '../../../../styles.css';
 import '../../../../fonts.css';
 import Sidebar from '../../../../components/Sidebar';
+import excelEditBackendClient from '../../../../shared/excelEditBackendClient';
 
 const FIELD_LABELS = [
   ['companyName', '상호'],
@@ -43,24 +44,12 @@ const EMPTY_FORM = {
   note: '',
 };
 
-const MOCK_LOADED = {
-  companyName: '일진전기건설공사',
-  managerName: '조래원',
-  bizNo: '131-20-68530',
-  region: '인천',
-  sipyung: '3,829,134,000',
-  perf3y: '3,350,827,000',
-  perf5y: '5,158,252,000',
-  debtRatio: '28.70%',
-  currentRatio: '456.46%',
-  bizYears: '2003.06.20',
-  creditText: 'A-\n(2025.01.01~2026.12.31)',
-  womenOwned: '',
-  smallBusiness: '',
-  jobCreation: '',
-  qualityEval: '',
-  note: '박성규',
+const EDITOR_MODE = {
+  MANAGEMENT: 'management',
+  CREDIT: 'credit',
 };
+
+const MANAGEMENT_FILE_TYPES = ['전기경영상태', '통신경영상태', '소방경영상태'];
 
 function buildCreditText(form) {
   const grade = String(form.creditGrade || '').trim();
@@ -72,14 +61,53 @@ function buildCreditText(form) {
   return `${grade}\n(${start || '?'}~${end || '?'})`;
 }
 
+function formatBizNoInput(value = '') {
+  const digits = String(value).replace(/\D/g, '').slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+}
+
+function formatAmountInput(value = '') {
+  const digits = String(value).replace(/\D/g, '');
+  if (!digits) return '';
+  return Number(digits).toLocaleString('ko-KR');
+}
+
+function formatPercentInput(value = '') {
+  const digits = String(value).replace(/\D/g, '');
+  if (!digits) return '';
+  const numeric = Number(digits) / 100;
+  return `${numeric.toFixed(2)}%`;
+}
+
+function formatAmountPreviewValue(value = '') {
+  const digits = String(value).replace(/\D/g, '');
+  if (!digits) return '';
+  return (Number(digits) * 1000).toLocaleString('ko-KR');
+}
+
 export default function ExcelWebEditPage() {
   const [activeMenu, setActiveMenu] = React.useState('excel-web-edit');
   const [fileType, setFileType] = React.useState('전기경영상태');
+  const [editorMode, setEditorMode] = React.useState(EDITOR_MODE.MANAGEMENT);
   const [sourceFiles, setSourceFiles] = React.useState([]);
   const [selectedFileId, setSelectedFileId] = React.useState('');
   const [loadedData, setLoadedData] = React.useState(null);
+  const [loadedColorMap, setLoadedColorMap] = React.useState({});
   const [form, setForm] = React.useState(EMPTY_FORM);
   const sourceFilesRef = React.useRef([]);
+  const [pdfPageNumber, setPdfPageNumber] = React.useState(1);
+  const [pdfLoading, setPdfLoading] = React.useState(false);
+  const [pdfError, setPdfError] = React.useState('');
+  const [previewZoom, setPreviewZoom] = React.useState(1);
+  const [isBackendBusy, setIsBackendBusy] = React.useState(false);
+  const [backendNotice, setBackendNotice] = React.useState('');
+  const [backendError, setBackendError] = React.useState('');
+  const [backendPreviewUrl, setBackendPreviewUrl] = React.useState('');
+  const [backendPdfPageCount, setBackendPdfPageCount] = React.useState(0);
+  const [backendPdfLoading, setBackendPdfLoading] = React.useState(false);
+  const [isMaintenanceModalOpen, setIsMaintenanceModalOpen] = React.useState(false);
 
   const selectedFile = React.useMemo(
     () => sourceFiles.find((file) => file.id === selectedFileId) || null,
@@ -88,19 +116,25 @@ export default function ExcelWebEditPage() {
 
   const previewSrc = selectedFile?.url || '';
   const isPdf = selectedFile?.type?.includes('pdf') || selectedFile?.name?.toLowerCase().endsWith('.pdf');
+  const effectivePdfPageCount = isPdf ? backendPdfPageCount : 1;
+  const finalCreditText = buildCreditText(form);
 
   const mergedAfterData = React.useMemo(() => {
     if (!loadedData) return null;
     const next = { ...loadedData };
-    const creditText = buildCreditText(form);
     Object.keys(form).forEach((key) => {
       if (['creditGrade', 'creditStartDate', 'creditEndDate'].includes(key)) return;
       const value = String(form[key] || '').trim();
-      if (value) next[key] = value;
+      if (!value) return;
+      if (['sipyung', 'perf3y', 'perf5y'].includes(key)) {
+        next[key] = formatAmountPreviewValue(value);
+        return;
+      }
+      next[key] = value;
     });
-    if (creditText) next.creditText = creditText;
+    if (finalCreditText) next.creditText = finalCreditText;
     return next;
-  }, [form, loadedData]);
+  }, [finalCreditText, form, loadedData]);
 
   const onSelectMenu = React.useCallback((key) => {
     setActiveMenu(key);
@@ -117,27 +151,41 @@ export default function ExcelWebEditPage() {
     else if (key === 'settings') window.location.hash = '#/settings';
   }, []);
 
-  const handleSourceUpload = (event) => {
+  const handleSourceUpload = async (event) => {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
     let firstAddedId = '';
-    setSourceFiles((prev) => {
-      const next = [...prev];
-      files.forEach((file) => {
-        const id = `${Date.now()}-${file.name}-${Math.random().toString(36).slice(2, 7)}`;
-        if (!firstAddedId) firstAddedId = id;
-        next.push({
-          id,
-          file,
-          name: file.name,
-          type: file.type || '',
-          url: URL.createObjectURL(file),
-        });
-      });
-      return next;
+    const nextFiles = files.map((file) => {
+      const id = `${Date.now()}-${file.name}-${Math.random().toString(36).slice(2, 7)}`;
+      if (!firstAddedId) firstAddedId = id;
+      return {
+        id,
+        file,
+        name: file.name,
+        type: file.type || '',
+        url: URL.createObjectURL(file),
+      };
     });
-    setSelectedFileId((prev) => prev || firstAddedId);
+
+    sourceFilesRef.current.forEach((file) => {
+      try { URL.revokeObjectURL(file.url); } catch (error) { void error; }
+    });
+
+    setSourceFiles(nextFiles);
+    setSelectedFileId(firstAddedId);
     event.target.value = '';
+
+    try {
+      setIsBackendBusy(true);
+      setBackendError('');
+      const result = await excelEditBackendClient.uploadFiles({ files, fileType });
+      const savedCount = Array.isArray(result?.data?.files) ? result.data.files.length : files.length;
+      setBackendNotice(`백엔드 업로드 완료 (${savedCount}건)`);
+    } catch (error) {
+      setBackendError(error?.message || '백엔드 업로드에 실패했습니다.');
+    } finally {
+      setIsBackendBusy(false);
+    }
   };
 
   React.useEffect(() => {
@@ -150,13 +198,22 @@ export default function ExcelWebEditPage() {
   }, [selectedFileId, sourceFiles]);
 
   React.useEffect(() => {
+    setPreviewZoom(1);
+  }, [selectedFileId]);
+
+  React.useEffect(() => {
     sourceFilesRef.current = sourceFiles;
   }, [sourceFiles]);
+
+  React.useEffect(() => () => {
+    if (!backendPreviewUrl) return;
+    try { URL.revokeObjectURL(backendPreviewUrl); } catch (error) { void error; }
+  }, [backendPreviewUrl]);
 
   React.useEffect(() => {
     return () => {
       sourceFilesRef.current.forEach((file) => {
-        try { URL.revokeObjectURL(file.url); } catch {}
+        try { URL.revokeObjectURL(file.url); } catch (error) { void error; }
       });
     };
   }, []);
@@ -165,39 +222,301 @@ export default function ExcelWebEditPage() {
     setSourceFiles((prev) => {
       const target = prev.find((item) => item.id === id);
       if (target) {
-        try { URL.revokeObjectURL(target.url); } catch {}
+        try { URL.revokeObjectURL(target.url); } catch (error) { void error; }
       }
       return prev.filter((item) => item.id !== id);
     });
   };
 
   const handleInput = (event) => {
-    const { name, value } = event.target;
+    const { name } = event.target;
+    let { value } = event.target;
+
+    if (name === 'bizNo') {
+      value = formatBizNoInput(value);
+    } else if (['sipyung', 'perf3y', 'perf5y'].includes(name)) {
+      value = formatAmountInput(value);
+    } else if (['debtRatio', 'currentRatio'].includes(name)) {
+      value = formatPercentInput(value);
+    }
+
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleLoadData = () => {
-    setLoadedData(MOCK_LOADED);
-    setForm((prev) => ({
-      ...prev,
-      companyName: MOCK_LOADED.companyName,
-      managerName: MOCK_LOADED.managerName,
-      bizNo: MOCK_LOADED.bizNo,
-      region: MOCK_LOADED.region,
-      note: MOCK_LOADED.note,
-    }));
+  const changePreviewZoom = React.useCallback((delta) => {
+    setPreviewZoom((prev) => Math.min(3, Math.max(0.5, Number((prev + delta).toFixed(2)))));
+  }, []);
+
+  const resetPreviewZoom = React.useCallback(() => {
+    setPreviewZoom(1);
+  }, []);
+
+  const handlePreviewWheel = React.useCallback((event) => {
+    if (!event.ctrlKey) return;
+    const direction = event.deltaY < 0 ? 1 : -1;
+    changePreviewZoom(direction * 0.1);
+  }, [changePreviewZoom]);
+
+  const handleLoadData = async () => {
+    const bizNo = String(form.bizNo || '').trim();
+    if (!bizNo) {
+      setBackendError('사업자등록번호를 먼저 입력하세요.');
+      return;
+    }
+
+    try {
+      setIsBackendBusy(true);
+      setBackendError('');
+      const result = await excelEditBackendClient.lookupCompany({ fileType, bizNo });
+      if (!result?.data?.found) {
+        setLoadedData(null);
+        setLoadedColorMap({});
+        setBackendNotice('해당 사업자번호의 업체를 찾지 못했습니다.');
+        return;
+      }
+
+      const company = result.data.company || {};
+      const colorMap = result.data.colorMap || {};
+
+      setLoadedData(company);
+      setLoadedColorMap(colorMap);
+      setForm((prev) => ({
+        ...EMPTY_FORM,
+        bizNo: prev.bizNo || bizNo,
+      }));
+      setBackendNotice('사업자번호 조회가 완료되었습니다.');
+    } catch (error) {
+      setBackendError(error?.message || '사업자번호 조회에 실패했습니다.');
+    } finally {
+      setIsBackendBusy(false);
+    }
   };
+
+  React.useEffect(() => {
+    if (editorMode === EDITOR_MODE.CREDIT && fileType !== '신용평가') {
+      setFileType('신용평가');
+      return;
+    }
+    if (editorMode === EDITOR_MODE.MANAGEMENT && fileType === '신용평가') {
+      setFileType('전기경영상태');
+    }
+  }, [editorMode, fileType]);
+
+  const handleYearEndUpdate = async () => {
+    try {
+      setIsBackendBusy(true);
+      setBackendError('');
+      const result = await excelEditBackendClient.updateYearEndColor({
+        fileType,
+        dryRun: false,
+      });
+      if (fileType !== '신용평가') {
+        await excelEditBackendClient.refreshUploadedDataset(fileType);
+      }
+      setBackendNotice(result?.message || '연말 색상 업데이트 요청 완료');
+    } catch (error) {
+      setBackendError(error?.message || '연말 색상 업데이트 요청 실패');
+    } finally {
+      setIsBackendBusy(false);
+    }
+  };
+
+  const handleCreditExpiryUpdate = async () => {
+    try {
+      setIsBackendBusy(true);
+      setBackendError('');
+      const result = await excelEditBackendClient.updateCreditExpiry({
+        fileType,
+        dryRun: false,
+      });
+      if (fileType === '신용평가') {
+        await Promise.all([
+          excelEditBackendClient.refreshUploadedDataset('전기경영상태'),
+          excelEditBackendClient.refreshUploadedDataset('통신경영상태'),
+          excelEditBackendClient.refreshUploadedDataset('소방경영상태'),
+        ]);
+      } else {
+        await excelEditBackendClient.refreshUploadedDataset(fileType);
+      }
+      setBackendNotice(result?.message || '신용평가 유효기간 갱신 요청 완료');
+    } catch (error) {
+      setBackendError(error?.message || '신용평가 유효기간 갱신 요청 실패');
+    } finally {
+      setIsBackendBusy(false);
+    }
+  };
+
+  const handleSave = async () => {
+    const bizNo = String(form.bizNo || '').trim();
+    if (!bizNo) {
+      setBackendError('사업자등록번호를 먼저 입력하세요.');
+      return;
+    }
+
+    try {
+      setIsBackendBusy(true);
+      setBackendError('');
+      const payload = {
+        fileType,
+        bizNo,
+        data: {
+          ...form,
+          creditText: finalCreditText,
+        },
+      };
+      const files = selectedFile?.file ? [selectedFile.file] : [];
+      const result = await excelEditBackendClient.saveData({ payload, files });
+      if (fileType === '신용평가') {
+        await Promise.all([
+          excelEditBackendClient.refreshUploadedDataset('전기경영상태'),
+          excelEditBackendClient.refreshUploadedDataset('통신경영상태'),
+          excelEditBackendClient.refreshUploadedDataset('소방경영상태'),
+        ]);
+      } else {
+        await excelEditBackendClient.refreshUploadedDataset(fileType);
+      }
+      const archiveCount = Array.isArray(result?.data?.archivedFiles) ? result.data.archivedFiles.length : 0;
+      setBackendNotice(`확정 및 저장 완료${archiveCount ? ` (파일 보관 ${archiveCount}건)` : ''}`);
+    } catch (error) {
+      setBackendError(error?.message || '확정 및 저장에 실패했습니다.');
+    } finally {
+      setIsBackendBusy(false);
+    }
+  };
+
+  const clearBackendPdfPreview = React.useCallback(() => {
+    setBackendPdfPageCount(0);
+    setBackendPdfLoading(false);
+    setBackendPreviewUrl((prev) => {
+      if (prev) {
+        try { URL.revokeObjectURL(prev); } catch (error) { void error; }
+      }
+      return '';
+    });
+  }, []);
+
+  React.useEffect(() => {
+    clearBackendPdfPreview();
+  }, [clearBackendPdfPreview, selectedFileId]);
+
+  const renderBackendPdfPage = React.useCallback(async (pageNumber) => {
+    if (!selectedFile?.file) return false;
+    try {
+      setBackendPdfLoading(true);
+      const rendered = await excelEditBackendClient.renderPdfPage({
+        file: selectedFile.file,
+        page: pageNumber,
+      });
+      const nextUrl = URL.createObjectURL(rendered.blob);
+      setBackendPreviewUrl((prev) => {
+        if (prev) {
+          try { URL.revokeObjectURL(prev); } catch (error) { void error; }
+        }
+        return nextUrl;
+      });
+      setBackendPdfPageCount(rendered.pageCount || 0);
+      if (rendered.pageNumber && rendered.pageNumber !== pageNumber) {
+        setPdfPageNumber(rendered.pageNumber);
+      }
+      setPdfError('');
+      return true;
+    } catch (error) {
+      setPdfError(error?.message || 'Python PDF 렌더링에 실패했습니다.');
+      return false;
+    } finally {
+      setBackendPdfLoading(false);
+    }
+  }, [selectedFile]);
+
+  const renderBackendImage = React.useCallback(async () => {
+    if (!selectedFile?.file) return false;
+    try {
+      setBackendPdfLoading(true);
+      const rendered = await excelEditBackendClient.renderImage({ file: selectedFile.file });
+      const nextUrl = URL.createObjectURL(rendered.blob);
+      setBackendPreviewUrl((prev) => {
+        if (prev) {
+          try { URL.revokeObjectURL(prev); } catch (error) { void error; }
+        }
+        return nextUrl;
+      });
+      setBackendPdfPageCount(1);
+      setPdfError('');
+      return true;
+    } catch (error) {
+      setPdfError(error?.message || 'Python 이미지 렌더링에 실패했습니다.');
+      return false;
+    } finally {
+      setBackendPdfLoading(false);
+    }
+  }, [selectedFile]);
+
+  React.useEffect(() => {
+    let canceled = false;
+    const loadPreview = async () => {
+      clearBackendPdfPreview();
+      setPdfError('');
+      setPdfPageNumber(1);
+      if (!selectedFile || !selectedFile.file) return;
+      setPdfLoading(true);
+      try {
+        if (isPdf) {
+          await renderBackendPdfPage(1);
+        } else {
+          await renderBackendImage();
+        }
+      } catch (error) {
+        if (!canceled) {
+          setPdfError(error?.message || '미리보기를 불러올 수 없습니다.');
+        }
+      } finally {
+        if (!canceled) setPdfLoading(false);
+      }
+    };
+
+    loadPreview();
+
+    return () => {
+      canceled = true;
+    };
+  }, [clearBackendPdfPreview, isPdf, renderBackendImage, renderBackendPdfPage, selectedFile]);
+
+  React.useEffect(() => {
+    if (!isPdf || !selectedFile?.file) return;
+    renderBackendPdfPage(pdfPageNumber);
+  }, [isPdf, pdfPageNumber, renderBackendPdfPage, selectedFile]);
+
+  React.useEffect(() => {
+    const handleGlobalWheel = (event) => {
+      if (!event.ctrlKey) return;
+      if (event.cancelable) event.preventDefault();
+    };
+
+    const handleGlobalKeydown = (event) => {
+      if (!event.ctrlKey) return;
+      if (event.key === '+' || event.key === '-' || event.key === '=' || event.key === '_' || event.key === '0') {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener('wheel', handleGlobalWheel, { passive: false });
+    window.addEventListener('keydown', handleGlobalKeydown);
+    return () => {
+      window.removeEventListener('wheel', handleGlobalWheel);
+      window.removeEventListener('keydown', handleGlobalKeydown);
+    };
+  }, []);
 
   return (
     <div className="app-shell sidebar-wide">
       <Sidebar active={activeMenu} onSelect={onSelectMenu} collapsed={false} />
       <main className="main excel-web-v2-main">
-        <div className="title-drag" />
+        <div className="topbar" />
         <div className="excel-web-v2-layout">
           <section className="excel-web-v2-pane left">
             <h2>1. PDF/이미지 뷰어</h2>
             <div className="excel-web-v2-upload-row">
-              <input type="file" multiple accept=".pdf,.png,.jpg,.jpeg" onChange={handleSourceUpload} />
+              <input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={handleSourceUpload} />
             </div>
             <div className="excel-web-v2-file-list">
               {sourceFiles.length === 0 && <p className="muted">업로드된 파일이 없습니다.</p>}
@@ -230,10 +549,53 @@ export default function ExcelWebEditPage() {
             <div className="excel-web-v2-preview">
               {!selectedFile && <p className="muted">좌측 목록에서 파일을 선택하세요.</p>}
               {selectedFile && isPdf && (
-                <iframe title={selectedFile.name} src={previewSrc} />
+                <div className="excel-web-v2-pdf-wrap">
+                  <div className="excel-web-v2-pdf-toolbar">
+                    <button type="button" disabled={pdfLoading || backendPdfLoading || pdfPageNumber <= 1} onClick={() => setPdfPageNumber((prev) => Math.max(1, prev - 1))}>이전</button>
+                    <span>{effectivePdfPageCount > 0 ? `${pdfPageNumber} / ${effectivePdfPageCount}` : '0 / 0'}</span>
+                    <button type="button" disabled={pdfLoading || backendPdfLoading || effectivePdfPageCount === 0 || pdfPageNumber >= effectivePdfPageCount} onClick={() => setPdfPageNumber((prev) => Math.min(effectivePdfPageCount, prev + 1))}>다음</button>
+                    <button type="button" onClick={() => changePreviewZoom(-0.1)}>-</button>
+                    <span>{Math.round(previewZoom * 100)}%</span>
+                    <button type="button" onClick={() => changePreviewZoom(0.1)}>+</button>
+                    <button type="button" onClick={resetPreviewZoom}>100%</button>
+                    <a href={previewSrc} target="_blank" rel="noreferrer">원본 열기</a>
+                  </div>
+                  <div className="excel-web-v2-pdf-canvas-area" onWheel={handlePreviewWheel}>
+                    {(pdfLoading || backendPdfLoading) && <p className="muted">PDF 불러오는 중...</p>}
+                    {!pdfLoading && !backendPdfLoading && backendPreviewUrl && (
+                      <img
+                        src={backendPreviewUrl}
+                        alt={selectedFile.name}
+                        className="excel-web-v2-zoom-image"
+                        style={{ width: `${previewZoom * 100}%` }}
+                      />
+                    )}
+                    {!pdfLoading && !backendPdfLoading && !backendPreviewUrl && pdfError && <p className="muted">{pdfError}</p>}
+                  </div>
+                </div>
               )}
               {selectedFile && !isPdf && (
-                <img src={previewSrc} alt={selectedFile.name} />
+                <div className="excel-web-v2-pdf-wrap">
+                  <div className="excel-web-v2-pdf-toolbar">
+                    <button type="button" onClick={() => changePreviewZoom(-0.1)}>-</button>
+                    <span>{Math.round(previewZoom * 100)}%</span>
+                    <button type="button" onClick={() => changePreviewZoom(0.1)}>+</button>
+                    <button type="button" onClick={resetPreviewZoom}>100%</button>
+                    <a href={previewSrc} target="_blank" rel="noreferrer">원본 열기</a>
+                  </div>
+                  <div className="excel-web-v2-image-area" onWheel={handlePreviewWheel}>
+                    {(pdfLoading || backendPdfLoading) && <p className="muted">이미지 불러오는 중...</p>}
+                    {!pdfLoading && !backendPdfLoading && backendPreviewUrl && (
+                      <img
+                        src={backendPreviewUrl}
+                        alt={selectedFile.name}
+                        className="excel-web-v2-zoom-image"
+                        style={{ width: `${previewZoom * 100}%` }}
+                      />
+                    )}
+                    {!pdfLoading && !backendPdfLoading && !backendPreviewUrl && pdfError && <p className="muted">{pdfError}</p>}
+                  </div>
+                </div>
               )}
             </div>
           </section>
@@ -241,7 +603,6 @@ export default function ExcelWebEditPage() {
           <section className="excel-web-v2-pane center">
             <div className="excel-web-v2-pane-head">
               <h2>4. 변경 전/후 미리보기</h2>
-              <button type="button" onClick={handleLoadData}>불러오기</button>
             </div>
             <div className="excel-web-v2-compare">
               <div>
@@ -251,7 +612,7 @@ export default function ExcelWebEditPage() {
                     {FIELD_LABELS.map(([key, label]) => (
                       <tr key={`before-${key}`}>
                         <th>{label}</th>
-                        <td>{loadedData?.[key] || ''}</td>
+                        <td style={loadedColorMap?.[key] ? { backgroundColor: loadedColorMap[key] } : undefined}>{loadedData?.[key] || ''}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -274,51 +635,140 @@ export default function ExcelWebEditPage() {
           </section>
 
           <section className="excel-web-v2-pane right">
-            <h2>2. 업데이트 대상 설정</h2>
-            <div className="excel-web-v2-settings">
-              <label>
-                자료 종류
-                <select value={fileType} onChange={(e) => setFileType(e.target.value)}>
-                  <option>전기경영상태</option>
-                  <option>통신경영상태</option>
-                  <option>소방경영상태</option>
-                  <option>신용평가</option>
-                </select>
-              </label>
+            <h2>2. 편집 유형</h2>
+            <div className="excel-web-v2-editor-tabs">
+              <button
+                type="button"
+                className={editorMode === EDITOR_MODE.MANAGEMENT ? 'active' : ''}
+                onClick={() => setEditorMode(EDITOR_MODE.MANAGEMENT)}
+              >
+                경영상태
+              </button>
+              <button
+                type="button"
+                className={editorMode === EDITOR_MODE.CREDIT ? 'active' : ''}
+                onClick={() => setEditorMode(EDITOR_MODE.CREDIT)}
+              >
+                신용평가
+              </button>
             </div>
 
-            <h2>3. 수정 입력</h2>
-            <div className="excel-web-v2-form">
-              <label>상호<input name="companyName" value={form.companyName} onChange={handleInput} /></label>
-              <label>대표자<input name="managerName" value={form.managerName} onChange={handleInput} /></label>
-              <label>사업자등록번호<input name="bizNo" value={form.bizNo} onChange={handleInput} /></label>
-              <label>지역<input name="region" value={form.region} onChange={handleInput} /></label>
-              <label>시평액<input name="sipyung" value={form.sipyung} onChange={handleInput} /></label>
-              <label>3년실적<input name="perf3y" value={form.perf3y} onChange={handleInput} /></label>
-              <label>5년실적<input name="perf5y" value={form.perf5y} onChange={handleInput} /></label>
-              <label>부채비율<input name="debtRatio" value={form.debtRatio} onChange={handleInput} /></label>
-              <label>유동비율<input name="currentRatio" value={form.currentRatio} onChange={handleInput} /></label>
-              <label>영업기간<input name="bizYears" value={form.bizYears} onChange={handleInput} /></label>
-              <label>신용평가등급<input name="creditGrade" value={form.creditGrade} onChange={handleInput} /></label>
-              <div className="inline-dates">
-                <label>시작일<input name="creditStartDate" value={form.creditStartDate} onChange={handleInput} placeholder="YYYY.MM.DD" /></label>
-                <label>종료일<input name="creditEndDate" value={form.creditEndDate} onChange={handleInput} placeholder="YYYY.MM.DD" /></label>
-              </div>
-              <label>여성기업<input name="womenOwned" value={form.womenOwned} onChange={handleInput} /></label>
-              <label>중소기업<input name="smallBusiness" value={form.smallBusiness} onChange={handleInput} /></label>
-              <label>일자리창출실적<input name="jobCreation" value={form.jobCreation} onChange={handleInput} /></label>
-              <label>시공품질평가<input name="qualityEval" value={form.qualityEval} onChange={handleInput} /></label>
-              <label>비고<input name="note" value={form.note} onChange={handleInput} /></label>
-            </div>
+            {editorMode === EDITOR_MODE.MANAGEMENT && (
+              <>
+                <h2>3. 업데이트 대상 설정</h2>
+                <div className="excel-web-v2-settings">
+                  <label>
+                    자료 종류
+                    <select value={fileType} onChange={(e) => setFileType(e.target.value)}>
+                      {MANAGEMENT_FILE_TYPES.map((type) => <option key={type}>{type}</option>)}
+                    </select>
+                  </label>
+                </div>
 
-            <h2>4. 실행</h2>
-            <div className="excel-web-v2-actions">
-              <button type="button">연말 색상 업데이트</button>
-              <button type="button">신용평가 유효기간 갱신</button>
-              <button type="button" className="primary">확정 및 저장</button>
-            </div>
+                <h2>4. 경영상태 수정 입력</h2>
+                <div className="excel-web-v2-form">
+                  <label>상호<input name="companyName" value={form.companyName} onChange={handleInput} /></label>
+                  <label>대표자<input name="managerName" value={form.managerName} onChange={handleInput} /></label>
+                  <label>사업자등록번호<input name="bizNo" value={form.bizNo} onChange={handleInput} /></label>
+                  <label>지역<input name="region" value={form.region} onChange={handleInput} /></label>
+                  <label>시평액<input name="sipyung" value={form.sipyung} onChange={handleInput} /></label>
+                  <label>3년실적<input name="perf3y" value={form.perf3y} onChange={handleInput} /></label>
+                  <label>5년실적<input name="perf5y" value={form.perf5y} onChange={handleInput} /></label>
+                  <label>부채비율<input name="debtRatio" value={form.debtRatio} onChange={handleInput} /></label>
+                  <label>유동비율<input name="currentRatio" value={form.currentRatio} onChange={handleInput} /></label>
+                  <label>영업기간<input name="bizYears" value={form.bizYears} onChange={handleInput} /></label>
+                  <label>여성기업<input name="womenOwned" value={form.womenOwned} onChange={handleInput} /></label>
+                  <label>중소기업<input name="smallBusiness" value={form.smallBusiness} onChange={handleInput} /></label>
+                  <label>일자리창출실적<input name="jobCreation" value={form.jobCreation} onChange={handleInput} /></label>
+                  <label>시공품질평가<input name="qualityEval" value={form.qualityEval} onChange={handleInput} /></label>
+                  <label className="full-row">비고<input name="note" value={form.note} onChange={handleInput} /></label>
+                </div>
+
+                <h2>5. 실행</h2>
+                <div className="excel-web-v2-actions">
+                  <button type="button" onClick={handleLoadData} disabled={isBackendBusy}>불러오기</button>
+                  <button type="button" className="primary" onClick={handleSave} disabled={isBackendBusy}>확정 및 저장</button>
+                  <button type="button" className="maintenance" onClick={() => setIsMaintenanceModalOpen(true)} disabled={isBackendBusy}>갱신기능</button>
+                  {backendNotice && <p className="excel-web-v2-api-notice">{backendNotice}</p>}
+                  {backendError && <p className="excel-web-v2-api-error">{backendError}</p>}
+                </div>
+              </>
+            )}
+
+            {editorMode === EDITOR_MODE.CREDIT && (
+              <>
+                <h2>3. 업데이트 대상 설정</h2>
+                <div className="excel-web-v2-settings">
+                  <label>
+                    자료 종류
+                    <input value="신용평가" readOnly />
+                  </label>
+                </div>
+
+                <h2>4. DB 원본 정보 (변경 전)</h2>
+                <div className="excel-web-v2-credit-readonly">
+                  <label>상호<input value={loadedData?.companyName || ''} readOnly /></label>
+                  <label>기존 신용평가<textarea value={loadedData?.creditText || ''} readOnly rows={3} /></label>
+                </div>
+
+                <h2>5. 신용평가 입력 (변경 후)</h2>
+                <div className="excel-web-v2-form">
+                  <label>사업자등록번호<input name="bizNo" value={form.bizNo} onChange={handleInput} /></label>
+                  <label>신용평가등급<input name="creditGrade" value={form.creditGrade} onChange={handleInput} /></label>
+                  <div className="inline-dates">
+                    <label>시작일<input name="creditStartDate" value={form.creditStartDate} onChange={handleInput} placeholder="YYYY.MM.DD" /></label>
+                    <label>종료일<input name="creditEndDate" value={form.creditEndDate} onChange={handleInput} placeholder="YYYY.MM.DD" /></label>
+                  </div>
+                  <label className="full-row">
+                    최종 저장값 (신용평가)
+                    <textarea value={finalCreditText} readOnly rows={3} />
+                  </label>
+                </div>
+
+                <h2>6. 실행</h2>
+                <div className="excel-web-v2-actions">
+                  <button type="button" onClick={handleLoadData} disabled={isBackendBusy}>불러오기</button>
+                  <button type="button" className="primary" onClick={handleSave} disabled={isBackendBusy}>확정 및 저장</button>
+                  {backendNotice && <p className="excel-web-v2-api-notice">{backendNotice}</p>}
+                  {backendError && <p className="excel-web-v2-api-error">{backendError}</p>}
+                </div>
+              </>
+            )}
           </section>
         </div>
+
+        {isMaintenanceModalOpen && (
+          <div className="excel-web-v2-modal-backdrop" role="dialog" aria-modal="true" aria-label="갱신기능">
+            <div className="excel-web-v2-modal">
+              <div className="excel-web-v2-modal-head">
+                <h3>갱신 기능</h3>
+                <button type="button" onClick={() => setIsMaintenanceModalOpen(false)} disabled={isBackendBusy}>닫기</button>
+              </div>
+              <div className="excel-web-v2-modal-body">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleYearEndUpdate();
+                    setIsMaintenanceModalOpen(false);
+                  }}
+                  disabled={isBackendBusy}
+                >
+                  연말 색상 업데이트
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleCreditExpiryUpdate();
+                    setIsMaintenanceModalOpen(false);
+                  }}
+                  disabled={isBackendBusy}
+                >
+                  신용평가 유효기간 갱신
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

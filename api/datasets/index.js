@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const { sendJson, allowMethods, readJsonBody } = require('../_lib/http');
 const {
   getStatuses,
@@ -7,6 +9,8 @@ const {
   getDatasetMeta,
   getDatasetVersion,
   uploadDataset,
+  refreshDataset,
+  resolveDatasetRoot,
 } = require('../_lib/blob-store');
 
 function getAction(req) {
@@ -66,20 +70,60 @@ module.exports = async function handler(req, res) {
       }
     }
 
+    if (action === 'download') {
+      try {
+        const url = new URL(req.url, 'http://localhost');
+        const fileType = String(url.searchParams.get('fileType') || '').trim().toLowerCase();
+        if (!DATASET_TYPES.includes(fileType)) {
+          return sendJson(res, 400, { success: false, message: 'Invalid dataset type' });
+        }
+
+        const meta = await getDatasetMeta(fileType);
+        if (!meta || !meta.pathname) {
+          return sendJson(res, 404, { success: false, message: `${fileType} dataset is not available` });
+        }
+
+        const absolutePath = path.join(resolveDatasetRoot(), meta.pathname);
+        const buffer = await fs.promises.readFile(absolutePath);
+        const originalName = String(meta.fileName || `${fileType}.xlsx`).trim() || `${fileType}.xlsx`;
+        const encodedName = encodeURIComponent(originalName);
+
+        res.statusCode = 200;
+        res.setHeader('Content-Type', meta.contentType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedName}`);
+        res.end(buffer);
+        return;
+      } catch (error) {
+        console.error('[api/datasets:index:download] failed:', error);
+        return sendJson(res, 500, { success: false, message: error?.message || 'Download failed' });
+      }
+    }
+
     allowMethods(res, ['GET', 'POST']);
     return sendJson(res, 400, { success: false, message: 'Invalid action' });
   }
 
   if (req.method === 'POST') {
     const action = getAction(req);
-    if (action !== 'upload') {
+    if (action !== 'upload' && action !== 'refresh') {
       allowMethods(res, ['GET', 'POST']);
       return sendJson(res, 400, { success: false, message: 'Invalid action' });
     }
 
     try {
       const body = await readJsonBody(req);
-      const fileType = body.fileType;
+      const fileType = String(body.fileType || '').trim().toLowerCase();
+      if (action === 'refresh') {
+        if (!DATASET_TYPES.includes(fileType)) {
+          return sendJson(res, 400, { success: false, message: 'Invalid dataset type' });
+        }
+        const refreshed = await refreshDataset(fileType);
+        return sendJson(res, 200, {
+          success: true,
+          data: refreshed,
+        });
+      }
+
       const fileName = body.fileName || `${fileType}.xlsx`;
       const contentType = body.contentType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
       const fileBase64 = body.fileBase64 || '';

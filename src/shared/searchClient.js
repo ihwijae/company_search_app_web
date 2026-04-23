@@ -93,6 +93,21 @@ const copyRowsToClipboard = async (rows) => {
   return { success: true };
 };
 
+const extractFileNameFromContentDisposition = (headerValue, fallback = 'dataset.xlsx') => {
+  const source = String(headerValue || '');
+  const utf8Match = source.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch (error) {
+      return utf8Match[1];
+    }
+  }
+  const plainMatch = source.match(/filename="?([^";]+)"?/i);
+  if (plainMatch?.[1]) return plainMatch[1];
+  return fallback;
+};
+
 export const searchClient = {
   async selectFile(fileType) {
     return invokeElectron('selectFile', fileType);
@@ -106,6 +121,37 @@ export const searchClient = {
     const result = await webSearchStore.uploadFile(fileType, file);
     sharedStatusCache = { payload: null, storedAt: 0, promise: null };
     return result;
+  },
+
+  async downloadDataset(fileType) {
+    const normalized = normalizeFileType(fileType);
+    if (!DATASET_TYPES.includes(normalized)) {
+      throw new Error('지원하지 않는 파일 유형입니다.');
+    }
+
+    const response = await fetch(`/api/datasets?action=download&fileType=${encodeURIComponent(normalized)}`);
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload?.message || `다운로드 실패 (${response.status})`);
+    }
+
+    const blob = await response.blob();
+    const fileName = extractFileNameFromContentDisposition(
+      response.headers.get('content-disposition'),
+      `${normalized}.xlsx`,
+    );
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+    return { success: true, fileName };
   },
 
   async searchCompanies(criteria, fileType, options) {

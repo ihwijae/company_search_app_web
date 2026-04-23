@@ -29,3 +29,5 @@ node_modules/
 .env*.local
 users.yaml
 clone/
+backend/python/.venv/
+backend/python/data/

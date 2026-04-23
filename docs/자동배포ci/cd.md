@@ -7,7 +7,7 @@
 ## 2. 현재 구성(적용 완료)
 - 서버 환경: WSL (Ubuntu)
 - 프로젝트 경로: `/home/ihwijae/projects/company_search_app_web`
-- 앱 실행: `pm2` + `npm run serve:prod:lan`
+- 앱 실행: `pm2` + `npm run serve:prod:lan` + `python excel backend(8787)`
 - PM2 서비스: `pm2-ihwijae.service` (`systemd`)
 - GitHub Actions Runner: self-hosted runner (서버에 서비스로 등록)
 
@@ -15,7 +15,7 @@
 1. 개발 PC에서 `main` 브랜치로 `git push`
 2. GitHub Actions의 `deploy.yml` 워크플로우 실행
 3. self-hosted runner가 서버에서 `scripts/deploy-prod.sh` 실행
-4. 서버에서 `git pull -> npm ci -> npm run build -> pm2 restart`
+4. 서버에서 `git pull -> npm ci -> npm run build -> python venv/pip sync -> pm2 restart`
 5. 서비스 반영 완료
 
 ## 4. 서버 배포 스크립트
@@ -38,6 +38,37 @@ npm run build
 
 pm2 restart "$PM2_NAME" --update-env
 pm2 save
+```
+
+### 4-1. 운영 초기 1회 세팅 스크립트 (신규)
+파일: `scripts/setup-prod-services.sh`
+
+- 목적: 운영 서버에서 Node + Python PM2 프로세스를 한 번에 준비
+- 포함 작업:
+  - `python3-venv` 설치(없을 때만)
+  - `backend/python/.venv` 생성 및 `requirements.txt` 설치
+  - `company-search` PM2 프로세스 준비
+  - `company-search-excel-backend` PM2 프로세스 준비
+  - `pm2 save`
+
+실행:
+
+```bash
+cd /home/ihwijae/projects/company_search_app_web
+chmod +x scripts/setup-prod-services.sh scripts/run-excel-backend-prod.sh scripts/deploy-prod.sh
+./scripts/setup-prod-services.sh
+```
+
+기본 경로:
+- `COMPANY_SEARCH_APP_DATA_ROOT=$HOME/app-data/company-search`
+- `EXCEL_EDIT_ARCHIVE_ROOT=$HOME/app-data/스캔본`
+
+필요 시 실행 시점에 환경변수로 덮어쓰기:
+
+```bash
+COMPANY_SEARCH_APP_DATA_ROOT=/home/ihwijae/app-data/company-search \
+EXCEL_EDIT_ARCHIVE_ROOT=/home/ihwijae/app-data/스캔본 \
+./scripts/setup-prod-services.sh
 ```
 
 ## 5. GitHub Actions 워크플로우
@@ -69,6 +100,7 @@ jobs:
 ```bash
 pm2 list
 pm2 logs company-search --lines 120
+pm2 logs company-search-excel-backend --lines 120
 ```
 
 ### PM2 자동시작(systemd) 확인

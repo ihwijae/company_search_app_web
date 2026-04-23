@@ -26,6 +26,7 @@ import CompanyNotesPage from './view/features/notes/pages/CompanyNotesPage.jsx';
 import TempCompaniesPage from './view/features/temp-companies/pages/TempCompaniesPage.jsx';
 import LoginPage from './view/features/auth/pages/LoginPage.jsx';
 import ExcelWebEditPage from './view/features/excel-web/pages/ExcelWebEditPage.jsx';
+import ScanArchivePage from './view/features/scan-archive/pages/ScanArchivePage.jsx';
 import authClient from './shared/authClient.js';
 
 export default function App() {
@@ -176,6 +177,9 @@ export default function App() {
       break;
     case '/excel-web-edit':
       Screen = ExcelWebEditPage;
+      break;
+    case '/scan-archive':
+      Screen = ScanArchivePage;
       break;
     case '/login':
       Screen = LoginPage;

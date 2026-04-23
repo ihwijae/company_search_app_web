@@ -43,6 +43,14 @@ export default function Sidebar({ active, onSelect, fileStatuses, collapsed = tr
       window.location.hash = '#/excel-web-edit';
       return;
     }
+    if (key === 'upload' && typeof window !== 'undefined') {
+      window.location.hash = '#/search?upload=1';
+      return;
+    }
+    if (key === 'scan-archive' && typeof window !== 'undefined') {
+      window.location.hash = '#/scan-archive';
+      return;
+    }
     if (key === 'agreements' && typeof window !== 'undefined') {
       const opener = window.__openAgreementBoard;
       if (typeof opener === 'function') {
@@ -54,7 +62,9 @@ export default function Sidebar({ active, onSelect, fileStatuses, collapsed = tr
       try {
         openTempCompaniesWindow();
         return;
-      } catch {}
+      } catch (error) {
+        void error;
+      }
     }
     if (onSelect) onSelect(key);
   };
@@ -147,6 +157,7 @@ export default function Sidebar({ active, onSelect, fileStatuses, collapsed = tr
     },
     { key: 'temp-companies', label: '임시업체', icon: '🏢' },
     { key: 'upload', label: '업로드', icon: '📂' },
+    { key: 'scan-archive', label: '스캔본', icon: '🗂️' },
     { key: 'settings', label: '설정', icon: '⚙️' },
   ];
 
