@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import hashlib
 from copy import copy
+from contextlib import contextmanager, ExitStack
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -18,6 +20,10 @@ from openpyxl.cell.cell import MergedCell
 from openpyxl.styles import Color, Font, PatternFill
 from PIL import Image
 from pydantic import BaseModel, Field
+try:
+    import fcntl
+except Exception:  # pragma: no cover
+    fcntl = None
 
 APP_NAME = "excel-edit-backend"
 PYTHON_BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -193,6 +199,7 @@ class SaveRequest(BaseModel):
     bizNo: str = Field(default="")
     data: dict = Field(default_factory=dict)
     saveMode: Literal["normal", "archive_only"] | str = Field(default="normal")
+    expectedVersion: str = Field(default="")
 
 
 app = FastAPI(title=APP_NAME, version="0.1.0")
@@ -343,6 +350,112 @@ def _resolve_archive_root() -> Path:
         return Path(legacy_archive).resolve()
 
     return DEFAULT_ARCHIVE_ROOT
+
+
+@contextmanager
+def _exclusive_excel_lock(excel_path: str):
+    lock_path = Path(f"{excel_path}.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "a+b") as lock_file:
+        if fcntl:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if fcntl:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def _exclusive_excel_locks(excel_paths: list[str]):
+    unique_paths = sorted({str(path) for path in excel_paths if str(path).strip()})
+    with ExitStack() as stack:
+        for path in unique_paths:
+            stack.enter_context(_exclusive_excel_lock(path))
+        yield
+
+
+def _build_company_fingerprint(db_type: str, excel_path: str, sheet_name: str, row: int, col: int, raw: dict) -> str:
+    payload = {
+        "dbType": db_type,
+        "excelPath": str(excel_path),
+        "sheetName": str(sheet_name),
+        "row": int(row),
+        "col": int(col),
+        "values": {key: str(raw.get(key) or "") for key in sorted(COLUMN_MAP.keys())},
+    }
+    digest = hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+    return digest[:24]
+
+
+def _build_found_version(db_type: str, excel_path: str, biz_no: str, sheet_name: str, row: int, col: int, raw: dict) -> str:
+    biz = _normalize_biz_no(biz_no)
+    fingerprint = _build_company_fingerprint(db_type, excel_path, sheet_name, row, col, raw)
+    return f"found|{db_type}|{biz}|{fingerprint}"
+
+
+def _build_not_found_version(file_type: str, biz_no: str) -> str:
+    return f"nf|{file_type}|{_normalize_biz_no(biz_no)}"
+
+
+def _validate_expected_version_for_save(request: SaveRequest, db_paths: dict[str, str], expected_version: str) -> None:
+    token = str(expected_version or "").strip()
+    if not token:
+        return
+
+    parts = token.split("|")
+    if len(parts) < 3:
+        raise HTTPException(status_code=409, detail="저장 버전 정보가 올바르지 않습니다. 다시 조회 후 저장하세요.")
+
+    normalized_biz = _normalize_biz_no(request.bizNo)
+    token_kind = parts[0]
+    token_file_type_or_db = parts[1]
+    token_biz = parts[2]
+
+    if token_biz and normalized_biz and token_biz != normalized_biz:
+        raise HTTPException(status_code=409, detail="사업자번호 기준 데이터가 변경되었습니다. 다시 조회 후 저장하세요.")
+
+    if token_kind == "nf":
+        if token_file_type_or_db != request.fileType:
+            raise HTTPException(status_code=409, detail="조회 기준 자료종류가 변경되었습니다. 다시 조회 후 저장하세요.")
+
+        if request.fileType == "신용평가":
+            for _, path in db_paths.items():
+                if not path or not Path(path).exists():
+                    continue
+                if _find_company_position(path, request.bizNo):
+                    raise HTTPException(status_code=409, detail="다른 사용자가 업체를 추가했습니다. 다시 조회 후 저장하세요.")
+            return
+
+        db_key = FILE_TYPE_TO_DB_KEY.get(request.fileType)
+        target_path = db_paths.get(db_key, "") if db_key else ""
+        if target_path and Path(target_path).exists() and _find_company_position(target_path, request.bizNo):
+            raise HTTPException(status_code=409, detail="다른 사용자가 업체를 추가했습니다. 다시 조회 후 저장하세요.")
+        return
+
+    if token_kind != "found" or len(parts) < 4:
+        raise HTTPException(status_code=409, detail="저장 버전 정보가 올바르지 않습니다. 다시 조회 후 저장하세요.")
+
+    db_type = token_file_type_or_db
+    expected_fp = parts[3]
+    if request.fileType != "신용평가":
+        target_db = FILE_TYPE_TO_DB_KEY.get(request.fileType)
+        if target_db and db_type != target_db:
+            raise HTTPException(status_code=409, detail="조회한 자료종류가 변경되었습니다. 다시 조회 후 저장하세요.")
+
+    excel_path = db_paths.get(db_type, "")
+    if not excel_path or not Path(excel_path).exists():
+        raise HTTPException(status_code=409, detail="조회한 원본 DB가 변경되었습니다. 다시 조회 후 저장하세요.")
+
+    position = _find_company_position(excel_path, request.bizNo)
+    if not position:
+        raise HTTPException(status_code=409, detail="조회한 업체 데이터가 변경되었습니다. 다시 조회 후 저장하세요.")
+
+    sheet_name, row, col = position
+    raw = _extract_company_data(excel_path, sheet_name, row, col)
+    current_fp = _build_company_fingerprint(db_type, excel_path, sheet_name, row, col, raw)
+    if current_fp != expected_fp:
+        raise HTTPException(status_code=409, detail="다른 사용자가 먼저 수정했습니다. 다시 조회 후 저장하세요.")
 
 
 def _find_company_position(excel_path: str, biz_no: str) -> tuple[str, int, int] | None:
@@ -1037,6 +1150,7 @@ def company_lookup(payload: LookupRequest) -> ApiResponse:
         raw = _extract_company_data(excel_path, sheet_name, row, col)
         raw_cells = _extract_company_cells(excel_path, sheet_name, row, col)
         lookup_payload = _build_lookup_payload(raw, db_type, excel_path, raw_cells=raw_cells)
+        lookup_payload["version"] = _build_found_version(db_type, excel_path, biz_no, sheet_name, row, col, raw)
         return ApiResponse(
             success=True,
             message="업체 조회가 완료되었습니다.",
@@ -1046,7 +1160,7 @@ def company_lookup(payload: LookupRequest) -> ApiResponse:
     return ApiResponse(
         success=True,
         message="업체를 찾지 못했습니다.",
-        data={"found": False},
+        data={"found": False, "version": _build_not_found_version(payload.fileType, biz_no)},
     )
 
 
@@ -1066,6 +1180,7 @@ async def save_excel_edit_data(
 
     biz_no = request.bizNo.strip()
     db_paths = _resolve_db_paths()
+    expected_version = str(request.expectedVersion or "").strip()
 
     updated: dict = {}
     company_name = str(request.data.get("companyName") or "")
@@ -1094,6 +1209,11 @@ async def save_excel_edit_data(
         if not region_name:
             raise HTTPException(status_code=400, detail="파일만 저장에는 지역이 필요합니다.")
 
+        if expected_version and db_paths:
+            target_paths = [path for path in db_paths.values() if path and Path(path).exists()]
+            with _exclusive_excel_locks(target_paths):
+                _validate_expected_version_for_save(request, db_paths, expected_version)
+
         archived_files = _archive_uploaded_files(files, company_name, request.fileType, region_name)
         return ApiResponse(
             success=True,
@@ -1113,21 +1233,24 @@ async def save_excel_edit_data(
         raise HTTPException(status_code=400, detail="DB 경로가 설정되지 않았습니다. 환경변수를 확인하세요.")
 
     if request.fileType == "신용평가":
-        credit_text = _build_credit_text(request.data)
-        results = _update_credit_data(db_paths, biz_no, credit_text)
-        if not any(item.get("updated") for item in results):
-            raise HTTPException(status_code=404, detail="신용평가 갱신 대상 업체를 찾지 못했습니다.")
-        updated["credit"] = results
-        if not company_name or not region_name:
-            for db_type, path in db_paths.items():
-                position = _find_company_position(path, biz_no)
-                if not position:
-                    continue
-                sheet_name, row, col = position
-                raw = _extract_company_data(path, sheet_name, row, col)
-                company_name = company_name or str(raw.get("상호") or "")
-                region_name = region_name or str(raw.get("지역") or "")
-                break
+        target_paths = [path for _, path in db_paths.items() if path and Path(path).exists()]
+        with _exclusive_excel_locks(target_paths):
+            _validate_expected_version_for_save(request, db_paths, expected_version)
+            credit_text = _build_credit_text(request.data)
+            results = _update_credit_data(db_paths, biz_no, credit_text)
+            if not any(item.get("updated") for item in results):
+                raise HTTPException(status_code=404, detail="신용평가 갱신 대상 업체를 찾지 못했습니다.")
+            updated["credit"] = results
+            if not company_name or not region_name:
+                for db_type, path in db_paths.items():
+                    position = _find_company_position(path, biz_no)
+                    if not position:
+                        continue
+                    sheet_name, row, col = position
+                    raw = _extract_company_data(path, sheet_name, row, col)
+                    company_name = company_name or str(raw.get("상호") or "")
+                    region_name = region_name or str(raw.get("지역") or "")
+                    break
     else:
         db_key = FILE_TYPE_TO_DB_KEY.get(request.fileType)
         if not db_key:
@@ -1135,31 +1258,33 @@ async def save_excel_edit_data(
         excel_path = db_paths.get(db_key, "")
         if not excel_path or not Path(excel_path).exists():
             raise HTTPException(status_code=400, detail=f"{db_key} DB 경로가 유효하지 않습니다.")
-        position = _find_company_position(excel_path, biz_no)
-        if position:
-            updated_labels = _update_management_data(excel_path, biz_no, request.data, db_key)
-            updated["management"] = {
-                "dbType": db_key,
-                "excelPath": excel_path,
-                "action": "update_existing",
-                "updatedLabels": updated_labels,
-            }
-            if not company_name or not region_name:
-                sheet_name, row, col = position
-                raw = _extract_company_data(excel_path, sheet_name, row, col)
-                company_name = company_name or str(raw.get("상호") or "")
-                region_name = region_name or str(raw.get("지역") or "")
-        else:
-            added = _add_new_company_data(excel_path, request.data, db_key)
-            company_name = company_name or str(added.get("companyName") or "")
-            region_name = region_name or str(added.get("sheetName") or "")
-            updated["management"] = {
-                "dbType": db_key,
-                "excelPath": excel_path,
-                "action": "add_new_company",
-                "sheetName": region_name,
-                "companyName": company_name,
-            }
+        with _exclusive_excel_lock(excel_path):
+            _validate_expected_version_for_save(request, db_paths, expected_version)
+            position = _find_company_position(excel_path, biz_no)
+            if position:
+                updated_labels = _update_management_data(excel_path, biz_no, request.data, db_key)
+                updated["management"] = {
+                    "dbType": db_key,
+                    "excelPath": excel_path,
+                    "action": "update_existing",
+                    "updatedLabels": updated_labels,
+                }
+                if not company_name or not region_name:
+                    sheet_name, row, col = position
+                    raw = _extract_company_data(excel_path, sheet_name, row, col)
+                    company_name = company_name or str(raw.get("상호") or "")
+                    region_name = region_name or str(raw.get("지역") or "")
+            else:
+                added = _add_new_company_data(excel_path, request.data, db_key)
+                company_name = company_name or str(added.get("companyName") or "")
+                region_name = region_name or str(added.get("sheetName") or "")
+                updated["management"] = {
+                    "dbType": db_key,
+                    "excelPath": excel_path,
+                    "action": "add_new_company",
+                    "sheetName": region_name,
+                    "companyName": company_name,
+                }
 
     archived_files = _archive_uploaded_files(files, company_name, request.fileType, region_name) if files else []
 
@@ -1181,10 +1306,11 @@ def update_year_end_color(payload: JobRequest) -> ApiResponse:
     targets = _resolve_target_excel_paths_for_job(payload)
     results: list[dict] = []
     total = 0
-    for db_type, excel_path in targets:
-        result = _batch_update_year_end_colors(excel_path, dry_run=payload.dryRun)
-        total += int(result.get("updatedCount", 0))
-        results.append({"dbType": db_type, "excelPath": excel_path, **result})
+    with _exclusive_excel_locks([path for _, path in targets]):
+        for db_type, excel_path in targets:
+            result = _batch_update_year_end_colors(excel_path, dry_run=payload.dryRun)
+            total += int(result.get("updatedCount", 0))
+            results.append({"dbType": db_type, "excelPath": excel_path, **result})
 
     return ApiResponse(
         success=True,
@@ -1203,10 +1329,11 @@ def update_credit_expiry(payload: JobRequest) -> ApiResponse:
     targets = _resolve_target_excel_paths_for_job(payload)
     results: list[dict] = []
     total = 0
-    for db_type, excel_path in targets:
-        result = _batch_update_credit_rating_colors(excel_path, dry_run=payload.dryRun)
-        total += int(result.get("updatedCount", 0))
-        results.append({"dbType": db_type, "excelPath": excel_path, **result})
+    with _exclusive_excel_locks([path for _, path in targets]):
+        for db_type, excel_path in targets:
+            result = _batch_update_credit_rating_colors(excel_path, dry_run=payload.dryRun)
+            total += int(result.get("updatedCount", 0))
+            results.append({"dbType": db_type, "excelPath": excel_path, **result})
 
     return ApiResponse(
         success=True,

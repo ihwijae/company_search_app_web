@@ -51,6 +51,11 @@ const EDITOR_MODE = {
 };
 
 const MANAGEMENT_FILE_TYPES = ['전기경영상태', '통신경영상태', '소방경영상태'];
+const MANAGEMENT_FILE_TYPE_COLORS = {
+  전기경영상태: '#ca8a04',
+  통신경영상태: '#0284c7',
+  소방경영상태: '#dc2626',
+};
 const REGION_OPTIONS = ['서울', '경기', '인천', '부산', '대구', '광주', '대전', '울산', '세종', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'];
 
 function buildCreditText(form) {
@@ -106,12 +111,14 @@ export default function ExcelWebEditPage() {
   const [selectedFileId, setSelectedFileId] = React.useState('');
   const [loadedData, setLoadedData] = React.useState(null);
   const [loadedColorMap, setLoadedColorMap] = React.useState({});
+  const [lookupVersion, setLookupVersion] = React.useState('');
   const [form, setForm] = React.useState(EMPTY_FORM);
   const sourceFilesRef = React.useRef([]);
   const [pdfPageNumber, setPdfPageNumber] = React.useState(1);
   const [pdfLoading, setPdfLoading] = React.useState(false);
   const [pdfError, setPdfError] = React.useState('');
   const [previewZoom, setPreviewZoom] = React.useState(1);
+  const [previewRotation, setPreviewRotation] = React.useState(0);
   const [isBackendBusy, setIsBackendBusy] = React.useState(false);
   const [backendPreviewUrl, setBackendPreviewUrl] = React.useState('');
   const [backendPdfPageCount, setBackendPdfPageCount] = React.useState(0);
@@ -139,13 +146,6 @@ export default function ExcelWebEditPage() {
     if (!message) return;
     notify({ type: 'error', title: '오류', message, duration: 4800 });
   }, [notify]);
-
-  const getFileTypeToneClass = React.useCallback((type) => {
-    if (type === '전기경영상태') return 'electric';
-    if (type === '통신경영상태') return 'communication';
-    if (type === '소방경영상태') return 'fire';
-    return '';
-  }, []);
 
   const selectedFile = React.useMemo(
     () => sourceFiles.find((file) => file.id === selectedFileId) || null,
@@ -236,6 +236,7 @@ export default function ExcelWebEditPage() {
 
   React.useEffect(() => {
     setPreviewZoom(1);
+    setPreviewRotation(0);
   }, [selectedFileId]);
 
   React.useEffect(() => {
@@ -271,6 +272,7 @@ export default function ExcelWebEditPage() {
 
     if (name === 'bizNo') {
       value = formatBizNoInput(value);
+      setLookupVersion('');
     } else if (['sipyung', 'perf3y', 'perf5y'].includes(name)) {
       value = formatAmountInput(value);
     } else if (['debtRatio', 'currentRatio'].includes(name)) {
@@ -288,6 +290,14 @@ export default function ExcelWebEditPage() {
 
   const resetPreviewZoom = React.useCallback(() => {
     setPreviewZoom(1);
+  }, []);
+
+  const rotatePreview = React.useCallback((delta) => {
+    setPreviewRotation((prev) => (prev + delta + 360) % 360);
+  }, []);
+
+  const resetPreviewRotation = React.useCallback(() => {
+    setPreviewRotation(0);
   }, []);
 
   const handlePreviewWheel = React.useCallback((event) => {
@@ -381,6 +391,7 @@ export default function ExcelWebEditPage() {
       if (!result?.data?.found) {
         setLoadedData(null);
         setLoadedColorMap({});
+        setLookupVersion(String(result?.data?.version || ''));
         setMissingCompanyMode(editorMode === EDITOR_MODE.CREDIT ? 'credit' : 'management');
         setIsMissingCompanyModalOpen(true);
         return;
@@ -391,6 +402,7 @@ export default function ExcelWebEditPage() {
 
       setLoadedData(company);
       setLoadedColorMap(colorMap);
+      setLookupVersion(String(result?.data?.version || ''));
       setForm((prev) => ({
         ...EMPTY_FORM,
         bizNo: prev.bizNo || bizNo,
@@ -406,10 +418,12 @@ export default function ExcelWebEditPage() {
   React.useEffect(() => {
     if (editorMode === EDITOR_MODE.CREDIT && fileType !== '신용평가') {
       setFileType('신용평가');
+      setLookupVersion('');
       return;
     }
     if (editorMode === EDITOR_MODE.MANAGEMENT && fileType === '신용평가') {
       setFileType('전기경영상태');
+      setLookupVersion('');
     }
   }, [editorMode, fileType]);
 
@@ -463,6 +477,7 @@ export default function ExcelWebEditPage() {
     setSelectedFileId('');
     setLoadedData(null);
     setLoadedColorMap({});
+    setLookupVersion('');
     setForm(EMPTY_FORM);
     setPdfPageNumber(1);
     setPdfError('');
@@ -488,6 +503,7 @@ export default function ExcelWebEditPage() {
       const payload = {
         fileType,
         bizNo,
+        expectedVersion: lookupVersion,
         data: {
           ...form,
           creditText: finalCreditText,
@@ -534,6 +550,7 @@ export default function ExcelWebEditPage() {
         fileType,
         bizNo: String(form.bizNo || '').trim(),
         saveMode: 'archive_only',
+        expectedVersion: lookupVersion,
         data: { companyName, region },
       };
       const result = await excelEditBackendClient.saveData({
@@ -550,7 +567,7 @@ export default function ExcelWebEditPage() {
     } finally {
       setIsBackendBusy(false);
     }
-  }, [fileType, form.bizNo, notifyError, notifyInfo, resetEditorState, selectedFile]);
+  }, [fileType, form.bizNo, lookupVersion, notifyError, notifyInfo, resetEditorState, selectedFile]);
 
   const handleConfirmCompanySetup = React.useCallback(async () => {
     const companyName = String(companySetupDraft.companyName || '').trim();
@@ -776,6 +793,9 @@ export default function ExcelWebEditPage() {
                     <span>{effectivePdfPageCount > 0 ? `${pdfPageNumber} / ${effectivePdfPageCount}` : '0 / 0'}</span>
                     <button type="button" disabled={pdfLoading || backendPdfLoading || effectivePdfPageCount === 0 || pdfPageNumber >= effectivePdfPageCount} onClick={() => setPdfPageNumber((prev) => Math.min(effectivePdfPageCount, prev + 1))}>다음</button>
                     <button type="button" onClick={handleOpenPdfExportModal} disabled={pdfLoading || backendPdfLoading || effectivePdfPageCount === 0}>페이지 내보내기</button>
+                    <button type="button" onClick={() => rotatePreview(-90)}>↺90°</button>
+                    <button type="button" onClick={() => rotatePreview(90)}>↻90°</button>
+                    <button type="button" onClick={resetPreviewRotation}>회전 초기화</button>
                     <button type="button" onClick={() => changePreviewZoom(-0.1)}>-</button>
                     <span>{Math.round(previewZoom * 100)}%</span>
                     <button type="button" onClick={() => changePreviewZoom(0.1)}>+</button>
@@ -789,7 +809,11 @@ export default function ExcelWebEditPage() {
                         src={backendPreviewUrl}
                         alt={selectedFile.name}
                         className="excel-web-v2-zoom-image"
-                        style={{ width: `${previewZoom * 100}%` }}
+                        style={{
+                          width: `${previewZoom * 100}%`,
+                          transform: `rotate(${previewRotation}deg)`,
+                          transformOrigin: 'center center',
+                        }}
                       />
                     )}
                     {!pdfLoading && !backendPdfLoading && !backendPreviewUrl && pdfError && <p className="muted">{pdfError}</p>}
@@ -799,6 +823,9 @@ export default function ExcelWebEditPage() {
               {selectedFile && !isPdf && (
                 <div className="excel-web-v2-pdf-wrap">
                   <div className="excel-web-v2-pdf-toolbar">
+                    <button type="button" onClick={() => rotatePreview(-90)}>↺90°</button>
+                    <button type="button" onClick={() => rotatePreview(90)}>↻90°</button>
+                    <button type="button" onClick={resetPreviewRotation}>회전 초기화</button>
                     <button type="button" onClick={() => changePreviewZoom(-0.1)}>-</button>
                     <span>{Math.round(previewZoom * 100)}%</span>
                     <button type="button" onClick={() => changePreviewZoom(0.1)}>+</button>
@@ -812,7 +839,11 @@ export default function ExcelWebEditPage() {
                         src={backendPreviewUrl}
                         alt={selectedFile.name}
                         className="excel-web-v2-zoom-image"
-                        style={{ width: `${previewZoom * 100}%` }}
+                        style={{
+                          width: `${previewZoom * 100}%`,
+                          transform: `rotate(${previewRotation}deg)`,
+                          transformOrigin: 'center center',
+                        }}
                       />
                     )}
                     {!pdfLoading && !backendPdfLoading && !backendPreviewUrl && pdfError && <p className="muted">{pdfError}</p>}
@@ -882,11 +913,18 @@ export default function ExcelWebEditPage() {
                   <label>
                     자료 종류
                     <select
-                      className={`excel-web-v2-filetype ${getFileTypeToneClass(fileType)}`}
+                      className="excel-web-v2-filetype"
                       value={fileType}
-                      onChange={(e) => setFileType(e.target.value)}
+                      onChange={(e) => {
+                        setFileType(e.target.value);
+                        setLookupVersion('');
+                      }}
                     >
-                      {MANAGEMENT_FILE_TYPES.map((type) => <option key={type}>{type}</option>)}
+                      {MANAGEMENT_FILE_TYPES.map((type) => (
+                        <option key={type} style={{ color: MANAGEMENT_FILE_TYPE_COLORS[type] || '#0f172a' }}>
+                          {type}
+                        </option>
+                      ))}
                     </select>
                   </label>
                 </div>

@@ -3787,6 +3787,12 @@ button.primary:hover { background: var(--accent-2); }
   word-break: break-all;
 }
 
+.excel-web-v2-pane.center .excel-web-v2-compare th,
+.excel-web-v2-pane.center .excel-web-v2-compare td {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
 .excel-web-v2-compare th {
   width: 34%;
   text-align: left;
@@ -3855,18 +3861,7 @@ button.primary:hover { background: var(--accent-2); }
 
 .excel-web-v2-filetype {
   font-weight: 700;
-}
-
-.excel-web-v2-filetype.electric {
-  color: #ca8a04;
-}
-
-.excel-web-v2-filetype.communication {
-  color: #0284c7;
-}
-
-.excel-web-v2-filetype.fire {
-  color: #dc2626;
+  color: #0f172a;
 }
 
 .excel-web-v2-form {
