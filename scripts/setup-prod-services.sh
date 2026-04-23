@@ -35,11 +35,12 @@ install_python_runtime_if_needed() {
 
 ensure_pm2_process() {
   local name="$1"
+  local command_line="$2"
   shift
   if pm2 describe "$name" >/dev/null 2>&1; then
     pm2 restart "$name" --update-env
   else
-    pm2 start "$@" --name "$name" --time
+    pm2 start /bin/bash --name "$name" --time -- -lc "$command_line"
   fi
 }
 
@@ -67,8 +68,8 @@ fi
 
 cd "$APP_DIR"
 
-ensure_pm2_process "$WEB_PM2_NAME" /bin/bash -lc "cd \"$APP_DIR\" && COMPANY_SEARCH_APP_DATA_ROOT=\"$APP_DATA_ROOT\" npm run serve:prod:lan"
-ensure_pm2_process "$PY_PM2_NAME" /bin/bash -lc "cd \"$APP_DIR\" && COMPANY_SEARCH_APP_DATA_ROOT=\"$APP_DATA_ROOT\" EXCEL_EDIT_ARCHIVE_ROOT=\"$ARCHIVE_ROOT\" ./scripts/run-excel-backend-prod.sh"
+ensure_pm2_process "$WEB_PM2_NAME" "cd \"$APP_DIR\" && COMPANY_SEARCH_APP_DATA_ROOT=\"$APP_DATA_ROOT\" npm run serve:prod:lan"
+ensure_pm2_process "$PY_PM2_NAME" "cd \"$APP_DIR\" && COMPANY_SEARCH_APP_DATA_ROOT=\"$APP_DATA_ROOT\" EXCEL_EDIT_ARCHIVE_ROOT=\"$ARCHIVE_ROOT\" ./scripts/run-excel-backend-prod.sh"
 
 pm2 save
 
