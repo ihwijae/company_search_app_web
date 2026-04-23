@@ -10,6 +10,7 @@ const FILE_FILTER = {
   ELECTRIC: 'electric',
   COMMUNICATION: 'communication',
   FIRE: 'fire',
+  CREDIT: 'credit',
 };
 
 function formatBytes(value) {
@@ -38,6 +39,8 @@ export default function ScanArchivePage() {
   const [error, setError] = React.useState('');
   const [searchTerm, setSearchTerm] = React.useState('');
   const [fileFilter, setFileFilter] = React.useState(FILE_FILTER.ALL);
+  const [searchBusy, setSearchBusy] = React.useState(false);
+  const searchRequestIdRef = React.useRef(0);
 
   const folders = React.useMemo(() => entries.filter((entry) => entry.type === 'dir'), [entries]);
   const files = React.useMemo(() => entries.filter((entry) => entry.type === 'file'), [entries]);
@@ -51,6 +54,7 @@ export default function ScanArchivePage() {
       if (fileFilter === FILE_FILTER.ELECTRIC) return fileName.includes('전기경영상태');
       if (fileFilter === FILE_FILTER.COMMUNICATION) return fileName.includes('통신경영상태');
       if (fileFilter === FILE_FILTER.FIRE) return fileName.includes('소방경영상태');
+      if (fileFilter === FILE_FILTER.CREDIT) return fileName.includes('신용평가');
       return true;
     });
   }, [fileFilter, files, searchTerm]);
@@ -107,6 +111,53 @@ export default function ScanArchivePage() {
   const isPdf = selectedFile?.ext === '.pdf';
   const isImage = selectedFile ? IMAGE_EXTENSIONS.has(selectedFile.ext) : false;
 
+  const handleGlobalSearch = React.useCallback(async () => {
+    const keyword = String(searchTerm || '').trim();
+    if (!keyword) {
+      setError('검색어를 입력하세요.');
+      return;
+    }
+
+    try {
+      const requestId = searchRequestIdRef.current + 1;
+      searchRequestIdRef.current = requestId;
+      setSearchBusy(true);
+      setError('');
+      const payload = await scanArchiveClient.search(keyword, fileFilter);
+      if (searchRequestIdRef.current !== requestId) return;
+      const result = payload?.data || {};
+      const first = Array.isArray(result.results) ? result.results[0] : null;
+      if (!first) {
+        setError('검색 결과가 없습니다.');
+        return;
+      }
+      const targetDir = first.dirPath || '';
+      const targetPath = first.path || '';
+      if (targetDir !== currentPath) {
+        await loadDirectory(targetDir);
+      }
+      setSelectedFilePath(targetPath);
+    } catch (searchError) {
+      setError(searchError?.message || '파일 검색 중 오류가 발생했습니다.');
+    } finally {
+      setSearchBusy(false);
+    }
+  }, [currentPath, fileFilter, loadDirectory, searchTerm]);
+
+  React.useEffect(() => {
+    const keyword = String(searchTerm || '').trim();
+    if (!keyword) {
+      searchRequestIdRef.current += 1;
+      setSearchBusy(false);
+      setError('');
+      return undefined;
+    }
+    const timer = setTimeout(() => {
+      handleGlobalSearch();
+    }, 220);
+    return () => clearTimeout(timer);
+  }, [fileFilter, handleGlobalSearch, searchTerm]);
+
   const fileTypeClassName = (fileName) => {
     if (fileName.includes('전기경영상태')) return 'electric';
     if (fileName.includes('통신경영상태')) return 'communication';
@@ -159,7 +210,21 @@ export default function ScanArchivePage() {
                 placeholder="파일명 검색"
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    handleGlobalSearch();
+                  }
+                }}
               />
+              <button
+                type="button"
+                className="scan-archive-search-btn"
+                onClick={handleGlobalSearch}
+                disabled={searchBusy}
+              >
+                {searchBusy ? '검색 중...' : '전체 검색'}
+              </button>
               <div className="scan-archive-filter-row">
                 <button
                   type="button"
@@ -188,6 +253,13 @@ export default function ScanArchivePage() {
                   onClick={() => setFileFilter(FILE_FILTER.FIRE)}
                 >
                   소방
+                </button>
+                <button
+                  type="button"
+                  className={fileFilter === FILE_FILTER.CREDIT ? 'active' : ''}
+                  onClick={() => setFileFilter(FILE_FILTER.CREDIT)}
+                >
+                  신용평가
                 </button>
               </div>
             </div>

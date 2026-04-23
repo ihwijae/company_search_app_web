@@ -192,6 +192,7 @@ class SaveRequest(BaseModel):
     fileType: str = Field(default="전기경영상태")
     bizNo: str = Field(default="")
     data: dict = Field(default_factory=dict)
+    saveMode: Literal["normal", "archive_only"] | str = Field(default="normal")
 
 
 app = FastAPI(title=APP_NAME, version="0.1.0")
@@ -476,6 +477,38 @@ def _parse_expiry_date(raw: str):
         except ValueError:
             continue
     return None
+
+
+def _parse_pdf_page_selection(selection: str, max_page: int) -> list[int]:
+    text = str(selection or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="내보낼 페이지 범위를 입력하세요.")
+
+    pages: set[int] = set()
+    for token in [part.strip() for part in text.split(",") if part.strip()]:
+        if "-" in token:
+            bounds = [part.strip() for part in token.split("-", 1)]
+            if len(bounds) != 2 or not bounds[0].isdigit() or not bounds[1].isdigit():
+                raise HTTPException(status_code=400, detail=f"잘못된 페이지 범위: {token}")
+            start = int(bounds[0])
+            end = int(bounds[1])
+            if start > end:
+                start, end = end, start
+            if start < 1 or end > max_page:
+                raise HTTPException(status_code=400, detail=f"페이지 범위를 벗어났습니다: {token}")
+            pages.update(range(start - 1, end))
+            continue
+
+        if not token.isdigit():
+            raise HTTPException(status_code=400, detail=f"잘못된 페이지 번호: {token}")
+        page_no = int(token)
+        if page_no < 1 or page_no > max_page:
+            raise HTTPException(status_code=400, detail=f"페이지 범위를 벗어났습니다: {token}")
+        pages.add(page_no - 1)
+
+    if not pages:
+        raise HTTPException(status_code=400, detail="내보낼 페이지를 찾지 못했습니다.")
+    return sorted(pages)
 
 
 def _is_theme_color(fill, theme: int) -> bool:
@@ -1027,17 +1060,57 @@ async def save_excel_edit_data(
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"저장 요청 파라미터가 올바르지 않습니다: {exc}") from exc
 
-    biz_no = request.bizNo.strip()
-    if not biz_no:
-        raise HTTPException(status_code=400, detail="사업자등록번호가 필요합니다.")
+    save_mode = str(request.saveMode or "normal").strip() or "normal"
+    if save_mode not in {"normal", "archive_only"}:
+        raise HTTPException(status_code=400, detail=f"지원하지 않는 저장 모드입니다: {save_mode}")
 
+    biz_no = request.bizNo.strip()
     db_paths = _resolve_db_paths()
-    if not db_paths:
-        raise HTTPException(status_code=400, detail="DB 경로가 설정되지 않았습니다. 환경변수를 확인하세요.")
 
     updated: dict = {}
     company_name = str(request.data.get("companyName") or "")
     region_name = str(request.data.get("region") or "")
+
+    if save_mode == "archive_only":
+        if not files:
+            raise HTTPException(status_code=400, detail="파일만 저장 모드는 업로드 파일이 필요합니다.")
+
+        if (not company_name or not region_name) and biz_no:
+            for db_type, excel_path in db_paths.items():
+                if not excel_path or not Path(excel_path).exists():
+                    continue
+                position = _find_company_position(excel_path, biz_no)
+                if not position:
+                    continue
+                sheet_name, row, col = position
+                raw = _extract_company_data(excel_path, sheet_name, row, col)
+                company_name = company_name or str(raw.get("상호") or "")
+                region_name = region_name or str(raw.get("지역") or "")
+                if company_name and region_name:
+                    break
+
+        if not company_name:
+            raise HTTPException(status_code=400, detail="파일만 저장에는 업체명이 필요합니다.")
+        if not region_name:
+            raise HTTPException(status_code=400, detail="파일만 저장에는 지역이 필요합니다.")
+
+        archived_files = _archive_uploaded_files(files, company_name, request.fileType, region_name)
+        return ApiResponse(
+            success=True,
+            message="파일 보관이 완료되었습니다.",
+            data={
+                "saveMode": save_mode,
+                "updated": updated,
+                "archivedFiles": archived_files,
+                "companyName": company_name,
+                "region": region_name,
+            },
+        )
+
+    if not biz_no:
+        raise HTTPException(status_code=400, detail="사업자등록번호가 필요합니다.")
+    if not db_paths:
+        raise HTTPException(status_code=400, detail="DB 경로가 설정되지 않았습니다. 환경변수를 확인하세요.")
 
     if request.fileType == "신용평가":
         credit_text = _build_credit_text(request.data)
@@ -1094,6 +1167,7 @@ async def save_excel_edit_data(
         success=True,
         message="확정 및 저장이 완료되었습니다.",
         data={
+            "saveMode": save_mode,
             "updated": updated,
             "archivedFiles": archived_files,
             "companyName": company_name,
@@ -1210,4 +1284,89 @@ async def render_image(file: UploadFile = File(...)) -> Response:
     return Response(
         content=image_bytes,
         media_type="image/png",
+    )
+
+
+@app.post("/excel-edit/export-pdf-pages")
+async def export_pdf_pages(
+    file: UploadFile = File(...),
+    pages: str = Form(default=""),
+) -> Response:
+    if not file:
+        raise HTTPException(status_code=400, detail="PDF 파일이 필요합니다.")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="빈 파일입니다.")
+
+    try:
+        with fitz.open(stream=content, filetype="pdf") as source:
+            page_count = source.page_count
+            if page_count <= 0:
+                raise HTTPException(status_code=400, detail="페이지가 없는 PDF입니다.")
+
+            selected_pages = _parse_pdf_page_selection(pages, page_count)
+            target = fitz.open()
+            try:
+                for page_index in selected_pages:
+                    target.insert_pdf(source, from_page=page_index, to_page=page_index)
+                exported_bytes = target.tobytes(garbage=3, deflate=True)
+            finally:
+                target.close()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"PDF 내보내기 실패: {exc}") from exc
+
+    return Response(
+        content=exported_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": 'attachment; filename="exported-pages.pdf"',
+            "x-pdf-page-count": str(len(selected_pages)),
+        },
+    )
+
+
+@app.post("/excel-edit/remove-pdf-pages")
+async def remove_pdf_pages(
+    file: UploadFile = File(...),
+    pages: str = Form(default=""),
+) -> Response:
+    if not file:
+        raise HTTPException(status_code=400, detail="PDF 파일이 필요합니다.")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="빈 파일입니다.")
+
+    try:
+        with fitz.open(stream=content, filetype="pdf") as source:
+            page_count = source.page_count
+            if page_count <= 0:
+                raise HTTPException(status_code=400, detail="페이지가 없는 PDF입니다.")
+
+            selected_pages = set(_parse_pdf_page_selection(pages, page_count))
+            remain_pages = [idx for idx in range(page_count) if idx not in selected_pages]
+            if not remain_pages:
+                return Response(status_code=204, headers={"x-pdf-page-count": "0"})
+
+            target = fitz.open()
+            try:
+                for page_index in remain_pages:
+                    target.insert_pdf(source, from_page=page_index, to_page=page_index)
+                remain_bytes = target.tobytes(garbage=3, deflate=True)
+            finally:
+                target.close()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"PDF 페이지 삭제 실패: {exc}") from exc
+
+    return Response(
+        content=remain_bytes,
+        media_type="application/pdf",
+        headers={
+            "x-pdf-page-count": str(len(remain_pages)),
+        },
     )

@@ -18,6 +18,14 @@ const CONTENT_TYPES = {
   '.txt': 'text/plain; charset=utf-8',
 };
 
+const SEARCH_FILTER = {
+  ALL: 'all',
+  ELECTRIC: 'electric',
+  COMMUNICATION: 'communication',
+  FIRE: 'fire',
+  CREDIT: 'credit',
+};
+
 function resolveArchiveRoot() {
   const configured = String(process.env.EXCEL_EDIT_ARCHIVE_ROOT || '').trim();
   if (configured) return path.resolve(configured);
@@ -138,6 +146,51 @@ async function collectFilesRecursive(baseDirAbsolute, targetDirAbsolute) {
   return collected;
 }
 
+function matchesFileTypeFilter(fileName, filter) {
+  if (!filter || filter === SEARCH_FILTER.ALL) return true;
+  if (filter === SEARCH_FILTER.ELECTRIC) return fileName.includes('전기경영상태');
+  if (filter === SEARCH_FILTER.COMMUNICATION) return fileName.includes('통신경영상태');
+  if (filter === SEARCH_FILTER.FIRE) return fileName.includes('소방경영상태');
+  if (filter === SEARCH_FILTER.CREDIT) return fileName.includes('신용평가');
+  return true;
+}
+
+async function searchFiles(root, query, filter = SEARCH_FILTER.ALL) {
+  const keyword = String(query || '').trim().toLowerCase();
+  if (!keyword) {
+    return { count: 0, results: [] };
+  }
+
+  await fs.promises.mkdir(root, { recursive: true });
+  const stat = await fs.promises.stat(root).catch(() => null);
+  if (!stat || !stat.isDirectory()) {
+    return { count: 0, results: [] };
+  }
+
+  const files = await collectFilesRecursive(root, root);
+  const results = files
+    .map((item) => {
+      const relativePath = item.relative;
+      const name = path.basename(relativePath);
+      const dir = path.dirname(relativePath);
+      return {
+        name,
+        path: relativePath,
+        dirPath: dir === '.' ? '' : dir,
+      };
+    })
+    .filter((item) => {
+      if (!matchesFileTypeFilter(item.name, filter)) return false;
+      return item.name.toLowerCase().includes(keyword);
+    })
+    .sort((a, b) => a.path.localeCompare(b.path, 'ko'));
+
+  return {
+    count: results.length,
+    results: results.slice(0, 200),
+  };
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {
     allowMethods(res, ['GET']);
@@ -225,6 +278,20 @@ module.exports = async function handler(req, res) {
       return;
     } catch (error) {
       return sendJson(res, 400, { success: false, message: error?.message || 'Zip download failed' });
+    }
+  }
+
+  if (action === 'search') {
+    try {
+      const q = String(url.searchParams.get('q') || '').trim();
+      const fileType = String(url.searchParams.get('fileType') || SEARCH_FILTER.ALL).trim().toLowerCase();
+      const result = await searchFiles(root, q, fileType);
+      return sendJson(res, 200, {
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      return sendJson(res, 400, { success: false, message: error?.message || 'Search failed' });
     }
   }
 

@@ -128,6 +128,51 @@ const excelEditBackendClient = {
     const blob = await response.blob();
     return { blob };
   },
+
+  async exportPdfPages({ file, pages } = {}) {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('pages', String(pages || '').trim());
+
+    const response = await fetch(`${API_BASE}/export-pdf-pages`, {
+      method: 'POST',
+      body: form,
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload?.message || payload?.detail || `PDF 내보내기 요청 실패 (${response.status})`);
+    }
+
+    const blob = await response.blob();
+    return {
+      blob,
+      pageCount: Number(response.headers.get('x-pdf-page-count') || 0) || 0,
+    };
+  },
+
+  async removePdfPages({ file, pages } = {}) {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('pages', String(pages || '').trim());
+
+    const response = await fetch(`${API_BASE}/remove-pdf-pages`, {
+      method: 'POST',
+      body: form,
+    });
+    if (response.status === 204) {
+      return { blob: null, pageCount: 0 };
+    }
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload?.message || payload?.detail || `PDF 페이지 삭제 요청 실패 (${response.status})`);
+    }
+
+    const blob = await response.blob();
+    return {
+      blob,
+      pageCount: Number(response.headers.get('x-pdf-page-count') || 0) || 0,
+    };
+  },
 };
 
 export default excelEditBackendClient;

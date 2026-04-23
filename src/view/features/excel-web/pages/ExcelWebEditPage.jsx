@@ -3,6 +3,7 @@ import '../../../../styles.css';
 import '../../../../fonts.css';
 import Sidebar from '../../../../components/Sidebar';
 import excelEditBackendClient from '../../../../shared/excelEditBackendClient';
+import { useFeedback } from '../../../../components/FeedbackProvider.jsx';
 
 const FIELD_LABELS = [
   ['companyName', '상호'],
@@ -50,6 +51,7 @@ const EDITOR_MODE = {
 };
 
 const MANAGEMENT_FILE_TYPES = ['전기경영상태', '통신경영상태', '소방경영상태'];
+const REGION_OPTIONS = ['서울', '경기', '인천', '부산', '대구', '광주', '대전', '울산', '세종', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'];
 
 function buildCreditText(form) {
   const grade = String(form.creditGrade || '').trim();
@@ -81,6 +83,14 @@ function formatPercentInput(value = '') {
   return `${numeric.toFixed(2)}%`;
 }
 
+function formatDotDateInput(value = '') {
+  const digits = String(value).replace(/\D/g, '').slice(0, 8);
+  if (!digits) return '';
+  if (digits.length <= 4) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 4)}.${digits.slice(4)}`;
+  return `${digits.slice(0, 4)}.${digits.slice(4, 6)}.${digits.slice(6)}`;
+}
+
 function formatAmountPreviewValue(value = '') {
   const digits = String(value).replace(/\D/g, '');
   if (!digits) return '';
@@ -88,6 +98,7 @@ function formatAmountPreviewValue(value = '') {
 }
 
 export default function ExcelWebEditPage() {
+  const { notify } = useFeedback();
   const [activeMenu, setActiveMenu] = React.useState('excel-web-edit');
   const [fileType, setFileType] = React.useState('전기경영상태');
   const [editorMode, setEditorMode] = React.useState(EDITOR_MODE.MANAGEMENT);
@@ -102,12 +113,39 @@ export default function ExcelWebEditPage() {
   const [pdfError, setPdfError] = React.useState('');
   const [previewZoom, setPreviewZoom] = React.useState(1);
   const [isBackendBusy, setIsBackendBusy] = React.useState(false);
-  const [backendNotice, setBackendNotice] = React.useState('');
-  const [backendError, setBackendError] = React.useState('');
   const [backendPreviewUrl, setBackendPreviewUrl] = React.useState('');
   const [backendPdfPageCount, setBackendPdfPageCount] = React.useState(0);
   const [backendPdfLoading, setBackendPdfLoading] = React.useState(false);
+  const [isMultiPageNoticeOpen, setIsMultiPageNoticeOpen] = React.useState(false);
+  const [multiPageNotice, setMultiPageNotice] = React.useState({ fileName: '', pageCount: 0 });
   const [isMaintenanceModalOpen, setIsMaintenanceModalOpen] = React.useState(false);
+  const [isPdfExportModalOpen, setIsPdfExportModalOpen] = React.useState(false);
+  const [pdfExportPages, setPdfExportPages] = React.useState('');
+  const [pdfExportFileName, setPdfExportFileName] = React.useState('');
+  const [isMissingCompanyModalOpen, setIsMissingCompanyModalOpen] = React.useState(false);
+  const [missingCompanyMode, setMissingCompanyMode] = React.useState('management');
+  const [isCompanySetupModalOpen, setIsCompanySetupModalOpen] = React.useState(false);
+  const [companySetupMode, setCompanySetupMode] = React.useState('register');
+  const [companySetupDraft, setCompanySetupDraft] = React.useState({ companyName: '', region: '' });
+  const lastPdfErrorRef = React.useRef('');
+  const multiPageNoticedFileIdsRef = React.useRef(new Set());
+
+  const notifyInfo = React.useCallback((message) => {
+    if (!message) return;
+    notify({ type: 'info', title: '알림', message });
+  }, [notify]);
+
+  const notifyError = React.useCallback((message) => {
+    if (!message) return;
+    notify({ type: 'error', title: '오류', message, duration: 4800 });
+  }, [notify]);
+
+  const getFileTypeToneClass = React.useCallback((type) => {
+    if (type === '전기경영상태') return 'electric';
+    if (type === '통신경영상태') return 'communication';
+    if (type === '소방경영상태') return 'fire';
+    return '';
+  }, []);
 
   const selectedFile = React.useMemo(
     () => sourceFiles.find((file) => file.id === selectedFileId) || null,
@@ -177,12 +215,11 @@ export default function ExcelWebEditPage() {
 
     try {
       setIsBackendBusy(true);
-      setBackendError('');
       const result = await excelEditBackendClient.uploadFiles({ files, fileType });
       const savedCount = Array.isArray(result?.data?.files) ? result.data.files.length : files.length;
-      setBackendNotice(`백엔드 업로드 완료 (${savedCount}건)`);
+      notifyInfo(`백엔드 업로드 완료 (${savedCount}건)`);
     } catch (error) {
-      setBackendError(error?.message || '백엔드 업로드에 실패했습니다.');
+      notifyError(error?.message || '백엔드 업로드에 실패했습니다.');
     } finally {
       setIsBackendBusy(false);
     }
@@ -218,7 +255,7 @@ export default function ExcelWebEditPage() {
     };
   }, []);
 
-  const removeSourceFile = (id) => {
+  const removeSourceFile = React.useCallback((id) => {
     setSourceFiles((prev) => {
       const target = prev.find((item) => item.id === id);
       if (target) {
@@ -226,7 +263,7 @@ export default function ExcelWebEditPage() {
       }
       return prev.filter((item) => item.id !== id);
     });
-  };
+  }, []);
 
   const handleInput = (event) => {
     const { name } = event.target;
@@ -238,6 +275,8 @@ export default function ExcelWebEditPage() {
       value = formatAmountInput(value);
     } else if (['debtRatio', 'currentRatio'].includes(name)) {
       value = formatPercentInput(value);
+    } else if (['creditStartDate', 'creditEndDate', 'bizYears'].includes(name)) {
+      value = formatDotDateInput(value);
     }
 
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -257,21 +296,93 @@ export default function ExcelWebEditPage() {
     changePreviewZoom(direction * 0.1);
   }, [changePreviewZoom]);
 
+  const handleOpenPdfExportModal = React.useCallback(() => {
+    if (!selectedFile?.file || !isPdf) {
+      notifyError('PDF 파일을 먼저 선택하세요.');
+      return;
+    }
+    const base = String(selectedFile.name || 'pdf').replace(/\.pdf$/i, '');
+    setPdfExportPages(String(pdfPageNumber || 1));
+    setPdfExportFileName(`${base}_페이지내보내기.pdf`);
+    setIsPdfExportModalOpen(true);
+  }, [isPdf, notifyError, pdfPageNumber, selectedFile]);
+
+  const handleExportPdfPages = React.useCallback(async () => {
+    if (!selectedFile?.file || !isPdf) {
+      notifyError('PDF 파일을 먼저 선택하세요.');
+      return;
+    }
+    const pages = String(pdfExportPages || '').trim();
+    if (!pages) {
+      notifyError('내보낼 페이지 범위를 입력하세요. 예: 1,3-5');
+      return;
+    }
+    let fileName = String(pdfExportFileName || '').trim();
+    if (!fileName) {
+      notifyError('내보낼 파일명을 입력하세요.');
+      return;
+    }
+    if (!/\.pdf$/i.test(fileName)) fileName = `${fileName}.pdf`;
+    try {
+      setIsBackendBusy(true);
+      const result = await excelEditBackendClient.exportPdfPages({
+        file: selectedFile.file,
+        pages,
+      });
+      const blobUrl = URL.createObjectURL(result.blob);
+      const anchor = document.createElement('a');
+      anchor.href = blobUrl;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(blobUrl);
+
+      const remaining = await excelEditBackendClient.removePdfPages({
+        file: selectedFile.file,
+        pages,
+      });
+
+      if (!remaining.blob || (remaining.pageCount || 0) <= 0) {
+        removeSourceFile(selectedFile.id);
+        notifyInfo(`PDF 페이지 내보내기 완료 (${result.pageCount || 0}p), 원본 파일은 모두 비워져 목록에서 제거되었습니다.`);
+      } else {
+        const nextFile = new File([remaining.blob], selectedFile.name, { type: 'application/pdf' });
+        setSourceFiles((prev) => prev.map((item) => {
+          if (item.id !== selectedFile.id) return item;
+          try { URL.revokeObjectURL(item.url); } catch (error) { void error; }
+          return {
+            ...item,
+            file: nextFile,
+            type: 'application/pdf',
+            url: URL.createObjectURL(nextFile),
+          };
+        }));
+        notifyInfo(`PDF 페이지 내보내기 완료 (${result.pageCount || 0}p), 원본에서 해당 페이지를 삭제했습니다.`);
+      }
+      setIsPdfExportModalOpen(false);
+    } catch (error) {
+      notifyError(error?.message || 'PDF 페이지 내보내기에 실패했습니다.');
+    } finally {
+      setIsBackendBusy(false);
+    }
+  }, [isPdf, notifyError, notifyInfo, pdfExportFileName, pdfExportPages, removeSourceFile, selectedFile]);
+
   const handleLoadData = async () => {
     const bizNo = String(form.bizNo || '').trim();
     if (!bizNo) {
-      setBackendError('사업자등록번호를 먼저 입력하세요.');
+      notifyError('사업자등록번호를 먼저 입력하세요.');
       return;
     }
 
     try {
       setIsBackendBusy(true);
-      setBackendError('');
       const result = await excelEditBackendClient.lookupCompany({ fileType, bizNo });
       if (!result?.data?.found) {
         setLoadedData(null);
         setLoadedColorMap({});
-        setBackendNotice('해당 사업자번호의 업체를 찾지 못했습니다.');
+        setMissingCompanyMode(editorMode === EDITOR_MODE.CREDIT ? 'credit' : 'management');
+        setIsMissingCompanyModalOpen(true);
         return;
       }
 
@@ -284,9 +395,9 @@ export default function ExcelWebEditPage() {
         ...EMPTY_FORM,
         bizNo: prev.bizNo || bizNo,
       }));
-      setBackendNotice('사업자번호 조회가 완료되었습니다.');
+      notifyInfo('사업자번호 조회가 완료되었습니다.');
     } catch (error) {
-      setBackendError(error?.message || '사업자번호 조회에 실패했습니다.');
+      notifyError(error?.message || '사업자번호 조회에 실패했습니다.');
     } finally {
       setIsBackendBusy(false);
     }
@@ -305,7 +416,6 @@ export default function ExcelWebEditPage() {
   const handleYearEndUpdate = async () => {
     try {
       setIsBackendBusy(true);
-      setBackendError('');
       const result = await excelEditBackendClient.updateYearEndColor({
         fileType,
         dryRun: false,
@@ -313,9 +423,9 @@ export default function ExcelWebEditPage() {
       if (fileType !== '신용평가') {
         await excelEditBackendClient.refreshUploadedDataset(fileType);
       }
-      setBackendNotice(result?.message || '연말 색상 업데이트 요청 완료');
+      notifyInfo(result?.message || '연말 색상 업데이트 요청 완료');
     } catch (error) {
-      setBackendError(error?.message || '연말 색상 업데이트 요청 실패');
+      notifyError(error?.message || '연말 색상 업데이트 요청 실패');
     } finally {
       setIsBackendBusy(false);
     }
@@ -324,7 +434,6 @@ export default function ExcelWebEditPage() {
   const handleCreditExpiryUpdate = async () => {
     try {
       setIsBackendBusy(true);
-      setBackendError('');
       const result = await excelEditBackendClient.updateCreditExpiry({
         fileType,
         dryRun: false,
@@ -338,24 +447,44 @@ export default function ExcelWebEditPage() {
       } else {
         await excelEditBackendClient.refreshUploadedDataset(fileType);
       }
-      setBackendNotice(result?.message || '신용평가 유효기간 갱신 요청 완료');
+      notifyInfo(result?.message || '신용평가 유효기간 갱신 요청 완료');
     } catch (error) {
-      setBackendError(error?.message || '신용평가 유효기간 갱신 요청 실패');
+      notifyError(error?.message || '신용평가 유효기간 갱신 요청 실패');
     } finally {
       setIsBackendBusy(false);
     }
   };
 
+  const resetEditorState = React.useCallback(() => {
+    sourceFilesRef.current.forEach((file) => {
+      try { URL.revokeObjectURL(file.url); } catch (error) { void error; }
+    });
+    setSourceFiles([]);
+    setSelectedFileId('');
+    setLoadedData(null);
+    setLoadedColorMap({});
+    setForm(EMPTY_FORM);
+    setPdfPageNumber(1);
+    setPdfError('');
+    setBackendPdfPageCount(0);
+    setBackendPdfLoading(false);
+    setBackendPreviewUrl((prev) => {
+      if (prev) {
+        try { URL.revokeObjectURL(prev); } catch (error) { void error; }
+      }
+      return '';
+    });
+  }, []);
+
   const handleSave = async () => {
     const bizNo = String(form.bizNo || '').trim();
     if (!bizNo) {
-      setBackendError('사업자등록번호를 먼저 입력하세요.');
+      notifyError('사업자등록번호를 먼저 입력하세요.');
       return;
     }
 
     try {
       setIsBackendBusy(true);
-      setBackendError('');
       const payload = {
         fileType,
         bizNo,
@@ -376,13 +505,81 @@ export default function ExcelWebEditPage() {
         await excelEditBackendClient.refreshUploadedDataset(fileType);
       }
       const archiveCount = Array.isArray(result?.data?.archivedFiles) ? result.data.archivedFiles.length : 0;
-      setBackendNotice(`확정 및 저장 완료${archiveCount ? ` (파일 보관 ${archiveCount}건)` : ''}`);
+      notifyInfo(`확정 및 저장 완료${archiveCount ? ` (파일 보관 ${archiveCount}건)` : ''}`);
+      resetEditorState();
     } catch (error) {
-      setBackendError(error?.message || '확정 및 저장에 실패했습니다.');
+      notifyError(error?.message || '확정 및 저장에 실패했습니다.');
     } finally {
       setIsBackendBusy(false);
     }
   };
+
+  const openCompanySetupModal = React.useCallback((mode) => {
+    setCompanySetupMode(mode);
+    setCompanySetupDraft({
+      companyName: String(form.companyName || loadedData?.companyName || '').trim(),
+      region: String(form.region || loadedData?.region || '').trim(),
+    });
+    setIsCompanySetupModalOpen(true);
+  }, [form.companyName, form.region, loadedData?.companyName, loadedData?.region]);
+
+  const saveArchiveOnlyWithDraft = React.useCallback(async ({ companyName, region }) => {
+    if (!selectedFile?.file) {
+      notifyError('저장할 파일이 없습니다. 파일을 먼저 업로드하세요.');
+      return false;
+    }
+    try {
+      setIsBackendBusy(true);
+      const payload = {
+        fileType,
+        bizNo: String(form.bizNo || '').trim(),
+        saveMode: 'archive_only',
+        data: { companyName, region },
+      };
+      const result = await excelEditBackendClient.saveData({
+        payload,
+        files: [selectedFile.file],
+      });
+      const archiveCount = Array.isArray(result?.data?.archivedFiles) ? result.data.archivedFiles.length : 0;
+      notifyInfo(`파일만 저장 완료${archiveCount ? ` (${archiveCount}건)` : ''}`);
+      resetEditorState();
+      return true;
+    } catch (error) {
+      notifyError(error?.message || '파일만 저장에 실패했습니다.');
+      return false;
+    } finally {
+      setIsBackendBusy(false);
+    }
+  }, [fileType, form.bizNo, notifyError, notifyInfo, resetEditorState, selectedFile]);
+
+  const handleConfirmCompanySetup = React.useCallback(async () => {
+    const companyName = String(companySetupDraft.companyName || '').trim();
+    const region = String(companySetupDraft.region || '').trim();
+    if (!companyName) {
+      notifyError('업체명을 입력하세요.');
+      return;
+    }
+    if (!region) {
+      notifyError('지역을 입력하세요.');
+      return;
+    }
+
+    if (companySetupMode === 'register') {
+      setForm((prev) => ({
+        ...prev,
+        companyName,
+        region,
+      }));
+      setIsCompanySetupModalOpen(false);
+      notifyInfo('신규업체 등록 정보가 입력되었습니다. 나머지 값을 입력 후 확정 및 저장하세요.');
+      return;
+    }
+
+    const archived = await saveArchiveOnlyWithDraft({ companyName, region });
+    if (archived) {
+      setIsCompanySetupModalOpen(false);
+    }
+  }, [companySetupDraft.companyName, companySetupDraft.region, companySetupMode, notifyError, notifyInfo, saveArchiveOnlyWithDraft]);
 
   const clearBackendPdfPreview = React.useCallback(() => {
     setBackendPdfPageCount(0);
@@ -397,6 +594,7 @@ export default function ExcelWebEditPage() {
 
   React.useEffect(() => {
     clearBackendPdfPreview();
+    setIsMultiPageNoticeOpen(false);
   }, [clearBackendPdfPreview, selectedFileId]);
 
   const renderBackendPdfPage = React.useCallback(async (pageNumber) => {
@@ -415,18 +613,36 @@ export default function ExcelWebEditPage() {
         return nextUrl;
       });
       setBackendPdfPageCount(rendered.pageCount || 0);
+      if (
+        pageNumber === 1
+        && selectedFile?.id
+        && (rendered.pageCount || 0) >= 2
+        && !multiPageNoticedFileIdsRef.current.has(selectedFile.id)
+      ) {
+        multiPageNoticedFileIdsRef.current.add(selectedFile.id);
+        setMultiPageNotice({
+          fileName: String(selectedFile.name || ''),
+          pageCount: rendered.pageCount || 0,
+        });
+        setIsMultiPageNoticeOpen(true);
+      }
       if (rendered.pageNumber && rendered.pageNumber !== pageNumber) {
         setPdfPageNumber(rendered.pageNumber);
       }
       setPdfError('');
       return true;
     } catch (error) {
-      setPdfError(error?.message || 'Python PDF 렌더링에 실패했습니다.');
+      const message = error?.message || 'Python PDF 렌더링에 실패했습니다.';
+      setPdfError(message);
+      if (lastPdfErrorRef.current !== message) {
+        lastPdfErrorRef.current = message;
+        notifyError(message);
+      }
       return false;
     } finally {
       setBackendPdfLoading(false);
     }
-  }, [selectedFile]);
+  }, [notifyError, selectedFile]);
 
   const renderBackendImage = React.useCallback(async () => {
     if (!selectedFile?.file) return false;
@@ -444,12 +660,17 @@ export default function ExcelWebEditPage() {
       setPdfError('');
       return true;
     } catch (error) {
-      setPdfError(error?.message || 'Python 이미지 렌더링에 실패했습니다.');
+      const message = error?.message || 'Python 이미지 렌더링에 실패했습니다.';
+      setPdfError(message);
+      if (lastPdfErrorRef.current !== message) {
+        lastPdfErrorRef.current = message;
+        notifyError(message);
+      }
       return false;
     } finally {
       setBackendPdfLoading(false);
     }
-  }, [selectedFile]);
+  }, [notifyError, selectedFile]);
 
   React.useEffect(() => {
     let canceled = false;
@@ -554,6 +775,7 @@ export default function ExcelWebEditPage() {
                     <button type="button" disabled={pdfLoading || backendPdfLoading || pdfPageNumber <= 1} onClick={() => setPdfPageNumber((prev) => Math.max(1, prev - 1))}>이전</button>
                     <span>{effectivePdfPageCount > 0 ? `${pdfPageNumber} / ${effectivePdfPageCount}` : '0 / 0'}</span>
                     <button type="button" disabled={pdfLoading || backendPdfLoading || effectivePdfPageCount === 0 || pdfPageNumber >= effectivePdfPageCount} onClick={() => setPdfPageNumber((prev) => Math.min(effectivePdfPageCount, prev + 1))}>다음</button>
+                    <button type="button" onClick={handleOpenPdfExportModal} disabled={pdfLoading || backendPdfLoading || effectivePdfPageCount === 0}>페이지 내보내기</button>
                     <button type="button" onClick={() => changePreviewZoom(-0.1)}>-</button>
                     <span>{Math.round(previewZoom * 100)}%</span>
                     <button type="button" onClick={() => changePreviewZoom(0.1)}>+</button>
@@ -659,7 +881,11 @@ export default function ExcelWebEditPage() {
                 <div className="excel-web-v2-settings">
                   <label>
                     자료 종류
-                    <select value={fileType} onChange={(e) => setFileType(e.target.value)}>
+                    <select
+                      className={`excel-web-v2-filetype ${getFileTypeToneClass(fileType)}`}
+                      value={fileType}
+                      onChange={(e) => setFileType(e.target.value)}
+                    >
                       {MANAGEMENT_FILE_TYPES.map((type) => <option key={type}>{type}</option>)}
                     </select>
                   </label>
@@ -689,8 +915,6 @@ export default function ExcelWebEditPage() {
                   <button type="button" onClick={handleLoadData} disabled={isBackendBusy}>불러오기</button>
                   <button type="button" className="primary" onClick={handleSave} disabled={isBackendBusy}>확정 및 저장</button>
                   <button type="button" className="maintenance" onClick={() => setIsMaintenanceModalOpen(true)} disabled={isBackendBusy}>갱신기능</button>
-                  {backendNotice && <p className="excel-web-v2-api-notice">{backendNotice}</p>}
-                  {backendError && <p className="excel-web-v2-api-error">{backendError}</p>}
                 </div>
               </>
             )}
@@ -729,8 +953,6 @@ export default function ExcelWebEditPage() {
                 <div className="excel-web-v2-actions">
                   <button type="button" onClick={handleLoadData} disabled={isBackendBusy}>불러오기</button>
                   <button type="button" className="primary" onClick={handleSave} disabled={isBackendBusy}>확정 및 저장</button>
-                  {backendNotice && <p className="excel-web-v2-api-notice">{backendNotice}</p>}
-                  {backendError && <p className="excel-web-v2-api-error">{backendError}</p>}
                 </div>
               </>
             )}
@@ -764,6 +986,128 @@ export default function ExcelWebEditPage() {
                   disabled={isBackendBusy}
                 >
                   신용평가 유효기간 갱신
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isMultiPageNoticeOpen && (
+          <div className="excel-web-v2-modal-backdrop" role="dialog" aria-modal="true" aria-label="페이지 수 안내">
+            <div className="excel-web-v2-modal">
+              <div className="excel-web-v2-modal-head">
+                <h3>확인 필요</h3>
+                <button type="button" onClick={() => setIsMultiPageNoticeOpen(false)}>확인</button>
+              </div>
+              <div className="excel-web-v2-modal-body">
+                <p className="muted">
+                  선택한 PDF는 총 {multiPageNotice.pageCount}페이지입니다.
+                  {' '}
+                  다른 업체 자료가 포함됐는지 확인하세요.
+                </p>
+                {multiPageNotice.fileName && <p className="muted">파일: {multiPageNotice.fileName}</p>}
+                <button type="button" onClick={() => setIsMultiPageNoticeOpen(false)}>확인</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isPdfExportModalOpen && (
+          <div className="excel-web-v2-floating-wrap" role="dialog" aria-modal="false" aria-label="PDF 페이지 내보내기">
+            <div className="excel-web-v2-modal excel-web-v2-floating-modal">
+              <div className="excel-web-v2-modal-head">
+                <h3>PDF 페이지 내보내기</h3>
+                <button type="button" onClick={() => setIsPdfExportModalOpen(false)} disabled={isBackendBusy}>닫기</button>
+              </div>
+              <div className="excel-web-v2-modal-body">
+                <label>
+                  페이지 범위
+                  <input
+                    value={pdfExportPages}
+                    onChange={(event) => setPdfExportPages(event.target.value)}
+                    placeholder="예: 1,3-5,8"
+                  />
+                </label>
+                <label>
+                  파일명
+                  <input
+                    value={pdfExportFileName}
+                    onChange={(event) => setPdfExportFileName(event.target.value)}
+                    placeholder="내보낼 파일명.pdf"
+                  />
+                </label>
+                <button type="button" onClick={handleExportPdfPages} disabled={isBackendBusy}>내보내기</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isMissingCompanyModalOpen && (
+          <div className="excel-web-v2-floating-wrap" role="dialog" aria-modal="false" aria-label="업체 미조회">
+            <div className="excel-web-v2-modal excel-web-v2-floating-modal">
+              <div className="excel-web-v2-modal-head">
+                <h3>업체 미조회</h3>
+                <button type="button" onClick={() => setIsMissingCompanyModalOpen(false)} disabled={isBackendBusy}>닫기</button>
+              </div>
+              <div className="excel-web-v2-modal-body">
+                <p className="muted">해당 사업자번호를 엑셀에서 찾지 못했습니다. 처리 방식을 선택하세요.</p>
+                {missingCompanyMode === 'management' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMissingCompanyModalOpen(false);
+                      openCompanySetupModal('register');
+                    }}
+                    disabled={isBackendBusy}
+                  >
+                    신규업체등록
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMissingCompanyModalOpen(false);
+                    openCompanySetupModal('archive_only');
+                  }}
+                  disabled={isBackendBusy}
+                >
+                  파일만저장
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isCompanySetupModalOpen && (
+          <div className="excel-web-v2-floating-wrap" role="dialog" aria-modal="false" aria-label="업체 정보 입력">
+            <div className="excel-web-v2-modal excel-web-v2-floating-modal">
+              <div className="excel-web-v2-modal-head">
+                <h3>{companySetupMode === 'register' ? '신규업체등록 정보' : '파일만저장 정보'}</h3>
+                <button type="button" onClick={() => setIsCompanySetupModalOpen(false)} disabled={isBackendBusy}>닫기</button>
+              </div>
+              <div className="excel-web-v2-modal-body">
+                <label>
+                  업체명
+                  <input
+                    value={companySetupDraft.companyName}
+                    onChange={(event) => setCompanySetupDraft((prev) => ({ ...prev, companyName: event.target.value }))}
+                    placeholder="업체명 입력"
+                  />
+                </label>
+                <label>
+                  지역
+                  <input
+                    list="excel-web-v2-region-options"
+                    value={companySetupDraft.region}
+                    onChange={(event) => setCompanySetupDraft((prev) => ({ ...prev, region: event.target.value }))}
+                    placeholder="예: 경기"
+                  />
+                  <datalist id="excel-web-v2-region-options">
+                    {REGION_OPTIONS.map((region) => <option key={region} value={region} />)}
+                  </datalist>
+                </label>
+                <button type="button" onClick={handleConfirmCompanySetup} disabled={isBackendBusy}>
+                  {companySetupMode === 'register' ? '확인' : '저장'}
                 </button>
               </div>
             </div>

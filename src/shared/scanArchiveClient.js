@@ -29,6 +29,11 @@ const scanArchiveClient = {
     if (dir) query.set('dir', dir);
     return `/api/scan-archive?${query.toString()}`;
   },
+
+  async search(query, fileType = 'all') {
+    const params = new URLSearchParams({ action: 'search', q: query, fileType });
+    return requestJson(`/api/scan-archive?${params.toString()}`);
+  },
 };
 
 export default scanArchiveClient;
