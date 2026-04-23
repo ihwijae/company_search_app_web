@@ -7,6 +7,8 @@ const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 4173);
 const DIST_DIR = path.join(__dirname, 'dist');
 const API_DIR = path.join(__dirname, 'api');
+const EXCEL_BACKEND_HOST = process.env.EXCEL_EDIT_BACKEND_HOST || '127.0.0.1';
+const EXCEL_BACKEND_PORT = Number(process.env.EXCEL_EDIT_BACKEND_PORT || 8787);
 
 const CONTENT_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -91,6 +93,39 @@ const serveStatic = (req, res) => {
   serveSpa(res);
 };
 
+const proxyExcelBackend = (req, res, targetPath) => {
+  const proxyReq = http.request(
+    {
+      protocol: 'http:',
+      hostname: EXCEL_BACKEND_HOST,
+      port: EXCEL_BACKEND_PORT,
+      method: req.method,
+      path: targetPath,
+      headers: {
+        ...req.headers,
+        host: `${EXCEL_BACKEND_HOST}:${EXCEL_BACKEND_PORT}`,
+      },
+    },
+    (proxyRes) => {
+      res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
+      proxyRes.pipe(res);
+    },
+  );
+
+  proxyReq.on('error', (error) => {
+    console.error('[server] excel backend proxy error:', error);
+    if (!res.headersSent) {
+      res.statusCode = 502;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify({ success: false, message: 'Excel backend proxy failed' }));
+      return;
+    }
+    res.end();
+  });
+
+  req.pipe(proxyReq);
+};
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const pathname = normalizePath(url.pathname || '/');
@@ -104,6 +139,13 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ success: false, message: 'Unauthorized' }));
         return;
       }
+    }
+
+    if (pathname === '/api/excel-edit' || pathname.startsWith('/api/excel-edit/')) {
+      const strippedPath = pathname.replace(/^\/api\/excel-edit/, '') || '/';
+      const targetPath = `${strippedPath}${url.search || ''}`;
+      proxyExcelBackend(req, res, targetPath);
+      return;
     }
 
     const handlerPath = resolveApiHandlerPath(pathname);

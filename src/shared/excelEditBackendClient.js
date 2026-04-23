@@ -1,4 +1,4 @@
-const API_BASE = (import.meta.env.VITE_EXCEL_EDIT_API_BASE || 'http://127.0.0.1:8787').replace(/\/$/, '');
+const API_BASE = (import.meta.env.VITE_EXCEL_EDIT_API_BASE || '/api/excel-edit').replace(/\/$/, '');
 const DATASET_TYPE_MAP = {
   전기경영상태: 'eung',
   통신경영상태: 'tongsin',
@@ -35,28 +35,28 @@ const excelEditBackendClient = {
     const form = new FormData();
     files.forEach((file) => form.append('files', file));
     form.append('fileType', fileType);
-    return requestJson('/excel-edit/upload', {
+    return requestJson('/upload', {
       method: 'POST',
       body: form,
     });
   },
 
   updateYearEndColor(payload = {}) {
-    return requestJson('/excel-edit/update-year-end-color', {
+    return requestJson('/update-year-end-color', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
   },
 
   updateCreditExpiry(payload = {}) {
-    return requestJson('/excel-edit/update-credit-expiry', {
+    return requestJson('/update-credit-expiry', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
   },
 
   lookupCompany(payload = {}) {
-    return requestJson('/excel-edit/company-lookup', {
+    return requestJson('/company-lookup', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -68,7 +68,7 @@ const excelEditBackendClient = {
     files.forEach((file) => {
       if (file) form.append('files', file);
     });
-    return requestJson('/excel-edit/save', {
+    return requestJson('/save', {
       method: 'POST',
       body: form,
     });
@@ -96,7 +96,7 @@ const excelEditBackendClient = {
     form.append('page', String(page));
     form.append('dpi', String(dpi));
 
-    const response = await fetch(`${API_BASE}/excel-edit/render-pdf-page`, {
+    const response = await fetch(`${API_BASE}/render-pdf-page`, {
       method: 'POST',
       body: form,
     });
@@ -117,7 +117,7 @@ const excelEditBackendClient = {
     const form = new FormData();
     form.append('file', file);
 
-    const response = await fetch(`${API_BASE}/excel-edit/render-image`, {
+    const response = await fetch(`${API_BASE}/render-image`, {
       method: 'POST',
       body: form,
     });
