@@ -4,6 +4,7 @@ import '../../../../fonts.css';
 import Sidebar from '../../../../components/Sidebar';
 import scanArchiveClient from '../../../../shared/scanArchiveClient';
 
+const SCAN_ARCHIVE_STATE_KEY = 'scan-archive:state:v1';
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
 const FILE_FILTER = {
   ALL: 'all',
@@ -29,18 +30,31 @@ function formatDate(value) {
 }
 
 export default function ScanArchivePage() {
+  const initialSavedState = React.useMemo(() => {
+    try {
+      const raw = window.sessionStorage.getItem(SCAN_ARCHIVE_STATE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (error) {
+      return null;
+    }
+  }, []);
   const [activeMenu, setActiveMenu] = React.useState('scan-archive');
   const [rootPath, setRootPath] = React.useState('');
-  const [currentPath, setCurrentPath] = React.useState('');
+  const [currentPath, setCurrentPath] = React.useState(() => String(initialSavedState?.currentPath || ''));
   const [breadcrumbs, setBreadcrumbs] = React.useState([{ name: '스캔본', path: '' }]);
   const [entries, setEntries] = React.useState([]);
-  const [selectedFilePath, setSelectedFilePath] = React.useState('');
+  const [selectedFilePath, setSelectedFilePath] = React.useState(() => String(initialSavedState?.selectedFilePath || ''));
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
-  const [searchTerm, setSearchTerm] = React.useState('');
-  const [fileFilter, setFileFilter] = React.useState(FILE_FILTER.ALL);
+  const [searchTerm, setSearchTerm] = React.useState(() => String(initialSavedState?.searchTerm || ''));
+  const [fileFilter, setFileFilter] = React.useState(() => (
+    Object.values(FILE_FILTER).includes(initialSavedState?.fileFilter)
+      ? initialSavedState.fileFilter
+      : FILE_FILTER.ALL
+  ));
   const [searchBusy, setSearchBusy] = React.useState(false);
   const searchRequestIdRef = React.useRef(0);
+  const initialPathRef = React.useRef(String(initialSavedState?.currentPath || ''));
 
   const folders = React.useMemo(() => entries.filter((entry) => entry.type === 'dir'), [entries]);
   const files = React.useMemo(() => entries.filter((entry) => entry.type === 'file'), [entries]);
@@ -85,8 +99,22 @@ export default function ScanArchivePage() {
   }, []);
 
   React.useEffect(() => {
-    loadDirectory('');
+    loadDirectory(initialPathRef.current);
   }, [loadDirectory]);
+
+  React.useEffect(() => {
+    const payload = {
+      currentPath,
+      selectedFilePath,
+      searchTerm,
+      fileFilter,
+    };
+    try {
+      window.sessionStorage.setItem(SCAN_ARCHIVE_STATE_KEY, JSON.stringify(payload));
+    } catch (error) {
+      void error;
+    }
+  }, [currentPath, fileFilter, searchTerm, selectedFilePath]);
 
   const handleSelectMenu = React.useCallback((key) => {
     setActiveMenu(key);

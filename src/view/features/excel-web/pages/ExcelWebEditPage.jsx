@@ -5,6 +5,9 @@ import Sidebar from '../../../../components/Sidebar';
 import excelEditBackendClient from '../../../../shared/excelEditBackendClient';
 import { useFeedback } from '../../../../components/FeedbackProvider.jsx';
 
+const EXCEL_WEB_STATE_KEY = 'excel-web-edit:state:v1';
+let excelWebPageMemoryState = null;
+
 const FIELD_LABELS = [
   ['companyName', '상호'],
   ['managerName', '대표자'],
@@ -136,6 +139,7 @@ export default function ExcelWebEditPage() {
   const [companySetupDraft, setCompanySetupDraft] = React.useState({ companyName: '', region: '' });
   const lastPdfErrorRef = React.useRef('');
   const multiPageNoticedFileIdsRef = React.useRef(new Set());
+  const didHydrateRef = React.useRef(false);
 
   const notifyInfo = React.useCallback((message) => {
     if (!message) return;
@@ -242,6 +246,95 @@ export default function ExcelWebEditPage() {
   React.useEffect(() => {
     sourceFilesRef.current = sourceFiles;
   }, [sourceFiles]);
+
+  React.useEffect(() => {
+    if (didHydrateRef.current) return;
+    didHydrateRef.current = true;
+
+    const memory = excelWebPageMemoryState;
+    let persisted = null;
+    try {
+      const raw = window.sessionStorage.getItem(EXCEL_WEB_STATE_KEY);
+      persisted = raw ? JSON.parse(raw) : null;
+    } catch (error) {
+      persisted = null;
+    }
+
+    const sourceFromMemory = Array.isArray(memory?.sourceFiles)
+      ? memory.sourceFiles
+        .filter((item) => item?.file)
+        .map((item) => ({
+          id: item.id || `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          file: item.file,
+          name: item.name || item.file?.name || 'file.pdf',
+          type: item.type || item.file?.type || '',
+          url: URL.createObjectURL(item.file),
+        }))
+      : [];
+
+    if (sourceFromMemory.length) {
+      setSourceFiles(sourceFromMemory);
+      setSelectedFileId(
+        sourceFromMemory.some((item) => item.id === memory?.selectedFileId)
+          ? memory.selectedFileId
+          : sourceFromMemory[0].id,
+      );
+    }
+
+    const state = persisted || memory;
+    if (!state) return;
+    if (state.fileType) setFileType(state.fileType);
+    if (state.editorMode) setEditorMode(state.editorMode);
+    if (state.form) setForm((prev) => ({ ...prev, ...state.form }));
+    if (state.loadedData) setLoadedData(state.loadedData);
+    if (state.loadedColorMap) setLoadedColorMap(state.loadedColorMap);
+    if (state.lookupVersion) setLookupVersion(state.lookupVersion);
+    if (typeof state.pdfPageNumber === 'number') setPdfPageNumber(Math.max(1, state.pdfPageNumber));
+    if (typeof state.previewZoom === 'number') setPreviewZoom(Math.min(3, Math.max(0.5, state.previewZoom)));
+    if (typeof state.previewRotation === 'number') setPreviewRotation(state.previewRotation % 360);
+  }, []);
+
+  React.useEffect(() => {
+    if (!didHydrateRef.current) return;
+    const serializable = {
+      fileType,
+      editorMode,
+      selectedFileId,
+      loadedData,
+      loadedColorMap,
+      lookupVersion,
+      form,
+      pdfPageNumber,
+      previewZoom,
+      previewRotation,
+    };
+    excelWebPageMemoryState = {
+      ...serializable,
+      sourceFiles: sourceFiles.map((item) => ({
+        id: item.id,
+        file: item.file,
+        name: item.name,
+        type: item.type,
+      })),
+    };
+    try {
+      window.sessionStorage.setItem(EXCEL_WEB_STATE_KEY, JSON.stringify(serializable));
+    } catch (error) {
+      void error;
+    }
+  }, [
+    editorMode,
+    fileType,
+    form,
+    loadedColorMap,
+    loadedData,
+    lookupVersion,
+    pdfPageNumber,
+    previewRotation,
+    previewZoom,
+    selectedFileId,
+    sourceFiles,
+  ]);
 
   React.useEffect(() => () => {
     if (!backendPreviewUrl) return;
