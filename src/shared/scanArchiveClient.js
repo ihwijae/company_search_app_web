@@ -23,7 +23,12 @@ const scanArchiveClient = {
     const query = new URLSearchParams({ action: 'file', path, download: '1' });
     return `/api/scan-archive?${query.toString()}`;
   },
+
+  buildDownloadAllUrl(dir = '') {
+    const query = new URLSearchParams({ action: 'download-all' });
+    if (dir) query.set('dir', dir);
+    return `/api/scan-archive?${query.toString()}`;
+  },
 };
 
 export default scanArchiveClient;
-

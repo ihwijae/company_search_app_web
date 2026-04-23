@@ -1,6 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const AdmZip = require('adm-zip');
 const { sendJson, allowMethods } = require('../_lib/http');
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
@@ -62,6 +63,11 @@ function buildBreadcrumbs(relativeDir) {
   return crumbs;
 }
 
+function isHiddenMetaFile(name) {
+  const normalized = String(name || '').toLowerCase();
+  return normalized.includes(':zone.identifier');
+}
+
 async function listDirectory(root, relativeDir) {
   const { normalized, absolute } = resolveTargetPath(root, relativeDir);
   await fs.promises.mkdir(root, { recursive: true });
@@ -79,6 +85,7 @@ async function listDirectory(root, relativeDir) {
 
   const names = await fs.promises.readdir(absolute);
   const entries = await Promise.all(names.map(async (name) => {
+    if (isHiddenMetaFile(name)) return null;
     const childRelative = normalized ? `${normalized}/${name}` : name;
     const childAbsolute = path.join(absolute, name);
     const childStat = await fs.promises.stat(childAbsolute);
@@ -95,7 +102,9 @@ async function listDirectory(root, relativeDir) {
     };
   }));
 
-  entries.sort((a, b) => {
+  const sanitizedEntries = entries.filter(Boolean);
+
+  sanitizedEntries.sort((a, b) => {
     if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
     return a.name.localeCompare(b.name, 'ko');
   });
@@ -103,8 +112,30 @@ async function listDirectory(root, relativeDir) {
   return {
     currentPath: normalized,
     breadcrumbs: buildBreadcrumbs(normalized),
-    entries,
+    entries: sanitizedEntries,
   };
+}
+
+async function collectFilesRecursive(baseDirAbsolute, targetDirAbsolute) {
+  const collected = [];
+  const queue = [targetDirAbsolute];
+  while (queue.length > 0) {
+    const currentDir = queue.shift();
+    const names = await fs.promises.readdir(currentDir);
+    for (const name of names) {
+      if (isHiddenMetaFile(name)) continue;
+      const absolute = path.join(currentDir, name);
+      const stat = await fs.promises.stat(absolute);
+      if (stat.isDirectory()) {
+        queue.push(absolute);
+        continue;
+      }
+      if (!stat.isFile()) continue;
+      const relative = path.relative(baseDirAbsolute, absolute).split(path.sep).join('/');
+      collected.push({ absolute, relative });
+    }
+  }
+  return collected;
 }
 
 module.exports = async function handler(req, res) {
@@ -166,6 +197,36 @@ module.exports = async function handler(req, res) {
     }
   }
 
+  if (action === 'download-all') {
+    try {
+      const dir = url.searchParams.get('dir') || '';
+      const { normalized, absolute } = resolveTargetPath(root, dir);
+      const stat = await fs.promises.stat(absolute).catch(() => null);
+      if (!stat || !stat.isDirectory()) {
+        return sendJson(res, 400, { success: false, message: 'Target directory does not exist' });
+      }
+
+      const files = await collectFilesRecursive(absolute, absolute);
+      const zip = new AdmZip();
+      files.forEach((item) => {
+        const zipPath = path.dirname(item.relative);
+        zip.addLocalFile(item.absolute, zipPath === '.' ? '' : zipPath, path.basename(item.relative));
+      });
+      const zipBuffer = zip.toBuffer();
+      const zipName = normalized
+        ? `${normalized.replace(/\//g, '_')}_스캔본.zip`
+        : '스캔본_전체.zip';
+      const encodedName = encodeURIComponent(zipName);
+
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedName}`);
+      res.end(zipBuffer);
+      return;
+    } catch (error) {
+      return sendJson(res, 400, { success: false, message: error?.message || 'Zip download failed' });
+    }
+  }
+
   return sendJson(res, 400, { success: false, message: 'Invalid action' });
 };
-

@@ -4489,6 +4489,12 @@ button.primary:hover { background: var(--accent-2); }
   gap: 8px;
 }
 
+.scan-archive-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .scan-archive-head button {
   border: 1px solid #d0dae8;
   border-radius: 8px;
@@ -4556,6 +4562,42 @@ button.primary:hover { background: var(--accent-2); }
   white-space: nowrap;
 }
 
+.scan-archive-file-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.scan-archive-file-controls input {
+  width: 100%;
+  border: 1px solid #d4ddea;
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+
+.scan-archive-filter-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.scan-archive-filter-row button {
+  border: 1px solid #dbe4f0;
+  background: #f8fbff;
+  color: #334155;
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.scan-archive-filter-row button.active {
+  border-color: #8fb2ff;
+  background: #e8f0ff;
+  color: #1d4ed8;
+}
+
 .scan-archive-error {
   margin: 0 0 8px;
   color: #b91c1c;
@@ -4577,6 +4619,35 @@ button.primary:hover { background: var(--accent-2); }
   padding: 6px 12px;
   text-decoration: none;
   font-size: 13px;
+}
+
+.scan-archive-download-all {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #0f766e;
+  background: #0d9488;
+  color: #fff;
+  border-radius: 8px;
+  padding: 6px 12px;
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.scan-archive-file-name {
+  font-weight: 600;
+}
+
+.scan-archive-file-name.electric {
+  color: #ca8a04;
+}
+
+.scan-archive-file-name.communication {
+  color: #0284c7;
+}
+
+.scan-archive-file-name.fire {
+  color: #dc2626;
 }
 
 .scan-archive-preview-frame {

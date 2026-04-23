@@ -5,6 +5,12 @@ import Sidebar from '../../../../components/Sidebar';
 import scanArchiveClient from '../../../../shared/scanArchiveClient';
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
+const FILE_FILTER = {
+  ALL: 'all',
+  ELECTRIC: 'electric',
+  COMMUNICATION: 'communication',
+  FIRE: 'fire',
+};
 
 function formatBytes(value) {
   const bytes = Number(value || 0);
@@ -30,12 +36,27 @@ export default function ScanArchivePage() {
   const [selectedFilePath, setSelectedFilePath] = React.useState('');
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const [fileFilter, setFileFilter] = React.useState(FILE_FILTER.ALL);
 
   const folders = React.useMemo(() => entries.filter((entry) => entry.type === 'dir'), [entries]);
   const files = React.useMemo(() => entries.filter((entry) => entry.type === 'file'), [entries]);
+  const filteredFiles = React.useMemo(() => {
+    const normalizedSearch = String(searchTerm || '').trim().toLowerCase();
+    return files.filter((file) => {
+      const fileName = String(file.name || '');
+      const lowered = fileName.toLowerCase();
+      if (normalizedSearch && !lowered.includes(normalizedSearch)) return false;
+      if (fileFilter === FILE_FILTER.ALL) return true;
+      if (fileFilter === FILE_FILTER.ELECTRIC) return fileName.includes('전기경영상태');
+      if (fileFilter === FILE_FILTER.COMMUNICATION) return fileName.includes('통신경영상태');
+      if (fileFilter === FILE_FILTER.FIRE) return fileName.includes('소방경영상태');
+      return true;
+    });
+  }, [fileFilter, files, searchTerm]);
   const selectedFile = React.useMemo(
-    () => files.find((item) => item.path === selectedFilePath) || null,
-    [files, selectedFilePath],
+    () => filteredFiles.find((item) => item.path === selectedFilePath) || null,
+    [filteredFiles, selectedFilePath],
   );
 
   const loadDirectory = React.useCallback(async (dir = '') => {
@@ -82,8 +103,16 @@ export default function ScanArchivePage() {
 
   const previewUrl = selectedFile ? scanArchiveClient.buildPreviewUrl(selectedFile.path) : '';
   const downloadUrl = selectedFile ? scanArchiveClient.buildDownloadUrl(selectedFile.path) : '';
+  const downloadAllUrl = scanArchiveClient.buildDownloadAllUrl(currentPath);
   const isPdf = selectedFile?.ext === '.pdf';
   const isImage = selectedFile ? IMAGE_EXTENSIONS.has(selectedFile.ext) : false;
+
+  const fileTypeClassName = (fileName) => {
+    if (fileName.includes('전기경영상태')) return 'electric';
+    if (fileName.includes('통신경영상태')) return 'communication';
+    if (fileName.includes('소방경영상태')) return 'fire';
+    return 'default';
+  };
 
   return (
     <div className="app-shell sidebar-wide">
@@ -94,7 +123,10 @@ export default function ScanArchivePage() {
           <section className="scan-archive-pane">
             <div className="scan-archive-head">
               <h2>스캔본 폴더</h2>
-              <button type="button" onClick={() => loadDirectory(currentPath)} disabled={loading}>새로고침</button>
+              <div className="scan-archive-head-actions">
+                <a href={downloadAllUrl} className="scan-archive-download-all">전체 ZIP 다운로드</a>
+                <button type="button" onClick={() => loadDirectory(currentPath)} disabled={loading}>새로고침</button>
+              </div>
             </div>
             <p className="scan-archive-root">{rootPath || '-'}</p>
             <div className="scan-archive-breadcrumbs">
@@ -118,20 +150,60 @@ export default function ScanArchivePage() {
           </section>
 
           <section className="scan-archive-pane">
-            <h2>파일 목록</h2>
+            <div className="scan-archive-head">
+              <h2>파일 목록</h2>
+            </div>
+            <div className="scan-archive-file-controls">
+              <input
+                type="text"
+                placeholder="파일명 검색"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+              />
+              <div className="scan-archive-filter-row">
+                <button
+                  type="button"
+                  className={fileFilter === FILE_FILTER.ALL ? 'active' : ''}
+                  onClick={() => setFileFilter(FILE_FILTER.ALL)}
+                >
+                  전체
+                </button>
+                <button
+                  type="button"
+                  className={fileFilter === FILE_FILTER.ELECTRIC ? 'active' : ''}
+                  onClick={() => setFileFilter(FILE_FILTER.ELECTRIC)}
+                >
+                  전기
+                </button>
+                <button
+                  type="button"
+                  className={fileFilter === FILE_FILTER.COMMUNICATION ? 'active' : ''}
+                  onClick={() => setFileFilter(FILE_FILTER.COMMUNICATION)}
+                >
+                  통신
+                </button>
+                <button
+                  type="button"
+                  className={fileFilter === FILE_FILTER.FIRE ? 'active' : ''}
+                  onClick={() => setFileFilter(FILE_FILTER.FIRE)}
+                >
+                  소방
+                </button>
+              </div>
+            </div>
             <div className="scan-archive-list">
-              {files.map((file) => (
+              {filteredFiles.map((file) => (
                 <button
                   key={file.path}
                   type="button"
                   className={file.path === selectedFilePath ? 'active' : ''}
                   onClick={() => setSelectedFilePath(file.path)}
                 >
-                  <span>📄 {file.name}</span>
+                  <span className={`scan-archive-file-name ${fileTypeClassName(file.name)}`}>📄 {file.name}</span>
                   <span>{formatBytes(file.size)}</span>
                 </button>
               ))}
-              {files.length === 0 && !loading && <p className="muted">파일이 없습니다.</p>}
+              {filteredFiles.length === 0 && !loading && <p className="muted">조건에 맞는 파일이 없습니다.</p>}
             </div>
           </section>
 
@@ -162,4 +234,3 @@ export default function ScanArchivePage() {
     </div>
   );
 }
-

@@ -142,8 +142,11 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/excel-edit' || pathname.startsWith('/api/excel-edit/')) {
-      const strippedPath = pathname.replace(/^\/api\/excel-edit/, '') || '/';
-      const targetPath = `${strippedPath}${url.search || ''}`;
+      const strippedPath = pathname.replace(/^\/api\/excel-edit/, '');
+      const targetBasePath = strippedPath === '/health'
+        ? '/health'
+        : `/excel-edit${strippedPath || ''}`;
+      const targetPath = `${targetBasePath}${url.search || ''}`;
       proxyExcelBackend(req, res, targetPath);
       return;
     }
