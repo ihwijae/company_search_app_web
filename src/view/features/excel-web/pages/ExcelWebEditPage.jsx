@@ -362,6 +362,7 @@ export default function ExcelWebEditPage() {
   const handleInput = (event) => {
     const { name } = event.target;
     let { value } = event.target;
+    const inputType = event.nativeEvent?.inputType;
 
     if (name === 'bizNo') {
       value = formatBizNoInput(value);
@@ -369,7 +370,20 @@ export default function ExcelWebEditPage() {
     } else if (['sipyung', 'perf3y', 'perf5y'].includes(name)) {
       value = formatAmountInput(value);
     } else if (['debtRatio', 'currentRatio'].includes(name)) {
-      value = formatPercentInput(value);
+      setForm((prev) => {
+        const prevValue = String(prev[name] || '');
+        const isDeletingPercentSuffix =
+          inputType === 'deleteContentBackward'
+          && prevValue.endsWith('%')
+          && value === prevValue.slice(0, -1);
+
+        const nextValue = isDeletingPercentSuffix
+          ? formatPercentInput(prevValue.replace(/\D/g, '').slice(0, -1))
+          : formatPercentInput(value);
+
+        return { ...prev, [name]: nextValue };
+      });
+      return;
     } else if (['creditStartDate', 'creditEndDate', 'bizYears'].includes(name)) {
       value = formatDotDateInput(value);
     }
