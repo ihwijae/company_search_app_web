@@ -140,6 +140,8 @@ export default function ExcelWebEditPage() {
   const lastPdfErrorRef = React.useRef('');
   const multiPageNoticedFileIdsRef = React.useRef(new Set());
   const didHydrateRef = React.useRef(false);
+  const previewAbortControllerRef = React.useRef(null);
+  const skipNextPdfPageEffectRef = React.useRef(false);
 
   const notifyInfo = React.useCallback((message) => {
     if (!message) return;
@@ -343,6 +345,10 @@ export default function ExcelWebEditPage() {
 
   React.useEffect(() => {
     return () => {
+      if (previewAbortControllerRef.current) {
+        previewAbortControllerRef.current.abort();
+        previewAbortControllerRef.current = null;
+      }
       sourceFilesRef.current.forEach((file) => {
         try { URL.revokeObjectURL(file.url); } catch (error) { void error; }
       });
@@ -706,6 +712,10 @@ export default function ExcelWebEditPage() {
   }, [companySetupDraft.companyName, companySetupDraft.region, companySetupMode, notifyError, notifyInfo, saveArchiveOnlyWithDraft]);
 
   const clearBackendPdfPreview = React.useCallback(() => {
+    if (previewAbortControllerRef.current) {
+      previewAbortControllerRef.current.abort();
+      previewAbortControllerRef.current = null;
+    }
     setBackendPdfPageCount(0);
     setBackendPdfLoading(false);
     setBackendPreviewUrl((prev) => {
@@ -723,12 +733,19 @@ export default function ExcelWebEditPage() {
 
   const renderBackendPdfPage = React.useCallback(async (pageNumber) => {
     if (!selectedFile?.file) return false;
+    if (previewAbortControllerRef.current) {
+      previewAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    previewAbortControllerRef.current = controller;
     try {
       setBackendPdfLoading(true);
       const rendered = await excelEditBackendClient.renderPdfPage({
         file: selectedFile.file,
         page: pageNumber,
+        signal: controller.signal,
       });
+      if (previewAbortControllerRef.current !== controller) return false;
       const nextUrl = URL.createObjectURL(rendered.blob);
       setBackendPreviewUrl((prev) => {
         if (prev) {
@@ -756,6 +773,7 @@ export default function ExcelWebEditPage() {
       setPdfError('');
       return true;
     } catch (error) {
+      if (error?.name === 'AbortError') return false;
       const message = error?.message || 'Python PDF 렌더링에 실패했습니다.';
       setPdfError(message);
       if (lastPdfErrorRef.current !== message) {
@@ -764,15 +782,27 @@ export default function ExcelWebEditPage() {
       }
       return false;
     } finally {
-      setBackendPdfLoading(false);
+      if (previewAbortControllerRef.current === controller) {
+        previewAbortControllerRef.current = null;
+        setBackendPdfLoading(false);
+      }
     }
   }, [notifyError, selectedFile]);
 
   const renderBackendImage = React.useCallback(async () => {
     if (!selectedFile?.file) return false;
+    if (previewAbortControllerRef.current) {
+      previewAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    previewAbortControllerRef.current = controller;
     try {
       setBackendPdfLoading(true);
-      const rendered = await excelEditBackendClient.renderImage({ file: selectedFile.file });
+      const rendered = await excelEditBackendClient.renderImage({
+        file: selectedFile.file,
+        signal: controller.signal,
+      });
+      if (previewAbortControllerRef.current !== controller) return false;
       const nextUrl = URL.createObjectURL(rendered.blob);
       setBackendPreviewUrl((prev) => {
         if (prev) {
@@ -784,6 +814,7 @@ export default function ExcelWebEditPage() {
       setPdfError('');
       return true;
     } catch (error) {
+      if (error?.name === 'AbortError') return false;
       const message = error?.message || 'Python 이미지 렌더링에 실패했습니다.';
       setPdfError(message);
       if (lastPdfErrorRef.current !== message) {
@@ -792,7 +823,10 @@ export default function ExcelWebEditPage() {
       }
       return false;
     } finally {
-      setBackendPdfLoading(false);
+      if (previewAbortControllerRef.current === controller) {
+        previewAbortControllerRef.current = null;
+        setBackendPdfLoading(false);
+      }
     }
   }, [notifyError, selectedFile]);
 
@@ -806,6 +840,7 @@ export default function ExcelWebEditPage() {
       setPdfLoading(true);
       try {
         if (isPdf) {
+          skipNextPdfPageEffectRef.current = true;
           await renderBackendPdfPage(1);
         } else {
           await renderBackendImage();
@@ -828,6 +863,10 @@ export default function ExcelWebEditPage() {
 
   React.useEffect(() => {
     if (!isPdf || !selectedFile?.file) return;
+    if (skipNextPdfPageEffectRef.current) {
+      skipNextPdfPageEffectRef.current = false;
+      return;
+    }
     renderBackendPdfPage(pdfPageNumber);
   }, [isPdf, pdfPageNumber, renderBackendPdfPage, selectedFile]);
 

@@ -90,7 +90,7 @@ const excelEditBackendClient = {
     return payload?.data || {};
   },
 
-  async renderPdfPage({ file, page = 1, dpi = 160 } = {}) {
+  async renderPdfPage({ file, page = 1, dpi = 160, signal } = {}) {
     const form = new FormData();
     form.append('file', file);
     form.append('page', String(page));
@@ -99,6 +99,7 @@ const excelEditBackendClient = {
     const response = await fetch(`${API_BASE}/render-pdf-page`, {
       method: 'POST',
       body: form,
+      signal,
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
@@ -113,13 +114,14 @@ const excelEditBackendClient = {
     };
   },
 
-  async renderImage({ file } = {}) {
+  async renderImage({ file, signal } = {}) {
     const form = new FormData();
     form.append('file', file);
 
     const response = await fetch(`${API_BASE}/render-image`, {
       method: 'POST',
       body: form,
+      signal,
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
