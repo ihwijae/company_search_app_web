@@ -202,6 +202,12 @@ class SaveRequest(BaseModel):
     expectedVersion: str = Field(default="")
 
 
+class DeleteRequest(BaseModel):
+    fileType: str = Field(default="전기경영상태")
+    bizNo: str = Field(default="")
+    expectedVersion: str = Field(default="")
+
+
 app = FastAPI(title=APP_NAME, version="0.1.0")
 
 app.add_middleware(
@@ -677,6 +683,31 @@ def _resolve_sheet_name_for_new_company(workbook, requested_region: str) -> str 
     return None
 
 
+def _find_company_section_bounds(sheet, row: int) -> tuple[int, int] | None:
+    company_label, remarks_label = "회사명", "비고"
+    section_start = -1
+    section_end = -1
+
+    for scan_row in range(row, 0, -1):
+        label_value = _normalize_label(sheet.cell(row=scan_row, column=1).value)
+        if company_label in label_value:
+            section_start = scan_row
+            break
+
+    if section_start == -1:
+        return None
+
+    for scan_row in range(row, sheet.max_row + 1):
+        label_value = _normalize_label(sheet.cell(row=scan_row, column=1).value)
+        if remarks_label in label_value:
+            section_end = scan_row
+            break
+
+    if section_end == -1 or section_end < section_start:
+        return None
+    return section_start, section_end
+
+
 def _add_new_company_data(excel_path: str, form_data: dict, db_type: str) -> dict:
     company_name = str(form_data.get("companyName") or "").strip()
     requested_region = str(form_data.get("region") or "").strip()
@@ -907,6 +938,46 @@ def _update_management_data(excel_path: str, biz_no: str, form_data: dict, db_ty
 
         workbook.save(excel_path)
         return updated_labels
+    finally:
+        workbook.close()
+
+
+def _delete_management_company(excel_path: str, biz_no: str, db_type: str) -> dict:
+    position = _find_company_position(excel_path, biz_no)
+    if not position:
+        raise HTTPException(status_code=404, detail="삭제 대상 업체를 찾지 못했습니다.")
+
+    sheet_name, target_row, target_col = position
+    workbook = load_workbook(filename=excel_path)
+    try:
+        sheet = workbook[sheet_name]
+        section_bounds = _find_company_section_bounds(sheet, target_row)
+        if not section_bounds:
+            raise HTTPException(status_code=400, detail="업체 블록 범위를 찾지 못했습니다.")
+
+        section_start, section_end = section_bounds
+        cleared_labels: list[str] = []
+
+        for row in range(section_start, section_end + 1):
+            label_value = sheet.cell(row=row, column=1).value
+            normalized_label = _normalize_label(label_value)
+            cell = _resolve_merged_cell(sheet, row, target_col)
+            cell.value = None
+            cell.fill = copy(NO_FILL)
+            cell.font = copy(DEFAULT_FONT)
+            cell.number_format = "General"
+            if normalized_label:
+                cleared_labels.append(str(label_value))
+
+        workbook.save(excel_path)
+        return {
+            "dbType": db_type,
+            "excelPath": excel_path,
+            "sheetName": sheet_name,
+            "sectionStart": section_start,
+            "sectionEnd": section_end,
+            "clearedLabels": cleared_labels,
+        }
     finally:
         workbook.close()
 
@@ -1297,6 +1368,46 @@ async def save_excel_edit_data(
             "archivedFiles": archived_files,
             "companyName": company_name,
             "region": region_name,
+        },
+    )
+
+
+@app.post("/excel-edit/delete-company", response_model=ApiResponse)
+def delete_excel_edit_company(payload: DeleteRequest) -> ApiResponse:
+    biz_no = payload.bizNo.strip()
+    if not biz_no:
+        raise HTTPException(status_code=400, detail="사업자등록번호가 필요합니다.")
+
+    if payload.fileType == "신용평가":
+        raise HTTPException(status_code=400, detail="신용평가 삭제는 아직 지원하지 않습니다.")
+
+    db_paths = _resolve_db_paths()
+    if not db_paths:
+        raise HTTPException(status_code=400, detail="DB 경로가 설정되지 않았습니다. 환경변수를 확인하세요.")
+
+    db_key = FILE_TYPE_TO_DB_KEY.get(payload.fileType)
+    if not db_key:
+        raise HTTPException(status_code=400, detail=f"지원하지 않는 자료 종류입니다: {payload.fileType}")
+
+    excel_path = db_paths.get(db_key, "")
+    if not excel_path or not Path(excel_path).exists():
+        raise HTTPException(status_code=400, detail=f"{db_key} DB 경로가 유효하지 않습니다.")
+
+    with _exclusive_excel_lock(excel_path):
+        _validate_expected_version_for_save(
+            SaveRequest(fileType=payload.fileType, bizNo=biz_no, expectedVersion=payload.expectedVersion),
+            db_paths,
+            str(payload.expectedVersion or "").strip(),
+        )
+        deleted = _delete_management_company(excel_path, biz_no, db_key)
+
+    return ApiResponse(
+        success=True,
+        message="업체 삭제가 완료되었습니다.",
+        data={
+            "deleted": deleted,
+            "fileType": payload.fileType,
+            "bizNo": _format_biz_no(biz_no),
         },
     )
 
