@@ -4711,6 +4711,8 @@ button.primary:hover { background: var(--accent-2); }
 
 .scan-archive-file-name {
   font-weight: 600;
+  font-size: 15px;
+  line-height: 1.35;
 }
 
 .scan-archive-file-summary {
