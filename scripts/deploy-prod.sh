@@ -9,6 +9,10 @@ ARCHIVE_ROOT="${EXCEL_EDIT_ARCHIVE_ROOT:-$HOME/app-data/스캔본}"
 
 cd "$APP_DIR"
 
+# Python bytecode cache can be generated on the server and block git pull
+find "$APP_DIR" -type d -name "__pycache__" -prune -exec rm -rf {} +
+find "$APP_DIR" -type f \( -name "*.pyc" -o -name "*.pyo" \) -delete
+
 git checkout main
 git pull --ff-only origin main
 

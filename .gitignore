@@ -31,3 +31,5 @@ users.yaml
 clone/
 backend/python/.venv/
 backend/python/data/
+__pycache__/
+*.py[cod]
