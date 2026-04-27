@@ -129,6 +129,7 @@ export default function ExcelWebEditPage() {
   const [isMultiPageNoticeOpen, setIsMultiPageNoticeOpen] = React.useState(false);
   const [multiPageNotice, setMultiPageNotice] = React.useState({ fileName: '', pageCount: 0 });
   const [isMaintenanceModalOpen, setIsMaintenanceModalOpen] = React.useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = React.useState(false);
   const [isPdfExportModalOpen, setIsPdfExportModalOpen] = React.useState(false);
   const [pdfExportPages, setPdfExportPages] = React.useState('');
   const [pdfExportFileName, setPdfExportFileName] = React.useState('');
@@ -528,6 +529,14 @@ export default function ExcelWebEditPage() {
     }
   };
 
+  const handleBizNoKeyDown = React.useCallback((event) => {
+    if (event.key !== 'Enter') return;
+    if (event.nativeEvent?.isComposing || event.keyCode === 229) return;
+    event.preventDefault();
+    if (isBackendBusy) return;
+    handleLoadData();
+  }, [handleLoadData, isBackendBusy]);
+
   React.useEffect(() => {
     if (editorMode === EDITOR_MODE.CREDIT && fileType !== '신용평가') {
       setFileType('신용평가');
@@ -586,6 +595,7 @@ export default function ExcelWebEditPage() {
     sourceFilesRef.current.forEach((file) => {
       try { URL.revokeObjectURL(file.url); } catch (error) { void error; }
     });
+    setIsDeleteConfirmOpen(false);
     setSourceFiles([]);
     setSelectedFileId('');
     setLoadedData(null);
@@ -638,6 +648,31 @@ export default function ExcelWebEditPage() {
       resetEditorState();
     } catch (error) {
       notifyError(error?.message || '확정 및 저장에 실패했습니다.');
+    } finally {
+      setIsBackendBusy(false);
+    }
+  };
+
+  const handleDeleteCompany = async () => {
+    const bizNo = String(form.bizNo || loadedData?.bizNo || '').trim();
+    if (!bizNo) {
+      notifyError('삭제할 업체의 사업자등록번호가 없습니다. 먼저 불러오기를 진행하세요.');
+      return;
+    }
+
+    try {
+      setIsBackendBusy(true);
+      const result = await excelEditBackendClient.deleteCompany({
+        fileType,
+        bizNo,
+        expectedVersion: lookupVersion,
+      });
+      await excelEditBackendClient.refreshUploadedDataset(fileType);
+      notifyInfo(result?.message || '업체 삭제가 완료되었습니다.');
+      setIsDeleteConfirmOpen(false);
+      resetEditorState();
+    } catch (error) {
+      notifyError(error?.message || '업체 삭제에 실패했습니다.');
     } finally {
       setIsBackendBusy(false);
     }
@@ -1079,7 +1114,7 @@ export default function ExcelWebEditPage() {
                 <div className="excel-web-v2-form">
                   <label>상호<input name="companyName" value={form.companyName} onChange={handleInput} /></label>
                   <label>대표자<input name="managerName" value={form.managerName} onChange={handleInput} /></label>
-                  <label>사업자등록번호<input name="bizNo" value={form.bizNo} onChange={handleInput} /></label>
+                  <label>사업자등록번호<input name="bizNo" value={form.bizNo} onChange={handleInput} onKeyDown={handleBizNoKeyDown} /></label>
                   <label>지역<input name="region" value={form.region} onChange={handleInput} /></label>
                   <label>시평액<input name="sipyung" value={form.sipyung} onChange={handleInput} /></label>
                   <label>3년실적<input name="perf3y" value={form.perf3y} onChange={handleInput} /></label>
@@ -1098,6 +1133,14 @@ export default function ExcelWebEditPage() {
                 <div className="excel-web-v2-actions">
                   <button type="button" onClick={handleLoadData} disabled={isBackendBusy}>불러오기</button>
                   <button type="button" className="primary" onClick={handleSave} disabled={isBackendBusy}>확정 및 저장</button>
+                  <button
+                    type="button"
+                    className="danger"
+                    onClick={() => setIsDeleteConfirmOpen(true)}
+                    disabled={isBackendBusy || !loadedData}
+                  >
+                    업체 삭제
+                  </button>
                   <button type="button" className="maintenance" onClick={() => setIsMaintenanceModalOpen(true)} disabled={isBackendBusy}>갱신기능</button>
                 </div>
               </>
@@ -1121,7 +1164,7 @@ export default function ExcelWebEditPage() {
 
                 <h2>5. 신용평가 입력 (변경 후)</h2>
                 <div className="excel-web-v2-form">
-                  <label>사업자등록번호<input name="bizNo" value={form.bizNo} onChange={handleInput} /></label>
+                  <label>사업자등록번호<input name="bizNo" value={form.bizNo} onChange={handleInput} onKeyDown={handleBizNoKeyDown} /></label>
                   <label>신용평가등급<input name="creditGrade" value={form.creditGrade} onChange={handleInput} /></label>
                   <div className="inline-dates">
                     <label>시작일<input name="creditStartDate" value={form.creditStartDate} onChange={handleInput} placeholder="YYYY.MM.DD" /></label>
@@ -1171,6 +1214,30 @@ export default function ExcelWebEditPage() {
                 >
                   신용평가 유효기간 갱신
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isDeleteConfirmOpen && (
+          <div className="excel-web-v2-modal-backdrop" role="dialog" aria-modal="true" aria-label="업체 삭제 확인">
+            <div className="excel-web-v2-modal">
+              <div className="excel-web-v2-modal-head">
+                <h3>업체 삭제 확인</h3>
+                <button type="button" onClick={() => setIsDeleteConfirmOpen(false)} disabled={isBackendBusy}>닫기</button>
+              </div>
+              <div className="excel-web-v2-modal-body">
+                <p className="muted">
+                  현재 선택한 {fileType} DB에서 업체 블록을 완전히 비웁니다.
+                </p>
+                <p className="muted">
+                  업체명: {loadedData?.companyName || '-'}
+                  <br />
+                  사업자등록번호: {loadedData?.bizNo || form.bizNo || '-'}
+                </p>
+                <p className="muted">삭제하려면 아래 예 버튼을 눌러 진행하세요.</p>
+                <button type="button" className="danger" onClick={handleDeleteCompany} disabled={isBackendBusy}>예</button>
+                <button type="button" onClick={() => setIsDeleteConfirmOpen(false)} disabled={isBackendBusy}>아니오</button>
               </div>
             </div>
           </div>

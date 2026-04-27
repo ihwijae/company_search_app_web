@@ -74,6 +74,13 @@ const excelEditBackendClient = {
     });
   },
 
+  deleteCompany(payload = {}) {
+    return requestJson('/delete-company', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   async refreshUploadedDataset(fileType) {
     const mapped = DATASET_TYPE_MAP[fileType];
     if (!mapped) return { skipped: true };

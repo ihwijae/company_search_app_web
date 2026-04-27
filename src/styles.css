@@ -3920,12 +3920,13 @@ button.primary:hover { background: var(--accent-2); }
 
 .excel-web-v2-actions {
   margin-top: 6px;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
 
 .excel-web-v2-actions button {
+  width: 100%;
   border: 1px solid #cbd5e1;
   border-radius: 7px;
   padding: 8px 10px;
@@ -3948,9 +3949,23 @@ button.primary:hover { background: var(--accent-2); }
   font-weight: 700;
 }
 
+.excel-web-v2-actions button.danger,
+.excel-web-v2-modal-body button.danger {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  color: #fff;
+  font-weight: 700;
+}
+
 .excel-web-v2-actions button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .excel-web-v2-actions {
+    grid-template-columns: 1fr;
+  }
 }
 
 .excel-web-v2-api-notice {
@@ -4696,6 +4711,20 @@ button.primary:hover { background: var(--accent-2); }
 
 .scan-archive-file-name {
   font-weight: 600;
+}
+
+.scan-archive-file-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.scan-archive-file-path {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+  word-break: break-all;
 }
 
 .scan-archive-file-name.electric {

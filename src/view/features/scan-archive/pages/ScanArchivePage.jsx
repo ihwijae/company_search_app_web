@@ -47,6 +47,7 @@ export default function ScanArchivePage() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
   const [searchTerm, setSearchTerm] = React.useState(() => String(initialSavedState?.searchTerm || ''));
+  const [searchResults, setSearchResults] = React.useState([]);
   const [fileFilter, setFileFilter] = React.useState(() => (
     Object.values(FILE_FILTER).includes(initialSavedState?.fileFilter)
       ? initialSavedState.fileFilter
@@ -58,12 +59,10 @@ export default function ScanArchivePage() {
 
   const folders = React.useMemo(() => entries.filter((entry) => entry.type === 'dir'), [entries]);
   const files = React.useMemo(() => entries.filter((entry) => entry.type === 'file'), [entries]);
+  const hasSearchKeyword = React.useMemo(() => String(searchTerm || '').trim().length > 0, [searchTerm]);
   const filteredFiles = React.useMemo(() => {
-    const normalizedSearch = String(searchTerm || '').trim().toLowerCase();
     return files.filter((file) => {
       const fileName = String(file.name || '');
-      const lowered = fileName.toLowerCase();
-      if (normalizedSearch && !lowered.includes(normalizedSearch)) return false;
       if (fileFilter === FILE_FILTER.ALL) return true;
       if (fileFilter === FILE_FILTER.ELECTRIC) return fileName.includes('전기경영상태');
       if (fileFilter === FILE_FILTER.COMMUNICATION) return fileName.includes('통신경영상태');
@@ -71,7 +70,8 @@ export default function ScanArchivePage() {
       if (fileFilter === FILE_FILTER.CREDIT) return fileName.includes('신용평가');
       return true;
     });
-  }, [fileFilter, files, searchTerm]);
+  }, [fileFilter, files]);
+  const visibleFiles = hasSearchKeyword ? searchResults : filteredFiles;
   const selectedFile = React.useMemo(
     () => filteredFiles.find((item) => item.path === selectedFilePath) || null,
     [filteredFiles, selectedFilePath],
@@ -143,6 +143,7 @@ export default function ScanArchivePage() {
     const keyword = String(searchTerm || '').trim();
     if (!keyword) {
       setError('검색어를 입력하세요.');
+      setSearchResults([]);
       return;
     }
 
@@ -154,29 +155,36 @@ export default function ScanArchivePage() {
       const payload = await scanArchiveClient.search(keyword, fileFilter);
       if (searchRequestIdRef.current !== requestId) return;
       const result = payload?.data || {};
-      const first = Array.isArray(result.results) ? result.results[0] : null;
-      if (!first) {
+      const nextResults = Array.isArray(result.results) ? result.results : [];
+      setSearchResults(nextResults);
+      if (nextResults.length === 0) {
         setError('검색 결과가 없습니다.');
         return;
       }
-      const targetDir = first.dirPath || '';
-      const targetPath = first.path || '';
-      if (targetDir !== currentPath) {
-        await loadDirectory(targetDir);
-      }
-      setSelectedFilePath(targetPath);
     } catch (searchError) {
+      setSearchResults([]);
       setError(searchError?.message || '파일 검색 중 오류가 발생했습니다.');
     } finally {
       setSearchBusy(false);
     }
-  }, [currentPath, fileFilter, loadDirectory, searchTerm]);
+  }, [fileFilter, searchTerm]);
+
+  const handleSelectSearchResult = React.useCallback(async (item) => {
+    const targetDir = String(item?.dirPath || '');
+    const targetPath = String(item?.path || '');
+    if (!targetPath) return;
+    if (targetDir !== currentPath) {
+      await loadDirectory(targetDir);
+    }
+    setSelectedFilePath(targetPath);
+  }, [currentPath, loadDirectory]);
 
   React.useEffect(() => {
     const keyword = String(searchTerm || '').trim();
     if (!keyword) {
       searchRequestIdRef.current += 1;
       setSearchBusy(false);
+      setSearchResults([]);
       setError('');
       return undefined;
     }
@@ -230,7 +238,7 @@ export default function ScanArchivePage() {
 
           <section className="scan-archive-pane">
             <div className="scan-archive-head">
-              <h2>파일 목록</h2>
+              <h2>{hasSearchKeyword ? '검색 결과' : '파일 목록'}</h2>
             </div>
             <div className="scan-archive-file-controls">
               <input
@@ -292,18 +300,29 @@ export default function ScanArchivePage() {
               </div>
             </div>
             <div className="scan-archive-list">
-              {filteredFiles.map((file) => (
+              {visibleFiles.map((file) => (
                 <button
                   key={file.path}
                   type="button"
                   className={file.path === selectedFilePath ? 'active' : ''}
-                  onClick={() => setSelectedFilePath(file.path)}
+                  onClick={() => {
+                    if (hasSearchKeyword) {
+                      handleSelectSearchResult(file);
+                      return;
+                    }
+                    setSelectedFilePath(file.path);
+                  }}
                 >
-                  <span className={`scan-archive-file-name ${fileTypeClassName(file.name)}`}>📄 {file.name}</span>
-                  <span>{formatBytes(file.size)}</span>
+                  <span className="scan-archive-file-summary">
+                    <span className={`scan-archive-file-name ${fileTypeClassName(file.name)}`}>📄 {file.name}</span>
+                    {hasSearchKeyword && <span className="scan-archive-file-path">{file.dirPath || '루트 폴더'}</span>}
+                  </span>
+                  {!hasSearchKeyword && <span>{formatBytes(file.size)}</span>}
                 </button>
               ))}
-              {filteredFiles.length === 0 && !loading && <p className="muted">조건에 맞는 파일이 없습니다.</p>}
+              {visibleFiles.length === 0 && !loading && (
+                <p className="muted">{hasSearchKeyword ? '검색 결과가 없습니다.' : '조건에 맞는 파일이 없습니다.'}</p>
+              )}
             </div>
           </section>
 
