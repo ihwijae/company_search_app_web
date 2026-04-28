@@ -202,6 +202,23 @@ const DEFAULT_LH_BODY_TEMPLATE = `
 const DEFAULT_PPS_BODY_TEMPLATE = DEFAULT_LH_BODY_TEMPLATE
   .replace('ENC 파일', 'BID 파일')
   .replace('ENC 파일만 첨부하세요!!!', 'BID 파일만 첨부하세요!!!');
+const DEFAULT_MOIS_BODY_TEMPLATE = `
+<div style="font-family:'Malgun Gothic',Dotum,Arial,sans-serif;font-size:19px;color:#1f2933;line-height:1.7;">
+  <p style="margin:0 0 12px;color:#0455c0;font-size:22px;font-weight:bold;">
+    {{owner}} "{{announcementNumber}} {{announcementName}}"의 입찰내역을 보내드립니다.
+  </p>
+  <p style="margin:0 0 12px;">
+    이메일에 첨부된 <span style="font-weight:bold;text-decoration:underline;">엑셀 파일</span> 1개만 입찰서에 첨부하셔서 투찰해 주시기 바랍니다.
+  </p>
+  <p style="margin:0 0 18px;">좋은 결과 있으시기 바랍니다.</p>
+  <hr style="border:none;border-top:1px solid #c9ced6;margin:16px 0;" />
+  <p style="margin:4px 0;">공사명 : <strong>{{announcementName}}</strong></p>
+  <p style="margin:4px 0;">공고번호 : <strong>{{announcementNumber}}</strong></p>
+  <p style="margin:4px 0;">
+    <strong><span style="color:#d22b2b;">{{vendorName}} 투찰금액 : {{tenderAmount}}</span></strong>
+  </p>
+  <p style="margin:4px 0;">투찰마감일 {{closingDate}}</p>
+</div>`;
 const DEFAULT_EX_BODY_TEMPLATE = `
 <div style="font-family:'Malgun Gothic',Dotum,Arial,sans-serif;font-size:19px;color:#1f2933;line-height:1.7;">
   <p style="margin:0 0 12px;color:#0455c0;font-size:22px;font-weight:bold;">
@@ -246,14 +263,20 @@ const makeSmtpProfileId = () => `${Date.now().toString(36)}-${Math.random().toSt
 const MAIL_OWNER_OPTIONS = [
   { id: 'LH', label: '한국토지주택공사' },
   { id: 'EX', label: '한국도로공사' },
+  { id: 'MOIS', label: '행안부' },
   { id: 'PPS', label: '조달청' },
 ];
 const MAIL_DEFAULT_TEMPLATE_BY_OWNER = {
   LH: DEFAULT_LH_BODY_TEMPLATE,
   EX: DEFAULT_EX_BODY_TEMPLATE,
+  MOIS: DEFAULT_MOIS_BODY_TEMPLATE,
   PPS: DEFAULT_PPS_BODY_TEMPLATE,
 };
 const resolveOwnerLabel = (ownerId) => MAIL_OWNER_OPTIONS.find((option) => option.id === ownerId)?.label || '';
+const resolveMailOwnerToken = (ownerId, fallbackOwner = '') => {
+  if (ownerId === 'MOIS') return '나라장터';
+  return resolveOwnerLabel(ownerId) || fallbackOwner || '';
+};
 const resolveDefaultBodyTemplateByOwner = (ownerId) => MAIL_DEFAULT_TEMPLATE_BY_OWNER[ownerId] || DEFAULT_LH_BODY_TEMPLATE;
 
 export default function MailAutomationPage() {
@@ -466,8 +489,6 @@ function MailAutomationPageInner() {
       setSelectedSmtpProfileId(smtpProfiles[0]?.id || '');
     }
   }, [selectedSmtpProfileId, smtpProfiles]);
-  const selectedOwnerLabel = React.useMemo(() => resolveOwnerLabel(ownerId), [ownerId]);
-
   const ensureOwnerSelected = React.useCallback(() => {
     if (ownerId) return true;
     showStatusMessage('발주처를 먼저 선택해 주세요.', { type: 'warning' });
@@ -1102,12 +1123,12 @@ function MailAutomationPageInner() {
   const buildRecipientContext = React.useCallback((recipient) => ({
     announcementNumber: projectInfo.announcementNumber || '',
     announcementName: projectInfo.announcementName || '',
-    owner: selectedOwnerLabel || projectInfo.owner || '',
+    owner: resolveMailOwnerToken(ownerId, projectInfo.owner),
     closingDate: projectInfo.closingDate || '',
     baseAmount: projectInfo.baseAmount || '',
     vendorName: recipient.vendorName || '',
     tenderAmount: recipient.tenderAmount || '',
-  }), [projectInfo, selectedOwnerLabel]);
+  }), [ownerId, projectInfo]);
 
   const buildFallbackText = React.useCallback((context) => ([
     `${context.owner || ''} "${context.announcementNumber || ''} ${context.announcementName || ''}"`,
@@ -1276,7 +1297,7 @@ function MailAutomationPageInner() {
     const templateContext = {
       announcementNumber: projectInfo.announcementNumber || '',
       announcementName: projectInfo.announcementName || '',
-      owner: selectedOwnerLabel || projectInfo.owner || '',
+      owner: resolveMailOwnerToken(ownerId, projectInfo.owner),
       closingDate: projectInfo.closingDate || '',
       baseAmount: projectInfo.baseAmount || '',
       vendorName: sampleRecipient?.vendorName || '',
@@ -1332,7 +1353,7 @@ function MailAutomationPageInner() {
       const message = error?.message ? `테스트 메일 실패: ${error.message}` : '테스트 메일 발송 중 오류가 발생했습니다.';
       showStatusMessage(message, { type: 'error', title: '테스트 메일 실패' });
     }
-  }, [ensureOwnerSelected, resolveSmtpConfig, projectInfo, recipients, subjectTemplate, bodyTemplate, selectedOwnerLabel, showStatusMessage]);
+  }, [ensureOwnerSelected, resolveSmtpConfig, projectInfo, recipients, subjectTemplate, bodyTemplate, ownerId, showStatusMessage]);
 
   const handleTemplatePreview = React.useCallback(() => {
     if (!ensureOwnerSelected()) return;
