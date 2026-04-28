@@ -600,11 +600,19 @@ function MailAutomationPageInner() {
           if (cell.t === 'n' && Number.isFinite(cell.v)) {
             const parsed = XLSX.SSF.parse_date_code(cell.v);
             if (parsed) {
-              const date = new Date(Date.UTC(parsed.y, (parsed.m || 1) - 1, parsed.d || 1, parsed.H || 0, parsed.M || 0));
+              const date = new Date(
+                parsed.y || 0,
+                Math.max((parsed.m || 1) - 1, 0),
+                parsed.d || 1,
+                0,
+                ((parsed.H || 0) * 60) + (parsed.M || 0) + ((parsed.S || 0) >= 30 ? 1 : 0),
+                0,
+                0,
+              );
               if (!Number.isNaN(date.getTime())) {
-                const base = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
-                const hours = date.getUTCHours();
-                const minutes = date.getUTCMinutes();
+                const base = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                const hours = date.getHours();
+                const minutes = date.getMinutes();
                 if (hours === 0 && minutes === 0) return base;
                 return `${base} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
               }
