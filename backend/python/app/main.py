@@ -710,15 +710,15 @@ def _find_company_section_bounds(sheet, row: int) -> tuple[int, int] | None:
 
 def _add_new_company_data(excel_path: str, form_data: dict, db_type: str) -> dict:
     company_name = str(form_data.get("companyName") or "").strip()
-    requested_region = str(form_data.get("region") or "").strip()
-    if not company_name or not requested_region:
+    requested_sheet_name = str(form_data.get("sheetName") or form_data.get("region") or "").strip()
+    if not company_name or not requested_sheet_name:
         raise HTTPException(status_code=400, detail="신규 업체 추가에는 상호와 지역(시트명)이 필요합니다.")
 
     workbook = load_workbook(filename=excel_path)
     try:
-        sheet_name = _resolve_sheet_name_for_new_company(workbook, requested_region)
+        sheet_name = _resolve_sheet_name_for_new_company(workbook, requested_sheet_name)
         if not sheet_name:
-            raise HTTPException(status_code=400, detail=f"'{requested_region}'에 해당하는 시트를 찾지 못했습니다.")
+            raise HTTPException(status_code=400, detail=f"'{requested_sheet_name}'에 해당하는 시트를 찾지 못했습니다.")
         sheet = workbook[sheet_name]
 
         start_col, end_col = 2, 13
@@ -1348,12 +1348,13 @@ async def save_excel_edit_data(
             else:
                 added = _add_new_company_data(excel_path, request.data, db_key)
                 company_name = company_name or str(added.get("companyName") or "")
-                region_name = region_name or str(added.get("sheetName") or "")
+                sheet_name = str(added.get("sheetName") or "")
+                region_name = region_name or sheet_name
                 updated["management"] = {
                     "dbType": db_key,
                     "excelPath": excel_path,
                     "action": "add_new_company",
-                    "sheetName": region_name,
+                    "sheetName": sheet_name,
                     "companyName": company_name,
                 }
 

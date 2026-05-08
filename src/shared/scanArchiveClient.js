@@ -1,5 +1,5 @@
-async function requestJson(url) {
-  const response = await fetch(url);
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, options);
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload?.success === false) {
     throw new Error(payload?.message || `요청 실패 (${response.status})`);
@@ -33,6 +33,11 @@ const scanArchiveClient = {
   async search(query, fileType = 'all') {
     const params = new URLSearchParams({ action: 'search', q: query, fileType });
     return requestJson(`/api/scan-archive?${params.toString()}`);
+  },
+
+  async deleteFile(path) {
+    const params = new URLSearchParams({ action: 'delete', path });
+    return requestJson(`/api/scan-archive?${params.toString()}`, { method: 'DELETE' });
   },
 };
 

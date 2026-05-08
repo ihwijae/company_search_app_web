@@ -137,7 +137,7 @@ export default function ExcelWebEditPage() {
   const [missingCompanyMode, setMissingCompanyMode] = React.useState('management');
   const [isCompanySetupModalOpen, setIsCompanySetupModalOpen] = React.useState(false);
   const [companySetupMode, setCompanySetupMode] = React.useState('register');
-  const [companySetupDraft, setCompanySetupDraft] = React.useState({ companyName: '', region: '' });
+  const [companySetupDraft, setCompanySetupDraft] = React.useState({ companyName: '', sheetName: '', region: '' });
   const lastPdfErrorRef = React.useRef('');
   const multiPageNoticedFileIdsRef = React.useRef(new Set());
   const didHydrateRef = React.useRef(false);
@@ -680,9 +680,11 @@ export default function ExcelWebEditPage() {
 
   const openCompanySetupModal = React.useCallback((mode) => {
     setCompanySetupMode(mode);
+    const region = String(form.region || loadedData?.region || '').trim();
     setCompanySetupDraft({
       companyName: String(form.companyName || loadedData?.companyName || '').trim(),
-      region: String(form.region || loadedData?.region || '').trim(),
+      sheetName: mode === 'register' ? region : '',
+      region,
     });
     setIsCompanySetupModalOpen(true);
   }, [form.companyName, form.region, loadedData?.companyName, loadedData?.region]);
@@ -719,9 +721,14 @@ export default function ExcelWebEditPage() {
 
   const handleConfirmCompanySetup = React.useCallback(async () => {
     const companyName = String(companySetupDraft.companyName || '').trim();
+    const sheetName = String(companySetupDraft.sheetName || '').trim();
     const region = String(companySetupDraft.region || '').trim();
     if (!companyName) {
       notifyError('업체명을 입력하세요.');
+      return;
+    }
+    if (companySetupMode === 'register' && !sheetName) {
+      notifyError('저장할 시트를 선택하세요.');
       return;
     }
     if (!region) {
@@ -733,6 +740,7 @@ export default function ExcelWebEditPage() {
       setForm((prev) => ({
         ...prev,
         companyName,
+        sheetName,
         region,
       }));
       setIsCompanySetupModalOpen(false);
@@ -744,7 +752,7 @@ export default function ExcelWebEditPage() {
     if (archived) {
       setIsCompanySetupModalOpen(false);
     }
-  }, [companySetupDraft.companyName, companySetupDraft.region, companySetupMode, notifyError, notifyInfo, saveArchiveOnlyWithDraft]);
+  }, [companySetupDraft.companyName, companySetupDraft.region, companySetupDraft.sheetName, companySetupMode, notifyError, notifyInfo, saveArchiveOnlyWithDraft]);
 
   const clearBackendPdfPreview = React.useCallback(() => {
     if (previewAbortControllerRef.current) {
@@ -1345,13 +1353,31 @@ export default function ExcelWebEditPage() {
                     placeholder="업체명 입력"
                   />
                 </label>
+                {companySetupMode === 'register' && (
+                  <label>
+                    저장 시트
+                    <input
+                      list="excel-web-v2-region-options"
+                      value={companySetupDraft.sheetName}
+                      onChange={(event) => {
+                        const nextSheetName = event.target.value;
+                        setCompanySetupDraft((prev) => ({
+                          ...prev,
+                          sheetName: nextSheetName,
+                          region: !prev.region || prev.region === prev.sheetName ? nextSheetName : prev.region,
+                        }));
+                      }}
+                      placeholder="예: 경기"
+                    />
+                  </label>
+                )}
                 <label>
-                  지역
+                  {companySetupMode === 'register' ? '지역/주소' : '지역'}
                   <input
                     list="excel-web-v2-region-options"
                     value={companySetupDraft.region}
                     onChange={(event) => setCompanySetupDraft((prev) => ({ ...prev, region: event.target.value }))}
-                    placeholder="예: 경기"
+                    placeholder={companySetupMode === 'register' ? '예: 경기도 화성시' : '예: 경기'}
                   />
                   <datalist id="excel-web-v2-region-options">
                     {REGION_OPTIONS.map((region) => <option key={region} value={region} />)}

@@ -4696,6 +4696,30 @@ button.primary:hover { background: var(--accent-2); }
   font-size: 13px;
 }
 
+.scan-archive-preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scan-archive-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #fecaca;
+  background: #fee2e2;
+  color: #b91c1c;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.scan-archive-delete:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .scan-archive-download-all {
   display: inline-flex;
   align-items: center;
@@ -4766,6 +4790,70 @@ button.primary:hover { background: var(--accent-2); }
 .scan-archive-preview-image {
   max-width: 100%;
   height: auto;
+}
+
+.scan-archive-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.scan-archive-confirm {
+  width: min(420px, 100%);
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+  padding: 20px;
+}
+
+.scan-archive-confirm h3 {
+  margin: 0 0 10px;
+  font-size: 18px;
+  color: #111827;
+}
+
+.scan-archive-confirm p {
+  margin: 0;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.scan-archive-confirm strong {
+  color: #111827;
+  word-break: break-all;
+}
+
+.scan-archive-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.scan-archive-confirm-actions button {
+  border: 1px solid #d0dae8;
+  background: #f8fafc;
+  color: #334155;
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+
+.scan-archive-confirm-actions button.danger {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #fff;
+}
+
+.scan-archive-confirm-actions button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 @media (max-width: 1300px) {

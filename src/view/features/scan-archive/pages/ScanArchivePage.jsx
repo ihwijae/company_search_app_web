@@ -54,6 +54,8 @@ export default function ScanArchivePage() {
       : FILE_FILTER.ALL
   ));
   const [searchBusy, setSearchBusy] = React.useState(false);
+  const [deleteTarget, setDeleteTarget] = React.useState(null);
+  const [deleteBusy, setDeleteBusy] = React.useState(false);
   const searchRequestIdRef = React.useRef(0);
   const initialPathRef = React.useRef(String(initialSavedState?.currentPath || ''));
 
@@ -178,6 +180,28 @@ export default function ScanArchivePage() {
     }
     setSelectedFilePath(targetPath);
   }, [currentPath, loadDirectory]);
+
+  const handleDeleteSelectedFile = React.useCallback(async () => {
+    if (!deleteTarget?.path) return;
+    try {
+      setDeleteBusy(true);
+      setError('');
+      await scanArchiveClient.deleteFile(deleteTarget.path);
+      setSelectedFilePath((prev) => (prev === deleteTarget.path ? '' : prev));
+      setEntries((prev) => prev.filter((entry) => entry.path !== deleteTarget.path));
+      setSearchResults((prev) => prev.filter((entry) => entry.path !== deleteTarget.path));
+      setDeleteTarget(null);
+      if (hasSearchKeyword) {
+        await handleGlobalSearch();
+      } else {
+        await loadDirectory(currentPath);
+      }
+    } catch (deleteError) {
+      setError(deleteError?.message || '파일 삭제에 실패했습니다.');
+    } finally {
+      setDeleteBusy(false);
+    }
+  }, [currentPath, deleteTarget, handleGlobalSearch, hasSearchKeyword, loadDirectory]);
 
   React.useEffect(() => {
     const keyword = String(searchTerm || '').trim();
@@ -330,9 +354,19 @@ export default function ScanArchivePage() {
             <div className="scan-archive-head">
               <h2>미리보기</h2>
               {selectedFile && (
-                <a href={downloadUrl} className="scan-archive-download">
-                  다운로드
-                </a>
+                <div className="scan-archive-preview-actions">
+                  <a href={downloadUrl} className="scan-archive-download">
+                    다운로드
+                  </a>
+                  <button
+                    type="button"
+                    className="scan-archive-delete"
+                    onClick={() => setDeleteTarget(selectedFile)}
+                    disabled={deleteBusy}
+                  >
+                    삭제
+                  </button>
+                </div>
               )}
             </div>
             {!selectedFile && <p className="muted">파일을 선택하세요.</p>}
@@ -349,6 +383,26 @@ export default function ScanArchivePage() {
             )}
           </section>
         </div>
+        {deleteTarget && (
+          <div className="scan-archive-confirm-overlay" role="presentation">
+            <div className="scan-archive-confirm" role="dialog" aria-modal="true" aria-labelledby="scan-delete-title">
+              <h3 id="scan-delete-title">파일 삭제</h3>
+              <p>
+                서버에서 이 파일을 삭제합니다.
+                <br />
+                <strong>{deleteTarget.name}</strong>
+              </p>
+              <div className="scan-archive-confirm-actions">
+                <button type="button" onClick={() => setDeleteTarget(null)} disabled={deleteBusy}>
+                  취소
+                </button>
+                <button type="button" className="danger" onClick={handleDeleteSelectedFile} disabled={deleteBusy}>
+                  {deleteBusy ? '삭제 중...' : '삭제'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

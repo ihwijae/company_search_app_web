@@ -192,14 +192,40 @@ async function searchFiles(root, query, filter = SEARCH_FILTER.ALL) {
 }
 
 module.exports = async function handler(req, res) {
-  if (req.method !== 'GET') {
-    allowMethods(res, ['GET']);
+  if (!['GET', 'DELETE'].includes(req.method)) {
+    allowMethods(res, ['GET', 'DELETE']);
     return sendJson(res, 405, { success: false, message: 'Method not allowed' });
   }
 
   const url = new URL(req.url, 'http://localhost');
   const action = String(url.searchParams.get('action') || 'list').trim().toLowerCase();
   const root = resolveArchiveRoot();
+
+  if (req.method === 'DELETE') {
+    if (action !== 'delete') {
+      return sendJson(res, 400, { success: false, message: 'Invalid action' });
+    }
+
+    try {
+      const relativePath = String(url.searchParams.get('path') || '').trim();
+      if (!relativePath) {
+        return sendJson(res, 400, { success: false, message: 'File path is required' });
+      }
+      const { normalized, absolute } = resolveTargetPath(root, relativePath);
+      const stat = await fs.promises.stat(absolute);
+      if (!stat.isFile()) {
+        return sendJson(res, 400, { success: false, message: 'Target is not a file' });
+      }
+      await fs.promises.unlink(absolute);
+      return sendJson(res, 200, {
+        success: true,
+        message: '파일을 삭제했습니다.',
+        data: { path: normalized, name: path.basename(absolute) },
+      });
+    } catch (error) {
+      return sendJson(res, 400, { success: false, message: error?.message || 'File delete failed' });
+    }
+  }
 
   if (action === 'list') {
     try {
