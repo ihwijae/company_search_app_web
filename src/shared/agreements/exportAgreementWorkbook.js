@@ -57,6 +57,21 @@ const cloneCellStyle = (style) => {
   try { return JSON.parse(JSON.stringify(style)); } catch { return style; }
 };
 
+const normalizeWorksheetViews = (views) => {
+  const sourceViews = cloneCellStyle(views);
+  if (Array.isArray(sourceViews) && sourceViews.length > 0) {
+    return sourceViews.map((view) => {
+      const zoomScale = view.zoomScale || view.zoomScaleNormal || 100;
+      return {
+        ...view,
+        zoomScale,
+        zoomScaleNormal: zoomScale,
+      };
+    });
+  }
+  return [{ state: 'normal', zoomScale: 100, zoomScaleNormal: 100 }];
+};
+
 const buildCredibilityFormula = (members, shareColumns, rowIndex, scaleValue = 1, scaleExpr = '') => {
   if (!Array.isArray(members) || !Array.isArray(shareColumns) || !rowIndex) return null;
   const parts = [];
@@ -102,15 +117,7 @@ const copyWorksheet = (source, target) => {
     }
   }
   target.pageSetup = cloneCellStyle(source.pageSetup);
-  const sourceViews = cloneCellStyle(source.views);
-  if (Array.isArray(sourceViews) && sourceViews.length > 0) {
-    target.views = sourceViews.map((view) => ({
-      ...view,
-      zoomScale: view.zoomScale || 100,
-    }));
-  } else {
-    target.views = [{ state: 'normal', zoomScale: 100 }];
-  }
+  target.views = normalizeWorksheetViews(source.views);
   target.autoFilter = cloneCellStyle(source.autoFilter);
   source.columns.forEach((column, index) => {
     const targetColumn = target.getColumn(index + 1);
@@ -815,6 +822,9 @@ async function exportAgreementExcel({
       ...targetWorkbook.calcProperties,
       fullCalcOnLoad: true,
     };
+    targetWorkbook.worksheets.forEach((sheet) => {
+      sheet.views = normalizeWorksheetViews(sheet.views);
+    });
 
     const layoutSnapshot = new Map();
     targetWorkbook.worksheets.forEach((sheet) => {
@@ -828,7 +838,11 @@ async function exportAgreementExcel({
           rowHeights.set(rowNumber, row.height);
         }
       });
-      layoutSnapshot.set(sheet.name, { columns, rowHeights });
+      layoutSnapshot.set(sheet.name, {
+        columns,
+        rowHeights,
+        views: normalizeWorksheetViews(sheet.views),
+      });
     });
 
     const resolvedName = ensureUniqueSheetName(targetWorkbook, worksheet.name);
@@ -859,6 +873,9 @@ async function exportAgreementExcel({
           const row = sheet.getRow(rowIdx);
           if (row) row.height = height;
         });
+      }
+      if (Array.isArray(layout.views) && layout.views.length > 0) {
+        sheet.views = normalizeWorksheetViews(layout.views);
       }
     });
 
