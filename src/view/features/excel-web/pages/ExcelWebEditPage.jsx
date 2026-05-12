@@ -376,7 +376,9 @@ export default function ExcelWebEditPage() {
 
   React.useEffect(() => () => {
     if (!backendPreviewUrl) return;
-    try { URL.revokeObjectURL(backendPreviewUrl); } catch (error) { void error; }
+    if (backendPreviewUrl.startsWith('blob:')) {
+      try { URL.revokeObjectURL(backendPreviewUrl); } catch (error) { void error; }
+    }
   }, [backendPreviewUrl]);
 
   React.useEffect(() => {
@@ -832,7 +834,7 @@ export default function ExcelWebEditPage() {
     setBackendPdfPageCount(0);
     setBackendPdfLoading(false);
     setBackendPreviewUrl((prev) => {
-      if (prev) {
+      if (prev?.startsWith('blob:')) {
         try { URL.revokeObjectURL(prev); } catch (error) { void error; }
       }
       return '';
@@ -904,23 +906,12 @@ export default function ExcelWebEditPage() {
   }, [notifyError, selectedFile]);
 
   const renderBackendImage = React.useCallback(async () => {
-    if (!selectedFile?.file && !selectedFile?.uploadId) return false;
-    if (previewAbortControllerRef.current) {
-      previewAbortControllerRef.current.abort();
-    }
-    const controller = new AbortController();
-    previewAbortControllerRef.current = controller;
+    if (!selectedFile?.file && !selectedFile?.url) return false;
     try {
       setBackendPdfLoading(true);
-      const rendered = await excelEditBackendClient.renderImage({
-        file: selectedFile.uploadId ? null : selectedFile.file,
-        uploadId: selectedFile.uploadId || '',
-        signal: controller.signal,
-      });
-      if (previewAbortControllerRef.current !== controller) return false;
-      const nextUrl = URL.createObjectURL(rendered.blob);
+      const nextUrl = selectedFile.file ? URL.createObjectURL(selectedFile.file) : selectedFile.url;
       setBackendPreviewUrl((prev) => {
-        if (prev) {
+        if (prev?.startsWith('blob:')) {
           try { URL.revokeObjectURL(prev); } catch (error) { void error; }
         }
         return nextUrl;
@@ -938,10 +929,7 @@ export default function ExcelWebEditPage() {
       }
       return false;
     } finally {
-      if (previewAbortControllerRef.current === controller) {
-        previewAbortControllerRef.current = null;
-        setBackendPdfLoading(false);
-      }
+      setBackendPdfLoading(false);
     }
   }, [notifyError, selectedFile]);
 

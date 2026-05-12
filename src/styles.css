@@ -3684,7 +3684,7 @@ button.primary:hover { background: var(--accent-2); }
   background: #0f172a;
   display: flex;
   align-items: flex-start;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 12px;
 }
 
@@ -3717,12 +3717,14 @@ button.primary:hover { background: var(--accent-2); }
   background: #0f172a;
   display: flex;
   align-items: flex-start;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 12px;
 }
 
 .excel-web-v2-zoom-image {
   display: block;
+  flex: 0 0 auto;
+  margin: 0 auto;
   height: auto;
   max-width: none;
   background: #fff;
