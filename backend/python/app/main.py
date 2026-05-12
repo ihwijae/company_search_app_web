@@ -388,20 +388,21 @@ def _format_amount_for_form_thousand_unit(value: object) -> str:
         return ""
 
 
-def _format_ratio_for_display(value: object) -> str:
+def _format_ratio_for_display(value: object, number_format: str = "") -> str:
     if value is None or str(value).strip() == "":
         return ""
+    is_percent_format = "%" in str(number_format or "")
     try:
         if isinstance(value, (int, float)):
             numeric = float(value)
-            if numeric <= 1:
+            if is_percent_format or numeric <= 1:
                 numeric *= 100
             return f"{numeric:.2f}%"
         text = str(value).strip()
         if text.endswith("%"):
             return f"{float(text[:-1]):.2f}%"
         numeric = float(text)
-        if numeric <= 1:
+        if is_percent_format or numeric <= 1:
             numeric *= 100
         return f"{numeric:.2f}%"
     except (TypeError, ValueError):
@@ -648,8 +649,11 @@ def _extract_company_cells(excel_path: str, sheet_name: str, row: int, col: int)
                 cell = _resolve_merged_cell(sheet, target_row, col)
                 value = cell.value
                 color = _resolve_fill_color_hex(cell)
-            result[kr_key] = {"value": value, "color": color}
-        result["지역"] = {"value": sheet_name, "color": "#FFFFFF"}
+                number_format = str(getattr(cell, "number_format", "") or "")
+            else:
+                number_format = ""
+            result[kr_key] = {"value": value, "color": color, "numberFormat": number_format}
+        result["지역"] = {"value": sheet_name, "color": "#FFFFFF", "numberFormat": ""}
         return result
     finally:
         workbook.close()
@@ -937,6 +941,8 @@ def _add_new_company_data(excel_path: str, form_data: dict, db_type: str) -> dic
 
 
 def _build_lookup_payload(raw: dict, db_type: str, excel_path: str, raw_cells: dict | None = None) -> dict:
+    debt_number_format = str((raw_cells or {}).get("부채비율", {}).get("numberFormat") or "")
+    current_number_format = str((raw_cells or {}).get("유동비율", {}).get("numberFormat") or "")
     company = {
         "companyName": str(raw.get("상호") or ""),
         "managerName": str(raw.get("대표자") or ""),
@@ -945,8 +951,8 @@ def _build_lookup_payload(raw: dict, db_type: str, excel_path: str, raw_cells: d
         "sipyung": _format_amount_for_display(raw.get("시평액")),
         "perf3y": _format_amount_for_display(raw.get("3년실적")),
         "perf5y": _format_amount_for_display(raw.get("5년실적")),
-        "debtRatio": _format_ratio_for_display(raw.get("부채비율")),
-        "currentRatio": _format_ratio_for_display(raw.get("유동비율")),
+        "debtRatio": _format_ratio_for_display(raw.get("부채비율"), debt_number_format),
+        "currentRatio": _format_ratio_for_display(raw.get("유동비율"), current_number_format),
         "bizYears": str(raw.get("영업기간") or ""),
         "creditText": str(raw.get("신용평가") or ""),
         "womenOwned": str(raw.get("여성기업") or ""),
