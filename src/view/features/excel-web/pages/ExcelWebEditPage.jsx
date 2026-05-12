@@ -233,6 +233,12 @@ export default function ExcelWebEditPage() {
 
       setSourceFiles(nextFiles);
       setSelectedFileId(firstAddedId);
+      setLoadedData(null);
+      setLoadedColorMap({});
+      setLookupVersion('');
+      setForm(EMPTY_FORM);
+      setPdfPageNumber(1);
+      setPdfError('');
       notifyInfo(`임시 업로드 완료 (${nextFiles.length}건)`);
     } catch (error) {
       notifyError(error?.message || '임시 업로드에 실패했습니다.');
