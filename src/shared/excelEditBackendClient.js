@@ -41,6 +41,23 @@ const excelEditBackendClient = {
     });
   },
 
+  getTempUpload(uploadId) {
+    return requestJson(`/temp-upload/${encodeURIComponent(uploadId)}`);
+  },
+
+  getTempUploadContentUrl(uploadId) {
+    return `${API_BASE}/temp-upload/${encodeURIComponent(uploadId)}/content`;
+  },
+
+  deleteTempUploads(uploadIds = []) {
+    const ids = Array.isArray(uploadIds) ? uploadIds.filter(Boolean) : [];
+    if (!ids.length) return Promise.resolve({ success: true, data: { deleted: [] } });
+    return requestJson('/temp-uploads/delete', {
+      method: 'POST',
+      body: JSON.stringify({ uploadIds: ids }),
+    });
+  },
+
   updateYearEndColor(payload = {}) {
     return requestJson('/update-year-end-color', {
       method: 'POST',
@@ -97,9 +114,10 @@ const excelEditBackendClient = {
     return payload?.data || {};
   },
 
-  async renderPdfPage({ file, page = 1, dpi = 160, signal } = {}) {
+  async renderPdfPage({ file, uploadId = '', page = 1, dpi = 160, signal } = {}) {
     const form = new FormData();
-    form.append('file', file);
+    if (file) form.append('file', file);
+    if (uploadId) form.append('uploadId', uploadId);
     form.append('page', String(page));
     form.append('dpi', String(dpi));
 
@@ -121,9 +139,10 @@ const excelEditBackendClient = {
     };
   },
 
-  async renderImage({ file, signal } = {}) {
+  async renderImage({ file, uploadId = '', signal } = {}) {
     const form = new FormData();
-    form.append('file', file);
+    if (file) form.append('file', file);
+    if (uploadId) form.append('uploadId', uploadId);
 
     const response = await fetch(`${API_BASE}/render-image`, {
       method: 'POST',
@@ -138,9 +157,10 @@ const excelEditBackendClient = {
     return { blob };
   },
 
-  async exportPdfPages({ file, pages } = {}) {
+  async exportPdfPages({ file, uploadId = '', pages } = {}) {
     const form = new FormData();
-    form.append('file', file);
+    if (file) form.append('file', file);
+    if (uploadId) form.append('uploadId', uploadId);
     form.append('pages', String(pages || '').trim());
 
     const response = await fetch(`${API_BASE}/export-pdf-pages`, {
@@ -159,9 +179,10 @@ const excelEditBackendClient = {
     };
   },
 
-  async removePdfPages({ file, pages } = {}) {
+  async removePdfPages({ file, uploadId = '', pages } = {}) {
     const form = new FormData();
-    form.append('file', file);
+    if (file) form.append('file', file);
+    if (uploadId) form.append('uploadId', uploadId);
     form.append('pages', String(pages || '').trim());
 
     const response = await fetch(`${API_BASE}/remove-pdf-pages`, {

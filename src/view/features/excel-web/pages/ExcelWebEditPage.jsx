@@ -123,6 +123,7 @@ export default function ExcelWebEditPage() {
   const [previewZoom, setPreviewZoom] = React.useState(1);
   const [previewRotation, setPreviewRotation] = React.useState(0);
   const [isBackendBusy, setIsBackendBusy] = React.useState(false);
+  const [backendStatusMessage, setBackendStatusMessage] = React.useState('');
   const [backendPreviewUrl, setBackendPreviewUrl] = React.useState('');
   const [backendPdfPageCount, setBackendPdfPageCount] = React.useState(0);
   const [backendPdfLoading, setBackendPdfLoading] = React.useState(false);
@@ -199,36 +200,46 @@ export default function ExcelWebEditPage() {
   const handleSourceUpload = async (event) => {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
-    let firstAddedId = '';
-    const nextFiles = files.map((file) => {
-      const id = `${Date.now()}-${file.name}-${Math.random().toString(36).slice(2, 7)}`;
-      if (!firstAddedId) firstAddedId = id;
-      return {
-        id,
-        file,
-        name: file.name,
-        type: file.type || '',
-        url: URL.createObjectURL(file),
-      };
-    });
-
-    sourceFilesRef.current.forEach((file) => {
-      try { URL.revokeObjectURL(file.url); } catch (error) { void error; }
-    });
-
-    setSourceFiles(nextFiles);
-    setSelectedFileId(firstAddedId);
-    event.target.value = '';
-
     try {
       setIsBackendBusy(true);
+      setBackendStatusMessage('스캔본을 서버 임시폴더에 업로드하는 중입니다.');
       const result = await excelEditBackendClient.uploadFiles({ files, fileType });
-      const savedCount = Array.isArray(result?.data?.files) ? result.data.files.length : files.length;
-      notifyInfo(`백엔드 업로드 완료 (${savedCount}건)`);
+      const uploaded = Array.isArray(result?.data?.files) ? result.data.files : [];
+      let firstAddedId = '';
+      const nextFiles = uploaded.map((item, index) => {
+        const sourceFile = files[index] || null;
+        const id = item.uploadId || `${Date.now()}-${item.originalName || sourceFile?.name || 'file'}-${Math.random().toString(36).slice(2, 7)}`;
+        if (!firstAddedId) firstAddedId = id;
+        return {
+          id,
+          uploadId: item.uploadId || '',
+          file: sourceFile,
+          name: item.originalName || sourceFile?.name || item.savedName || 'file.pdf',
+          type: item.contentType || sourceFile?.type || '',
+          size: item.size || sourceFile?.size || 0,
+          url: sourceFile
+            ? URL.createObjectURL(sourceFile)
+            : excelEditBackendClient.getTempUploadContentUrl(item.uploadId),
+        };
+      });
+
+      const oldUploadIds = sourceFilesRef.current.map((item) => item.uploadId).filter(Boolean);
+      sourceFilesRef.current.forEach((file) => {
+        if (file.url?.startsWith('blob:')) {
+          try { URL.revokeObjectURL(file.url); } catch (error) { void error; }
+        }
+      });
+      if (oldUploadIds.length) void excelEditBackendClient.deleteTempUploads(oldUploadIds);
+
+      setSourceFiles(nextFiles);
+      setSelectedFileId(firstAddedId);
+      notifyInfo(`임시 업로드 완료 (${nextFiles.length}건)`);
     } catch (error) {
-      notifyError(error?.message || '백엔드 업로드에 실패했습니다.');
+      notifyError(error?.message || '임시 업로드에 실패했습니다.');
     } finally {
       setIsBackendBusy(false);
+      setBackendStatusMessage('');
+      event.target.value = '';
     }
   };
 
@@ -263,28 +274,43 @@ export default function ExcelWebEditPage() {
       persisted = null;
     }
 
+    const state = persisted || memory;
+    const sourceState = Array.isArray(state?.sourceFiles) ? state.sourceFiles : [];
+    const sourceFromState = sourceState
+      .filter((item) => item?.uploadId)
+      .map((item) => ({
+        id: item.id || item.uploadId,
+        uploadId: item.uploadId,
+        file: null,
+        name: item.name || item.originalName || item.savedName || 'file.pdf',
+        type: item.type || item.contentType || '',
+        size: item.size || 0,
+        url: excelEditBackendClient.getTempUploadContentUrl(item.uploadId),
+      }));
     const sourceFromMemory = Array.isArray(memory?.sourceFiles)
       ? memory.sourceFiles
         .filter((item) => item?.file)
         .map((item) => ({
           id: item.id || `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          uploadId: item.uploadId || '',
           file: item.file,
           name: item.name || item.file?.name || 'file.pdf',
           type: item.type || item.file?.type || '',
+          size: item.size || item.file?.size || 0,
           url: URL.createObjectURL(item.file),
         }))
       : [];
+    const restoredSources = sourceFromState.length ? sourceFromState : sourceFromMemory;
 
-    if (sourceFromMemory.length) {
-      setSourceFiles(sourceFromMemory);
+    if (restoredSources.length) {
+      setSourceFiles(restoredSources);
       setSelectedFileId(
-        sourceFromMemory.some((item) => item.id === memory?.selectedFileId)
-          ? memory.selectedFileId
-          : sourceFromMemory[0].id,
+        restoredSources.some((item) => item.id === state?.selectedFileId)
+          ? state.selectedFileId
+          : restoredSources[0].id,
       );
     }
 
-    const state = persisted || memory;
     if (!state) return;
     if (state.fileType) setFileType(state.fileType);
     if (state.editorMode) setEditorMode(state.editorMode);
@@ -293,7 +319,7 @@ export default function ExcelWebEditPage() {
     if (state.loadedColorMap) setLoadedColorMap(state.loadedColorMap);
     if (state.lookupVersion) setLookupVersion(state.lookupVersion);
     if (typeof state.pdfPageNumber === 'number') setPdfPageNumber(Math.max(1, state.pdfPageNumber));
-    if (typeof state.previewZoom === 'number') setPreviewZoom(Math.min(3, Math.max(0.5, state.previewZoom)));
+    if (typeof state.previewZoom === 'number') setPreviewZoom(Math.max(0.5, state.previewZoom));
     if (typeof state.previewRotation === 'number') setPreviewRotation(state.previewRotation % 360);
   }, []);
 
@@ -310,14 +336,23 @@ export default function ExcelWebEditPage() {
       pdfPageNumber,
       previewZoom,
       previewRotation,
+      sourceFiles: sourceFiles.map((item) => ({
+        id: item.id,
+        uploadId: item.uploadId || '',
+        name: item.name,
+        type: item.type,
+        size: item.size || 0,
+      })).filter((item) => item.uploadId),
     };
     excelWebPageMemoryState = {
       ...serializable,
       sourceFiles: sourceFiles.map((item) => ({
         id: item.id,
+        uploadId: item.uploadId || '',
         file: item.file,
         name: item.name,
         type: item.type,
+        size: item.size || 0,
       })),
     };
     try {
@@ -351,7 +386,9 @@ export default function ExcelWebEditPage() {
         previewAbortControllerRef.current = null;
       }
       sourceFilesRef.current.forEach((file) => {
-        try { URL.revokeObjectURL(file.url); } catch (error) { void error; }
+        if (file.url?.startsWith('blob:')) {
+          try { URL.revokeObjectURL(file.url); } catch (error) { void error; }
+        }
       });
     };
   }, []);
@@ -360,7 +397,10 @@ export default function ExcelWebEditPage() {
     setSourceFiles((prev) => {
       const target = prev.find((item) => item.id === id);
       if (target) {
-        try { URL.revokeObjectURL(target.url); } catch (error) { void error; }
+        if (target.url?.startsWith('blob:')) {
+          try { URL.revokeObjectURL(target.url); } catch (error) { void error; }
+        }
+        if (target.uploadId) void excelEditBackendClient.deleteTempUploads([target.uploadId]);
       }
       return prev.filter((item) => item.id !== id);
     });
@@ -399,7 +439,7 @@ export default function ExcelWebEditPage() {
   };
 
   const changePreviewZoom = React.useCallback((delta) => {
-    setPreviewZoom((prev) => Math.min(3, Math.max(0.5, Number((prev + delta).toFixed(2)))));
+    setPreviewZoom((prev) => Math.max(0.5, Number((prev + delta).toFixed(2))));
   }, []);
 
   const resetPreviewZoom = React.useCallback(() => {
@@ -421,7 +461,7 @@ export default function ExcelWebEditPage() {
   }, [changePreviewZoom]);
 
   const handleOpenPdfExportModal = React.useCallback(() => {
-    if (!selectedFile?.file || !isPdf) {
+    if ((!selectedFile?.file && !selectedFile?.uploadId) || !isPdf) {
       notifyError('PDF 파일을 먼저 선택하세요.');
       return;
     }
@@ -432,7 +472,7 @@ export default function ExcelWebEditPage() {
   }, [isPdf, notifyError, pdfPageNumber, selectedFile]);
 
   const handleExportPdfPages = React.useCallback(async () => {
-    if (!selectedFile?.file || !isPdf) {
+    if ((!selectedFile?.file && !selectedFile?.uploadId) || !isPdf) {
       notifyError('PDF 파일을 먼저 선택하세요.');
       return;
     }
@@ -450,7 +490,8 @@ export default function ExcelWebEditPage() {
     try {
       setIsBackendBusy(true);
       const result = await excelEditBackendClient.exportPdfPages({
-        file: selectedFile.file,
+        file: selectedFile.uploadId ? null : selectedFile.file,
+        uploadId: selectedFile.uploadId || '',
         pages,
       });
       const blobUrl = URL.createObjectURL(result.blob);
@@ -463,7 +504,8 @@ export default function ExcelWebEditPage() {
       URL.revokeObjectURL(blobUrl);
 
       const remaining = await excelEditBackendClient.removePdfPages({
-        file: selectedFile.file,
+        file: selectedFile.uploadId ? null : selectedFile.file,
+        uploadId: selectedFile.uploadId || '',
         pages,
       });
 
@@ -474,12 +516,17 @@ export default function ExcelWebEditPage() {
         const nextFile = new File([remaining.blob], selectedFile.name, { type: 'application/pdf' });
         setSourceFiles((prev) => prev.map((item) => {
           if (item.id !== selectedFile.id) return item;
-          try { URL.revokeObjectURL(item.url); } catch (error) { void error; }
+          if (item.url?.startsWith('blob:')) {
+            try { URL.revokeObjectURL(item.url); } catch (error) { void error; }
+          }
           return {
             ...item,
-            file: nextFile,
+            file: selectedFile.uploadId ? null : nextFile,
             type: 'application/pdf',
-            url: URL.createObjectURL(nextFile),
+            size: remaining.blob.size,
+            url: selectedFile.uploadId
+              ? `${excelEditBackendClient.getTempUploadContentUrl(selectedFile.uploadId)}?t=${Date.now()}`
+              : URL.createObjectURL(nextFile),
           };
         }));
         notifyInfo(`PDF 페이지 내보내기 완료 (${result.pageCount || 0}p), 원본에서 해당 페이지를 삭제했습니다.`);
@@ -592,8 +639,12 @@ export default function ExcelWebEditPage() {
   };
 
   const resetEditorState = React.useCallback(() => {
+    const tempUploadIds = sourceFilesRef.current.map((file) => file.uploadId).filter(Boolean);
+    if (tempUploadIds.length) void excelEditBackendClient.deleteTempUploads(tempUploadIds);
     sourceFilesRef.current.forEach((file) => {
-      try { URL.revokeObjectURL(file.url); } catch (error) { void error; }
+      if (file.url?.startsWith('blob:')) {
+        try { URL.revokeObjectURL(file.url); } catch (error) { void error; }
+      }
     });
     setIsDeleteConfirmOpen(false);
     setSourceFiles([]);
@@ -623,26 +674,36 @@ export default function ExcelWebEditPage() {
 
     try {
       setIsBackendBusy(true);
+      setBackendStatusMessage('엑셀에 반영하고 스캔본을 최종 보관 폴더로 이동하는 중입니다.');
       const payload = {
         fileType,
         bizNo,
         expectedVersion: lookupVersion,
+        tempFiles: selectedFile?.uploadId ? [{
+          uploadId: selectedFile.uploadId,
+          originalName: selectedFile.name,
+          contentType: selectedFile.type,
+          size: selectedFile.size || 0,
+        }] : [],
         data: {
           ...form,
           creditText: finalCreditText,
         },
       };
-      const files = selectedFile?.file ? [selectedFile.file] : [];
+      const files = selectedFile?.file && !selectedFile?.uploadId ? [selectedFile.file] : [];
       const result = await excelEditBackendClient.saveData({ payload, files });
-      if (fileType === '신용평가') {
-        await Promise.all([
+      setBackendStatusMessage('저장은 완료됐고, 검색용 데이터를 백그라운드로 갱신하는 중입니다.');
+      const refreshPromise = fileType === '신용평가'
+        ? Promise.all([
           excelEditBackendClient.refreshUploadedDataset('전기경영상태'),
           excelEditBackendClient.refreshUploadedDataset('통신경영상태'),
           excelEditBackendClient.refreshUploadedDataset('소방경영상태'),
-        ]);
-      } else {
-        await excelEditBackendClient.refreshUploadedDataset(fileType);
-      }
+        ])
+        : excelEditBackendClient.refreshUploadedDataset(fileType);
+      refreshPromise.catch((error) => {
+        console.warn('[ExcelWebEditPage] dataset refresh failed after save:', error);
+        notifyError('저장은 완료됐지만 업로드 DB 재색인에 실패했습니다. 검색 결과가 바로 갱신되지 않을 수 있습니다.');
+      });
       const archiveCount = Array.isArray(result?.data?.archivedFiles) ? result.data.archivedFiles.length : 0;
       notifyInfo(`확정 및 저장 완료${archiveCount ? ` (파일 보관 ${archiveCount}건)` : ''}`);
       resetEditorState();
@@ -650,6 +711,7 @@ export default function ExcelWebEditPage() {
       notifyError(error?.message || '확정 및 저장에 실패했습니다.');
     } finally {
       setIsBackendBusy(false);
+      setBackendStatusMessage('');
     }
   };
 
@@ -690,22 +752,29 @@ export default function ExcelWebEditPage() {
   }, [form.companyName, form.region, loadedData?.companyName, loadedData?.region]);
 
   const saveArchiveOnlyWithDraft = React.useCallback(async ({ companyName, region }) => {
-    if (!selectedFile?.file) {
+    if (!selectedFile?.file && !selectedFile?.uploadId) {
       notifyError('저장할 파일이 없습니다. 파일을 먼저 업로드하세요.');
       return false;
     }
     try {
       setIsBackendBusy(true);
+      setBackendStatusMessage('스캔본을 최종 보관 폴더로 이동하는 중입니다.');
       const payload = {
         fileType,
         bizNo: String(form.bizNo || '').trim(),
         saveMode: 'archive_only',
         expectedVersion: lookupVersion,
+        tempFiles: selectedFile?.uploadId ? [{
+          uploadId: selectedFile.uploadId,
+          originalName: selectedFile.name,
+          contentType: selectedFile.type,
+          size: selectedFile.size || 0,
+        }] : [],
         data: { companyName, region },
       };
       const result = await excelEditBackendClient.saveData({
         payload,
-        files: [selectedFile.file],
+        files: selectedFile?.file && !selectedFile?.uploadId ? [selectedFile.file] : [],
       });
       const archiveCount = Array.isArray(result?.data?.archivedFiles) ? result.data.archivedFiles.length : 0;
       notifyInfo(`파일만 저장 완료${archiveCount ? ` (${archiveCount}건)` : ''}`);
@@ -716,6 +785,7 @@ export default function ExcelWebEditPage() {
       return false;
     } finally {
       setIsBackendBusy(false);
+      setBackendStatusMessage('');
     }
   }, [fileType, form.bizNo, lookupVersion, notifyError, notifyInfo, resetEditorState, selectedFile]);
 
@@ -775,7 +845,7 @@ export default function ExcelWebEditPage() {
   }, [clearBackendPdfPreview, selectedFileId]);
 
   const renderBackendPdfPage = React.useCallback(async (pageNumber) => {
-    if (!selectedFile?.file) return false;
+    if (!selectedFile?.file && !selectedFile?.uploadId) return false;
     if (previewAbortControllerRef.current) {
       previewAbortControllerRef.current.abort();
     }
@@ -784,7 +854,8 @@ export default function ExcelWebEditPage() {
     try {
       setBackendPdfLoading(true);
       const rendered = await excelEditBackendClient.renderPdfPage({
-        file: selectedFile.file,
+        file: selectedFile.uploadId ? null : selectedFile.file,
+        uploadId: selectedFile.uploadId || '',
         page: pageNumber,
         signal: controller.signal,
       });
@@ -833,7 +904,7 @@ export default function ExcelWebEditPage() {
   }, [notifyError, selectedFile]);
 
   const renderBackendImage = React.useCallback(async () => {
-    if (!selectedFile?.file) return false;
+    if (!selectedFile?.file && !selectedFile?.uploadId) return false;
     if (previewAbortControllerRef.current) {
       previewAbortControllerRef.current.abort();
     }
@@ -842,7 +913,8 @@ export default function ExcelWebEditPage() {
     try {
       setBackendPdfLoading(true);
       const rendered = await excelEditBackendClient.renderImage({
-        file: selectedFile.file,
+        file: selectedFile.uploadId ? null : selectedFile.file,
+        uploadId: selectedFile.uploadId || '',
         signal: controller.signal,
       });
       if (previewAbortControllerRef.current !== controller) return false;
@@ -879,7 +951,7 @@ export default function ExcelWebEditPage() {
       clearBackendPdfPreview();
       setPdfError('');
       setPdfPageNumber(1);
-      if (!selectedFile || !selectedFile.file) return;
+      if (!selectedFile || (!selectedFile.file && !selectedFile.uploadId)) return;
       setPdfLoading(true);
       try {
         if (isPdf) {
@@ -905,7 +977,7 @@ export default function ExcelWebEditPage() {
   }, [clearBackendPdfPreview, isPdf, renderBackendImage, renderBackendPdfPage, selectedFile]);
 
   React.useEffect(() => {
-    if (!isPdf || !selectedFile?.file) return;
+    if (!isPdf || (!selectedFile?.file && !selectedFile?.uploadId)) return;
     if (skipNextPdfPageEffectRef.current) {
       skipNextPdfPageEffectRef.current = false;
       return;
@@ -1151,6 +1223,7 @@ export default function ExcelWebEditPage() {
                   </button>
                   <button type="button" className="maintenance" onClick={() => setIsMaintenanceModalOpen(true)} disabled={isBackendBusy}>갱신기능</button>
                 </div>
+                {backendStatusMessage && <p className="muted">{backendStatusMessage}</p>}
               </>
             )}
 
@@ -1189,6 +1262,7 @@ export default function ExcelWebEditPage() {
                   <button type="button" onClick={handleLoadData} disabled={isBackendBusy}>불러오기</button>
                   <button type="button" className="primary" onClick={handleSave} disabled={isBackendBusy}>확정 및 저장</button>
                 </div>
+                {backendStatusMessage && <p className="muted">{backendStatusMessage}</p>}
               </>
             )}
           </section>

@@ -4,9 +4,13 @@ import json
 import os
 import re
 import hashlib
+import shutil
+import threading
+import time
+import uuid
 from copy import copy
 from contextlib import contextmanager, ExitStack
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Literal
@@ -14,7 +18,7 @@ from typing import Literal
 import fitz
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 from openpyxl.styles import Color, Font, PatternFill
@@ -33,6 +37,7 @@ DEFAULT_STORAGE_ROOT = Path(
     os.getenv("EXCEL_EDIT_STORAGE_ROOT", str(PYTHON_BACKEND_ROOT / "data"))
 ).resolve()
 DEFAULT_ARCHIVE_ROOT = (DEFAULT_STORAGE_ROOT / "archive").resolve()
+TEMP_UPLOAD_TTL_SECONDS = int(os.getenv("EXCEL_EDIT_TEMP_UPLOAD_TTL_SECONDS", "86400"))
 
 RELATIVE_OFFSETS = {
     "회사명": -2,
@@ -200,12 +205,17 @@ class SaveRequest(BaseModel):
     data: dict = Field(default_factory=dict)
     saveMode: Literal["normal", "archive_only"] | str = Field(default="normal")
     expectedVersion: str = Field(default="")
+    tempFiles: list[dict] = Field(default_factory=list)
 
 
 class DeleteRequest(BaseModel):
     fileType: str = Field(default="전기경영상태")
     bizNo: str = Field(default="")
     expectedVersion: str = Field(default="")
+
+
+class TempUploadDeleteRequest(BaseModel):
+    uploadIds: list[str] = Field(default_factory=list)
 
 
 app = FastAPI(title=APP_NAME, version="0.1.0")
@@ -234,6 +244,97 @@ def _safe_filename(name: str) -> str:
     keep = "._-()[]{}"
     cleaned = "".join(ch for ch in name if ch.isalnum() or ch in keep)
     return cleaned or f"uploaded_{_now_stamp()}"
+
+
+def _resolve_temp_upload_root() -> Path:
+    root = os.getenv("EXCEL_EDIT_TEMP_UPLOAD_ROOT", "").strip()
+    return Path(root).resolve() if root else (DEFAULT_STORAGE_ROOT / "temp-uploads").resolve()
+
+
+def _validate_upload_id(upload_id: str) -> str:
+    normalized = str(upload_id or "").strip()
+    if not re.fullmatch(r"[a-f0-9-]{36}", normalized):
+        raise HTTPException(status_code=400, detail="임시 업로드 ID가 올바르지 않습니다.")
+    return normalized
+
+
+def _temp_upload_meta_path(upload_id: str) -> Path:
+    return _resolve_temp_upload_root() / _validate_upload_id(upload_id) / "meta.json"
+
+
+def _read_temp_upload_meta(upload_id: str) -> dict:
+    meta_path = _temp_upload_meta_path(upload_id)
+    if not meta_path.exists():
+        raise HTTPException(status_code=404, detail="임시 업로드 파일을 찾을 수 없습니다.")
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="임시 업로드 메타데이터를 읽을 수 없습니다.") from exc
+
+    file_path = Path(str(meta.get("path") or ""))
+    root = _resolve_temp_upload_root()
+    try:
+        file_path.resolve().relative_to(root)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="임시 업로드 경로가 올바르지 않습니다.") from exc
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="임시 업로드 파일이 삭제되었습니다.")
+    meta["path"] = str(file_path)
+    return meta
+
+
+def _delete_temp_upload(upload_id: str) -> bool:
+    target_dir = _resolve_temp_upload_root() / _validate_upload_id(upload_id)
+    if not target_dir.exists():
+        return False
+    shutil.rmtree(target_dir, ignore_errors=True)
+    return True
+
+
+def _cleanup_expired_temp_uploads() -> int:
+    root = _resolve_temp_upload_root()
+    if not root.exists():
+        return 0
+    threshold = datetime.now(timezone.utc) - timedelta(seconds=max(60, TEMP_UPLOAD_TTL_SECONDS))
+    deleted = 0
+    for child in root.iterdir():
+        if not child.is_dir():
+            continue
+        created_at = None
+        meta_path = child / "meta.json"
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                created_at = datetime.fromisoformat(str(meta.get("createdAt") or ""))
+            except Exception:
+                created_at = None
+        if created_at is None:
+            created_at = datetime.fromtimestamp(child.stat().st_mtime, timezone.utc)
+        if created_at < threshold:
+            shutil.rmtree(child, ignore_errors=True)
+            deleted += 1
+    return deleted
+
+
+@app.on_event("startup")
+def cleanup_temp_uploads_on_startup() -> None:
+    def cleanup_loop() -> None:
+        while True:
+            time.sleep(3600)
+            try:
+                deleted = _cleanup_expired_temp_uploads()
+                if deleted:
+                    print(f"[excel-edit] cleaned expired temp uploads: {deleted}")
+            except Exception as exc:
+                print(f"[excel-edit] temp upload cleanup failed: {exc}")
+
+    try:
+        deleted = _cleanup_expired_temp_uploads()
+        if deleted:
+            print(f"[excel-edit] cleaned expired temp uploads: {deleted}")
+    except Exception as exc:
+        print(f"[excel-edit] temp upload cleanup failed: {exc}")
+    threading.Thread(target=cleanup_loop, daemon=True).start()
 
 
 def _normalize_biz_no(raw: str) -> str:
@@ -893,11 +994,12 @@ def _build_lookup_payload(raw: dict, db_type: str, excel_path: str, raw_cells: d
     }
 
 
-def _update_management_data(excel_path: str, biz_no: str, form_data: dict, db_type: str) -> list[str]:
-    position = _find_company_position(excel_path, biz_no)
-    if not position:
-        raise HTTPException(status_code=404, detail="해당 사업자번호의 업체를 찾을 수 없습니다.")
-
+def _update_management_data_at_position(
+    excel_path: str,
+    form_data: dict,
+    db_type: str,
+    position: tuple[str, int, int],
+) -> dict:
     sheet_name, target_row, target_col = position
     workbook = load_workbook(filename=excel_path)
     updated_labels: list[str] = []
@@ -937,9 +1039,23 @@ def _update_management_data(excel_path: str, biz_no: str, form_data: dict, db_ty
                     cell.font = copy(HIGHLIGHT_FONT)
 
         workbook.save(excel_path)
-        return updated_labels
+        company_cell = _resolve_merged_cell(sheet, target_row + RELATIVE_OFFSETS["회사명"], target_col)
+        region_cell = _resolve_merged_cell(sheet, target_row + RELATIVE_OFFSETS["지역"], target_col)
+        return {
+            "updatedLabels": updated_labels,
+            "companyName": str(company_cell.value or ""),
+            "region": str(region_cell.value or sheet_name),
+        }
     finally:
         workbook.close()
+
+
+def _update_management_data(excel_path: str, biz_no: str, form_data: dict, db_type: str) -> list[str]:
+    position = _find_company_position(excel_path, biz_no)
+    if not position:
+        raise HTTPException(status_code=404, detail="해당 사업자번호의 업체를 찾을 수 없습니다.")
+
+    return _update_management_data_at_position(excel_path, form_data, db_type, position)["updatedLabels"]
 
 
 def _delete_management_company(excel_path: str, biz_no: str, db_type: str) -> dict:
@@ -1059,6 +1175,58 @@ def _archive_uploaded_files(files: list[UploadFile], company_name: str, file_typ
     return archived
 
 
+def _archive_temp_uploads(temp_files: list[dict], company_name: str, file_type: str, region: str) -> list[dict]:
+    archived: list[dict] = []
+    normalized_region = _normalize_region_folder_name(region)
+    region_safe = re.sub(r'[<>:"/\\|?*]+', "", normalized_region).strip() or "기타"
+    company_safe = re.sub(r'[<>:"/\\|?*]+', "", str(company_name or "업체")).strip() or "업체"
+    company_safe = company_safe.replace("㈜", "(주)")
+
+    target_dir = _resolve_archive_root() / region_safe
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    for idx, item in enumerate(temp_files):
+        upload_id = str((item or {}).get("uploadId") or "").strip()
+        if not upload_id:
+            continue
+        meta = _read_temp_upload_meta(upload_id)
+        source_path = Path(str(meta.get("path") or ""))
+        original_name = str(meta.get("originalName") or meta.get("savedName") or "")
+        ext = Path(original_name).suffix or Path(str(meta.get("savedName") or "")).suffix
+        base_name = f"{company_safe}_{file_type}"
+        file_name = f"{base_name}{ext}" if idx == 0 else f"{base_name}_{idx + 1}{ext}"
+        target_path = target_dir / file_name
+
+        if target_path.exists():
+            target_path.unlink()
+
+        shutil.move(str(source_path), str(target_path))
+        _delete_temp_upload(upload_id)
+        archived.append({
+            "uploadId": upload_id,
+            "originalName": original_name,
+            "savedName": file_name,
+            "path": str(target_path),
+            "size": target_path.stat().st_size if target_path.exists() else int(meta.get("size") or 0),
+        })
+
+    return archived
+
+
+async def _read_request_file_or_temp(file: UploadFile | None, upload_id: str = "") -> tuple[bytes, dict]:
+    if upload_id:
+        meta = _read_temp_upload_meta(upload_id)
+        content = Path(str(meta["path"])).read_bytes()
+        return content, meta
+    if file:
+        content = await file.read()
+        return content, {
+            "originalName": file.filename or "",
+            "contentType": file.content_type or "",
+        }
+    raise HTTPException(status_code=400, detail="파일 또는 임시 업로드 ID가 필요합니다.")
+
+
 def _resolve_target_excel_paths_for_job(payload: JobRequest) -> list[tuple[str, str]]:
     db_paths = _resolve_db_paths()
     if payload.excelPath and Path(payload.excelPath).exists():
@@ -1166,29 +1334,94 @@ async def upload_excel_edit_files(
     if not files:
         raise HTTPException(status_code=400, detail="업로드할 파일이 없습니다.")
 
-    # 미리보기 업로드는 서버 디스크에 저장하지 않고 메모리로만 검증한다.
+    _cleanup_expired_temp_uploads()
+    temp_root = _resolve_temp_upload_root()
+    temp_root.mkdir(parents=True, exist_ok=True)
     previews = []
     for item in files:
         content = await item.read()
         safe_name = _safe_filename(item.filename or "unknown")
+        upload_id = str(uuid.uuid4())
+        upload_dir = temp_root / upload_id
+        upload_dir.mkdir(parents=True, exist_ok=False)
+        file_path = upload_dir / safe_name
+        file_path.write_bytes(content)
+        created_at = datetime.now(timezone.utc).isoformat()
+        meta = {
+            "uploadId": upload_id,
+            "originalName": item.filename or safe_name,
+            "savedName": safe_name,
+            "path": str(file_path),
+            "size": len(content),
+            "contentType": item.content_type or "",
+            "fileType": fileType,
+            "createdAt": created_at,
+        }
+        (upload_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
         previews.append(
             {
-                "originalName": item.filename,
+                "uploadId": upload_id,
+                "originalName": item.filename or safe_name,
                 "savedName": safe_name,
                 "size": len(content),
                 "contentType": item.content_type or "",
-                "stored": False,
+                "stored": True,
+                "createdAt": created_at,
             }
         )
 
     return ApiResponse(
         success=True,
-        message="미리보기 파일 업로드를 처리했습니다. (서버 저장 없음)",
+        message="임시 업로드가 완료되었습니다.",
         data={
             "fileType": fileType,
-            "stored": False,
+            "stored": True,
             "files": previews,
+            "ttlSeconds": TEMP_UPLOAD_TTL_SECONDS,
         },
+    )
+
+
+@app.get("/excel-edit/temp-upload/{upload_id}", response_model=ApiResponse)
+def get_temp_upload(upload_id: str) -> ApiResponse:
+    meta = _read_temp_upload_meta(upload_id)
+    return ApiResponse(
+        success=True,
+        message="임시 업로드 조회 완료",
+        data={
+            "uploadId": meta.get("uploadId"),
+            "originalName": meta.get("originalName"),
+            "savedName": meta.get("savedName"),
+            "size": meta.get("size"),
+            "contentType": meta.get("contentType"),
+            "fileType": meta.get("fileType"),
+            "createdAt": meta.get("createdAt"),
+            "exists": True,
+        },
+    )
+
+
+@app.get("/excel-edit/temp-upload/{upload_id}/content")
+def get_temp_upload_content(upload_id: str) -> FileResponse:
+    meta = _read_temp_upload_meta(upload_id)
+    path = Path(str(meta["path"]))
+    return FileResponse(
+        path,
+        media_type=str(meta.get("contentType") or "application/octet-stream"),
+        filename=str(meta.get("originalName") or meta.get("savedName") or path.name),
+    )
+
+
+@app.post("/excel-edit/temp-uploads/delete", response_model=ApiResponse)
+def delete_temp_uploads(payload: TempUploadDeleteRequest) -> ApiResponse:
+    deleted = []
+    for upload_id in payload.uploadIds:
+        if _delete_temp_upload(upload_id):
+            deleted.append(upload_id)
+    return ApiResponse(
+        success=True,
+        message="임시 업로드 삭제 완료",
+        data={"deleted": deleted},
     )
 
 
@@ -1256,9 +1489,11 @@ async def save_excel_edit_data(
     updated: dict = {}
     company_name = str(request.data.get("companyName") or "")
     region_name = str(request.data.get("region") or "")
+    temp_files = [item for item in request.tempFiles if isinstance(item, dict) and item.get("uploadId")]
+    has_archive_files = bool(files) or bool(temp_files)
 
     if save_mode == "archive_only":
-        if not files:
+        if not has_archive_files:
             raise HTTPException(status_code=400, detail="파일만 저장 모드는 업로드 파일이 필요합니다.")
 
         if (not company_name or not region_name) and biz_no:
@@ -1285,7 +1520,11 @@ async def save_excel_edit_data(
             with _exclusive_excel_locks(target_paths):
                 _validate_expected_version_for_save(request, db_paths, expected_version)
 
-        archived_files = _archive_uploaded_files(files, company_name, request.fileType, region_name)
+        archived_files = []
+        if temp_files:
+            archived_files.extend(_archive_temp_uploads(temp_files, company_name, request.fileType, region_name))
+        if files:
+            archived_files.extend(_archive_uploaded_files(files, company_name, request.fileType, region_name))
         return ApiResponse(
             success=True,
             message="파일 보관이 완료되었습니다.",
@@ -1333,7 +1572,8 @@ async def save_excel_edit_data(
             _validate_expected_version_for_save(request, db_paths, expected_version)
             position = _find_company_position(excel_path, biz_no)
             if position:
-                updated_labels = _update_management_data(excel_path, biz_no, request.data, db_key)
+                update_result = _update_management_data_at_position(excel_path, request.data, db_key, position)
+                updated_labels = update_result["updatedLabels"]
                 updated["management"] = {
                     "dbType": db_key,
                     "excelPath": excel_path,
@@ -1341,10 +1581,8 @@ async def save_excel_edit_data(
                     "updatedLabels": updated_labels,
                 }
                 if not company_name or not region_name:
-                    sheet_name, row, col = position
-                    raw = _extract_company_data(excel_path, sheet_name, row, col)
-                    company_name = company_name or str(raw.get("상호") or "")
-                    region_name = region_name or str(raw.get("지역") or "")
+                    company_name = company_name or str(update_result.get("companyName") or "")
+                    region_name = region_name or str(update_result.get("region") or "")
             else:
                 added = _add_new_company_data(excel_path, request.data, db_key)
                 company_name = company_name or str(added.get("companyName") or "")
@@ -1358,7 +1596,11 @@ async def save_excel_edit_data(
                     "companyName": company_name,
                 }
 
-    archived_files = _archive_uploaded_files(files, company_name, request.fileType, region_name) if files else []
+    archived_files = []
+    if temp_files:
+        archived_files.extend(_archive_temp_uploads(temp_files, company_name, request.fileType, region_name))
+    if files:
+        archived_files.extend(_archive_uploaded_files(files, company_name, request.fileType, region_name))
 
     return ApiResponse(
         success=True,
@@ -1461,14 +1703,12 @@ def update_credit_expiry(payload: JobRequest) -> ApiResponse:
 
 @app.post("/excel-edit/render-pdf-page")
 async def render_pdf_page(
-    file: UploadFile = File(...),
+    file: UploadFile | None = File(default=None),
+    uploadId: str = Form(default=""),
     page: int = Form(default=1),
     dpi: int = Form(default=160),
 ) -> Response:
-    if not file:
-        raise HTTPException(status_code=400, detail="PDF 파일이 필요합니다.")
-
-    content = await file.read()
+    content, _ = await _read_request_file_or_temp(file, uploadId)
     if not content:
         raise HTTPException(status_code=400, detail="빈 파일입니다.")
 
@@ -1503,11 +1743,11 @@ async def render_pdf_page(
 
 
 @app.post("/excel-edit/render-image")
-async def render_image(file: UploadFile = File(...)) -> Response:
-    if not file:
-        raise HTTPException(status_code=400, detail="이미지 파일이 필요합니다.")
-
-    content = await file.read()
+async def render_image(
+    file: UploadFile | None = File(default=None),
+    uploadId: str = Form(default=""),
+) -> Response:
+    content, _ = await _read_request_file_or_temp(file, uploadId)
     if not content:
         raise HTTPException(status_code=400, detail="빈 파일입니다.")
 
@@ -1528,13 +1768,11 @@ async def render_image(file: UploadFile = File(...)) -> Response:
 
 @app.post("/excel-edit/export-pdf-pages")
 async def export_pdf_pages(
-    file: UploadFile = File(...),
+    file: UploadFile | None = File(default=None),
+    uploadId: str = Form(default=""),
     pages: str = Form(default=""),
 ) -> Response:
-    if not file:
-        raise HTTPException(status_code=400, detail="PDF 파일이 필요합니다.")
-
-    content = await file.read()
+    content, _ = await _read_request_file_or_temp(file, uploadId)
     if not content:
         raise HTTPException(status_code=400, detail="빈 파일입니다.")
 
@@ -1569,13 +1807,11 @@ async def export_pdf_pages(
 
 @app.post("/excel-edit/remove-pdf-pages")
 async def remove_pdf_pages(
-    file: UploadFile = File(...),
+    file: UploadFile | None = File(default=None),
+    uploadId: str = Form(default=""),
     pages: str = Form(default=""),
 ) -> Response:
-    if not file:
-        raise HTTPException(status_code=400, detail="PDF 파일이 필요합니다.")
-
-    content = await file.read()
+    content, meta = await _read_request_file_or_temp(file, uploadId)
     if not content:
         raise HTTPException(status_code=400, detail="빈 파일입니다.")
 
@@ -1588,6 +1824,8 @@ async def remove_pdf_pages(
             selected_pages = set(_parse_pdf_page_selection(pages, page_count))
             remain_pages = [idx for idx in range(page_count) if idx not in selected_pages]
             if not remain_pages:
+                if uploadId:
+                    _delete_temp_upload(uploadId)
                 return Response(status_code=204, headers={"x-pdf-page-count": "0"})
 
             target = fitz.open()
@@ -1597,6 +1835,12 @@ async def remove_pdf_pages(
                 remain_bytes = target.tobytes(garbage=3, deflate=True)
             finally:
                 target.close()
+            if uploadId:
+                temp_path = Path(str(meta["path"]))
+                temp_path.write_bytes(remain_bytes)
+                meta["size"] = len(remain_bytes)
+                meta["updatedAt"] = datetime.now(timezone.utc).isoformat()
+                (temp_path.parent / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     except HTTPException:
         raise
     except Exception as exc:
