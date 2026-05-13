@@ -1954,7 +1954,7 @@ body {
 .mail-recipients-header,
 .mail-recipients-row {
   display: grid;
-  grid-template-columns: 48px 1.2fr 1fr 1.2fr 1fr minmax(0, 1fr) 90px 90px;
+  grid-template-columns: 48px 1.2fr 2fr 1fr minmax(0, 1fr) 90px 90px;
   align-items: center;
   padding: 10px 12px;
   gap: 12px;
@@ -2020,6 +2020,7 @@ body {
   display: flex;
   gap: 6px;
   align-items: center;
+  min-width: 0;
 }
 
 .mail-contact-picker {

@@ -36,6 +36,39 @@ const formatEmailAddress = (name, email) => {
   const normalizedName = trimValue(name);
   return normalizedName ? `${normalizedName} <${normalizedEmail}>` : normalizedEmail;
 };
+const sanitizeRecipientContact = (item) => {
+  if (!item || typeof item !== 'object') return null;
+  const contactName = trimValue(item.contactName || item.name || '');
+  const email = trimValue(item.email || '');
+  if (!contactName && !email) return null;
+  return { contactName, email };
+};
+const sanitizeRecipientContacts = (list = [], fallback = null) => {
+  const source = Array.isArray(list) ? list : [];
+  const seen = new Set();
+  const normalized = source
+    .map(sanitizeRecipientContact)
+    .filter(Boolean)
+    .filter((item) => {
+      const key = `${item.contactName.toLowerCase()}|${item.email.toLowerCase()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  if (normalized.length > 0) return normalized;
+  const fallbackContact = sanitizeRecipientContact(fallback);
+  return fallbackContact ? [fallbackContact] : [];
+};
+const deriveLegacyRecipientFields = (contacts = []) => {
+  const primary = Array.isArray(contacts) && contacts.length > 0 ? contacts[0] : null;
+  return {
+    contactName: primary?.contactName || '',
+    email: primary?.email || '',
+  };
+};
+const mergeRecipientContacts = (current = [], additions = []) => (
+  sanitizeRecipientContacts([...(Array.isArray(current) ? current : []), ...(Array.isArray(additions) ? additions : [])])
+);
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const buildAttachmentDescriptor = (raw) => {
   if (!raw) return null;
@@ -107,11 +140,17 @@ const sanitizeRecipientDraftList = (list = []) => {
   return list.map((item, index) => {
     if (!item || typeof item !== 'object') return null;
     const id = Number(item.id);
+    const recipientContacts = sanitizeRecipientContacts(item.recipientContacts, {
+      contactName: item.contactName || '',
+      email: item.email || '',
+    });
+    const legacyFields = deriveLegacyRecipientFields(recipientContacts);
     return {
       id: Number.isFinite(id) && id > 0 ? id : index + 1,
       vendorName: item.vendorName || '',
-      contactName: item.contactName || '',
-      email: item.email || '',
+      contactName: legacyFields.contactName,
+      email: legacyFields.email,
+      recipientContacts,
       tenderAmount: item.tenderAmount || '',
       workerName: item.workerName || '',
       attachments: serializeAttachmentListForPersist(item.attachments),
@@ -123,11 +162,17 @@ const serializeRecipientsForPersist = (recipients = []) => {
   if (!Array.isArray(recipients) || !recipients.length) return [];
   return recipients.map((item, index) => {
     const id = Number(item.id);
+    const recipientContacts = sanitizeRecipientContacts(item.recipientContacts, {
+      contactName: item.contactName || '',
+      email: item.email || '',
+    });
+    const legacyFields = deriveLegacyRecipientFields(recipientContacts);
     return {
       id: Number.isFinite(id) && id > 0 ? id : index + 1,
       vendorName: item.vendorName || '',
-      contactName: item.contactName || '',
-      email: item.email || '',
+      contactName: legacyFields.contactName,
+      email: legacyFields.email,
+      recipientContacts,
       tenderAmount: item.tenderAmount || '',
       workerName: item.workerName || '',
       attachments: serializeAttachmentListForPersist(item.attachments),
@@ -338,6 +383,7 @@ function MailAutomationPageInner() {
   });
   const [addressBookOpen, setAddressBookOpen] = React.useState(false);
   const [addressBookTargetId, setAddressBookTargetId] = React.useState(null);
+  const [selectedAddressBookIds, setSelectedAddressBookIds] = React.useState([]);
   const [sending, setSending] = React.useState(false);
   const [includeGlobalRecipients, setIncludeGlobalRecipients] = React.useState(() => Boolean(initialDraft.includeGlobalRecipients));
   const [previewOpen, setPreviewOpen] = React.useState(false);
@@ -398,19 +444,13 @@ function MailAutomationPageInner() {
     if (!normalized) return null;
     const candidates = contactIndex.get(normalized);
     if (!candidates || candidates.length === 0) return null;
-    if (candidates.length === 1) {
-      const best = candidates[0];
-      return {
-        contactName: best.contactName || '',
-        email: best.email || '',
-        note: null,
-      };
-    }
-    const summary = candidates.map((c) => c.contactName || c.email || '담당자').join(', ');
+    const recipientContacts = sanitizeRecipientContacts(candidates);
+    const legacyFields = deriveLegacyRecipientFields(recipientContacts);
     return {
-      contactName: `[중복 확인] ${summary}`,
-      email: '',
-      note: '중복 담당자 확인 필요',
+      contactName: legacyFields.contactName,
+      email: legacyFields.email,
+      recipientContacts,
+      note: recipientContacts.length > 1 ? '복수 담당자 자동 매칭' : null,
     };
   }, [contactIndex]);
 
@@ -692,6 +732,7 @@ function MailAutomationPageInner() {
               vendorName: vendor,
               contactName: resolvedContact?.contactName || '',
               email: resolvedContact?.email || '',
+              recipientContacts: resolvedContact?.recipientContacts || [],
               tenderAmount: formattedAmount,
               workerName: effectiveWorker,
               attachments: [],
@@ -721,6 +762,7 @@ function MailAutomationPageInner() {
                 workerName: item.workerName || workerName || '',
                 contactName: item.contactName || resolvedContact?.contactName || '',
                 email: item.email || resolvedContact?.email || '',
+                recipientContacts: item.recipientContacts?.length ? item.recipientContacts : (resolvedContact?.recipientContacts || []),
               };
             }
             if (workerName) {
@@ -765,11 +807,11 @@ function MailAutomationPageInner() {
         if (workerMatch) updated.workerName = workerMatch;
         const resolvedContact = resolveContactForVendor(value);
         if (resolvedContact) {
-          if (!updated.contactName && resolvedContact.contactName) {
-            updated.contactName = resolvedContact.contactName;
-          }
-          if (!updated.email && resolvedContact.email) {
-            updated.email = resolvedContact.email;
+          if ((!Array.isArray(updated.recipientContacts) || updated.recipientContacts.length === 0) && resolvedContact.recipientContacts?.length) {
+            updated.recipientContacts = resolvedContact.recipientContacts;
+            const legacyFields = deriveLegacyRecipientFields(updated.recipientContacts);
+            updated.contactName = legacyFields.contactName;
+            updated.email = legacyFields.email;
           }
         }
         return updated;
@@ -802,12 +844,14 @@ function MailAutomationPageInner() {
 
   const handleOpenAddressBook = React.useCallback((targetId = null) => {
     setAddressBookTargetId(targetId);
+    setSelectedAddressBookIds([]);
     setAddressBookOpen(true);
   }, []);
 
   const handleCloseAddressBook = React.useCallback(() => {
     setAddressBookOpen(false);
     setAddressBookTargetId(null);
+    setSelectedAddressBookIds([]);
     setAddressBookQuery('');
   }, []);
 
@@ -910,7 +954,7 @@ function MailAutomationPageInner() {
   const handleUseContact = (contact) => {
     if (!contact.email && !contact.vendorName) return;
     setRecipients((prev) => {
-      if (prev.some((item) => item.email && contact.email && item.email === contact.email)) {
+      if (prev.some((item) => sanitizeRecipientContacts(item.recipientContacts, item).some((entry) => entry.email && contact.email && entry.email === contact.email))) {
       showStatusMessage('이미 동일한 이메일이 수신자 목록에 있습니다.', { type: 'warning' });
       return prev;
       }
@@ -923,6 +967,7 @@ function MailAutomationPageInner() {
       vendorName: contact.vendorName || '',
       contactName: contact.contactName || '',
       email: contact.email || '',
+      recipientContacts: sanitizeRecipientContacts([contact]),
       tenderAmount,
       workerName: '',
       attachments: [],
@@ -938,11 +983,14 @@ function MailAutomationPageInner() {
     if (!recipientId || !contact) return;
     setRecipients((prev) => prev.map((item) => {
       if (item.id !== recipientId) return item;
+      const recipientContacts = mergeRecipientContacts(item.recipientContacts, [contact]);
+      const legacyFields = deriveLegacyRecipientFields(recipientContacts);
       const updated = {
         ...item,
         vendorName: item.vendorName || contact.vendorName || '',
-        contactName: contact.contactName || contact.vendorName || item.contactName || '',
-        email: contact.email || item.email || '',
+        contactName: legacyFields.contactName,
+        email: legacyFields.email,
+        recipientContacts,
       };
       const normalizedVendor = normalizeVendorName(updated.vendorName);
       if (!item.tenderAmount && normalizedVendor && vendorAmounts[normalizedVendor]) {
@@ -953,6 +1001,54 @@ function MailAutomationPageInner() {
     showStatusMessage(`주소록 정보를 적용했습니다: ${contact.vendorName || contact.contactName || ''}`);
     handleCloseAddressBook();
   }, [vendorAmounts, handleCloseAddressBook, showStatusMessage]);
+
+  const handleToggleAddressBookSelection = React.useCallback((contactId) => {
+    setSelectedAddressBookIds((prev) => (
+      prev.includes(contactId)
+        ? prev.filter((id) => id !== contactId)
+        : [...prev, contactId]
+    ));
+  }, []);
+
+  const handleApplySelectedContactsToRecipient = React.useCallback(() => {
+    if (!addressBookTargetId || selectedAddressBookIds.length === 0) {
+      showStatusMessage('추가할 담당자를 선택해 주세요.', { type: 'warning' });
+      return;
+    }
+    const selectedContacts = contacts.filter((contact) => selectedAddressBookIds.includes(contact.id));
+    if (!selectedContacts.length) {
+      showStatusMessage('선택한 주소록 항목을 찾을 수 없습니다.', { type: 'warning' });
+      return;
+    }
+    setRecipients((prev) => prev.map((item) => {
+      if (item.id !== addressBookTargetId) return item;
+      const recipientContacts = mergeRecipientContacts(item.recipientContacts, selectedContacts);
+      const legacyFields = deriveLegacyRecipientFields(recipientContacts);
+      return {
+        ...item,
+        contactName: legacyFields.contactName,
+        email: legacyFields.email,
+        recipientContacts,
+      };
+    }));
+    showStatusMessage(`담당자 ${selectedContacts.length}명을 추가했습니다.`);
+    handleCloseAddressBook();
+  }, [addressBookTargetId, contacts, selectedAddressBookIds, handleCloseAddressBook, showStatusMessage]);
+
+  const handleRemoveRecipientContact = React.useCallback((recipientId, indexToRemove) => {
+    setRecipients((prev) => prev.map((item) => {
+      if (item.id !== recipientId) return item;
+      const currentContacts = sanitizeRecipientContacts(item.recipientContacts, item);
+      const recipientContacts = currentContacts.filter((_, index) => index !== indexToRemove);
+      const legacyFields = deriveLegacyRecipientFields(recipientContacts);
+      return {
+        ...item,
+        contactName: legacyFields.contactName,
+        email: legacyFields.email,
+        recipientContacts,
+      };
+    }));
+  }, []);
 
   const handleRemoveRecipient = (id) => {
     setRecipients((prev) => {
@@ -969,6 +1065,7 @@ function MailAutomationPageInner() {
       vendorName: '',
       contactName: '',
       email: '',
+      recipientContacts: [],
       tenderAmount: '',
       workerName: '',
       attachments: [],
@@ -1148,15 +1245,21 @@ function MailAutomationPageInner() {
   ].join('\n')), []);
 
   const buildRecipientHeader = React.useCallback((recipient) => {
-    const primaryEmail = trimValue(recipient.email);
-    const primaryName = trimValue(recipient.contactName) || trimValue(recipient.vendorName);
-    const primaryAddress = formatEmailAddress(primaryName, primaryEmail);
     const dedup = new Set();
     const addresses = [];
-    if (primaryAddress && primaryEmail) {
-      addresses.push(primaryAddress);
-      dedup.add(primaryEmail.toLowerCase());
-    }
+    const primaryContacts = sanitizeRecipientContacts(recipient.recipientContacts, {
+      contactName: recipient.contactName || trimValue(recipient.vendorName),
+      email: recipient.email || '',
+    });
+    primaryContacts.forEach((contact) => {
+      const normalizedEmail = trimValue(contact.email);
+      const address = formatEmailAddress(contact.contactName || recipient.vendorName, normalizedEmail);
+      if (!normalizedEmail || !address) return;
+      const key = normalizedEmail.toLowerCase();
+      if (dedup.has(key)) return;
+      dedup.add(key);
+      addresses.push(address);
+    });
     if (includeGlobalRecipients && globalRecipientAddresses.length) {
       globalRecipientAddresses.forEach((entry) => {
         if (dedup.has(entry.email)) return;
@@ -1170,7 +1273,11 @@ function MailAutomationPageInner() {
   const handleSendAll = React.useCallback(async () => {
     if (sending) return;
     if (!ensureOwnerSelected()) return;
-    const ready = recipients.filter((item) => trimValue(item.email) && Array.isArray(item.attachments) && item.attachments.length > 0);
+    const ready = recipients.filter((item) => (
+      sanitizeRecipientContacts(item.recipientContacts, item).some((contact) => trimValue(contact.email))
+      && Array.isArray(item.attachments)
+      && item.attachments.length > 0
+    ));
     if (!ready.length) {
       notify({ type: 'warning', message: '발송 대상이 없습니다. 이메일과 첨부를 확인해 주세요.' });
       return;
@@ -1552,14 +1659,16 @@ function MailAutomationPageInner() {
                   <div className="mail-recipients-header">
                     <span>#</span>
                     <span>업체명</span>
-                    <span>담당자</span>
-                    <span>이메일</span>
+                    <span>수신 담당자</span>
                     <span>투찰금액</span>
                     <span>첨부</span>
                     <span>상태</span>
                     <span>작업</span>
                   </div>
-                  {recipients.length ? recipients.map((recipient) => (
+                  {recipients.length ? recipients.map((recipient) => {
+                    const recipientContacts = sanitizeRecipientContacts(recipient.recipientContacts, recipient);
+                    const deliverableCount = recipientContacts.filter((contact) => trimValue(contact.email)).length;
+                    return (
                     <div key={recipient.id} className="mail-recipients-row">
                       <span>{recipient.id}</span>
                       <span>
@@ -1570,26 +1679,44 @@ function MailAutomationPageInner() {
                       />
                     </span>
                     <span className="mail-recipient-contact">
-                      <input
-                        value={recipient.contactName}
-                        onChange={(event) => handleRecipientFieldChange(recipient.id, 'contactName', event.target.value)}
-                        placeholder="담당자"
-                      />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {recipientContacts.length ? recipientContacts.map((contact, index) => (
+                            <span
+                              key={`${recipient.id}-${contact.email || contact.contactName || index}`}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '4px 8px',
+                                borderRadius: '6px',
+                                background: '#e2e8f0',
+                                color: '#0f172a',
+                                fontSize: '12px',
+                              }}
+                            >
+                              <span>{contact.contactName || '담당자'}{contact.email ? ` <${contact.email}>` : ''}</span>
+                              <button
+                                type="button"
+                                className="btn-sm btn-muted"
+                                style={{ padding: '0 4px', minWidth: 'auto' }}
+                                onClick={() => handleRemoveRecipientContact(recipient.id, index)}
+                              >
+                                x
+                              </button>
+                            </span>
+                          )) : <span className="mail-recipient-attachment-empty">수신자 없음</span>}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#64748b' }}>{deliverableCount}명 발송 대상</div>
+                      </div>
                       <button
                         type="button"
                         className="mail-contact-picker"
                         onClick={() => handleOpenAddressBook(recipient.id)}
-                        title="주소록에서 불러오기"
+                        title="주소록에서 담당자 추가"
                       >
                         🔍
                       </button>
-                    </span>
-                    <span>
-                      <input
-                        value={recipient.email}
-                        onChange={(event) => handleRecipientFieldChange(recipient.id, 'email', event.target.value)}
-                        placeholder="example@company.com"
-                      />
                     </span>
                     <span>
                       <input
@@ -1625,7 +1752,7 @@ function MailAutomationPageInner() {
                       <button type="button" className="btn-sm btn-muted" onClick={() => handleRemoveRecipient(recipient.id)}>삭제</button>
                     </span>
                   </div>
-                )) : (
+                ); }) : (
                   <div className="mail-recipients-empty">업체가 없습니다. 엑셀을 불러오거나 직접 추가하세요.</div>
                 )}
               </div>
@@ -1709,7 +1836,20 @@ function MailAutomationPageInner() {
                     .some((value) => (value || '').toLowerCase().includes(keyword));
                 })
                 .map((contact) => (
-                <div key={contact.id} className="mail-addressbook-modal__row">
+                <div
+                  key={contact.id}
+                  className="mail-addressbook-modal__row"
+                  style={addressBookTargetId ? { gridTemplateColumns: '36px 1.4fr 1fr 1.2fr 130px' } : undefined}
+                >
+                  {addressBookTargetId ? (
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedAddressBookIds.includes(contact.id)}
+                        onChange={() => handleToggleAddressBookSelection(contact.id)}
+                      />
+                    </label>
+                  ) : null}
                   <input
                     value={contact.vendorName}
                     onChange={(event) => handleContactFieldChange(contact.id, 'vendorName', event.target.value)}
@@ -1737,7 +1877,7 @@ function MailAutomationPageInner() {
                         }
                       }}
                     >
-                      {addressBookTargetId ? '적용' : '추가'}
+                      {addressBookTargetId ? '1명 추가' : '추가'}
                     </button>
                     <button type="button" className="btn-sm btn-muted" onClick={() => handleRemoveContact(contact.id)}>삭제</button>
                   </div>
@@ -1746,6 +1886,14 @@ function MailAutomationPageInner() {
                 <div className="mail-addressbook-modal__empty">주소록이 비어 있습니다. 주소를 추가하거나 가져오세요.</div>
               )}
             </div>
+            {addressBookTargetId ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px' }}>
+                <div style={{ fontSize: '12px', color: '#64748b' }}>선택 {selectedAddressBookIds.length}건</div>
+                <button type="button" className="btn-sm btn-primary" onClick={handleApplySelectedContactsToRecipient}>
+                  선택한 담당자 추가
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       )}
