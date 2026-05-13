@@ -105,6 +105,17 @@ function formatAmountPreviewValue(value = '') {
   return (Number(digits) * 1000).toLocaleString('ko-KR');
 }
 
+function buildCreditLookupPreview(loadedData) {
+  if (!loadedData) return '';
+  const companyName = String(loadedData.companyName || '').trim();
+  const bizNo = String(loadedData.bizNo || '').trim();
+  const creditText = String(loadedData.creditText || '').trim();
+  const header = companyName
+    ? `${companyName}${bizNo ? ` [${bizNo}]` : ''}`
+    : (bizNo ? `[${bizNo}]` : '');
+  return [header, creditText].filter(Boolean).join('\n');
+}
+
 export default function ExcelWebEditPage() {
   const { notify } = useFeedback();
   const [activeMenu, setActiveMenu] = React.useState('excel-web-edit');
@@ -164,6 +175,7 @@ export default function ExcelWebEditPage() {
   const isPdf = selectedFile?.type?.includes('pdf') || selectedFile?.name?.toLowerCase().endsWith('.pdf');
   const effectivePdfPageCount = isPdf ? backendPdfPageCount : 1;
   const finalCreditText = buildCreditText(form);
+  const creditLookupPreview = React.useMemo(() => buildCreditLookupPreview(loadedData), [loadedData]);
 
   const mergedAfterData = React.useMemo(() => {
     if (!loadedData) return null;
@@ -1108,39 +1120,41 @@ export default function ExcelWebEditPage() {
             </div>
           </section>
 
-          <section className="excel-web-v2-pane center">
-            <div className="excel-web-v2-pane-head">
-              <h2>4. 변경 전/후 미리보기</h2>
-            </div>
-            <div className="excel-web-v2-compare">
-              <div>
-                <h3>변경 전 (엑셀 원본)</h3>
-                <table>
-                  <tbody>
-                    {FIELD_LABELS.map(([key, label]) => (
-                      <tr key={`before-${key}`}>
-                        <th>{label}</th>
-                        <td style={loadedColorMap?.[key] ? { backgroundColor: loadedColorMap[key] } : undefined}>{loadedData?.[key] || ''}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {editorMode === EDITOR_MODE.MANAGEMENT && (
+            <section className="excel-web-v2-pane center">
+              <div className="excel-web-v2-pane-head">
+                <h2>4. 변경 전/후 미리보기</h2>
               </div>
-              <div>
-                <h3>변경 후 (사용자 입력)</h3>
-                <table>
-                  <tbody>
-                    {FIELD_LABELS.map(([key, label]) => (
-                      <tr key={`after-${key}`}>
-                        <th>{label}</th>
-                        <td>{mergedAfterData?.[key] || ''}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="excel-web-v2-compare">
+                <div>
+                  <h3>변경 전 (엑셀 원본)</h3>
+                  <table>
+                    <tbody>
+                      {FIELD_LABELS.map(([key, label]) => (
+                        <tr key={`before-${key}`}>
+                          <th>{label}</th>
+                          <td style={loadedColorMap?.[key] ? { backgroundColor: loadedColorMap[key] } : undefined}>{loadedData?.[key] || ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div>
+                  <h3>변경 후 (사용자 입력)</h3>
+                  <table>
+                    <tbody>
+                      {FIELD_LABELS.map(([key, label]) => (
+                        <tr key={`after-${key}`}>
+                          <th>{label}</th>
+                          <td>{mergedAfterData?.[key] || ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
+          )}
 
           <section className="excel-web-v2-pane right">
             <h2>2. 편집 유형</h2>
@@ -1231,13 +1245,15 @@ export default function ExcelWebEditPage() {
                   </label>
                 </div>
 
-                <h2>4. DB 원본 정보 (변경 전)</h2>
+                <h2>4. 기존 신용평가 조회값</h2>
                 <div className="excel-web-v2-credit-readonly">
-                  <label>상호<input value={loadedData?.companyName || ''} readOnly /></label>
-                  <label>기존 신용평가<textarea value={loadedData?.creditText || ''} readOnly rows={3} /></label>
+                  <label className="full-row">
+                    기존 신용평가
+                    <textarea value={creditLookupPreview} readOnly rows={4} />
+                  </label>
                 </div>
 
-                <h2>5. 신용평가 입력 (변경 후)</h2>
+                <h2>5. 신용평가 입력</h2>
                 <div className="excel-web-v2-form">
                   <label>사업자등록번호<input name="bizNo" value={form.bizNo} onChange={handleInput} onKeyDown={handleBizNoKeyDown} /></label>
                   <label>신용평가등급<input name="creditGrade" value={form.creditGrade} onChange={handleInput} /></label>

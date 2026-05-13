@@ -240,6 +240,10 @@ def _now_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
 
+def _format_elapsed_seconds(value: float) -> str:
+    return f"{max(0.0, float(value)):.2f}s"
+
+
 def _safe_filename(name: str) -> str:
     keep = "._-()[]{}"
     cleaned = "".join(ch for ch in name if ch.isalnum() or ch in keep)
@@ -1479,10 +1483,33 @@ async def save_excel_edit_data(
     payload: str = Form(...),
     files: list[UploadFile] = File(default=[]),
 ) -> ApiResponse:
+    save_started_at = time.perf_counter()
+    timing_points: dict[str, float] = {}
+
+    def mark_timing(name: str) -> None:
+        timing_points[name] = time.perf_counter()
+
+    def log_save_timings(status: str) -> None:
+        previous = save_started_at
+        segments: list[str] = []
+        for name, current in timing_points.items():
+            segments.append(f"{name}={_format_elapsed_seconds(current - previous)}")
+            previous = current
+        segments.append(f"total={_format_elapsed_seconds(time.perf_counter() - save_started_at)}")
+        print(
+            "[excel-edit:save] "
+            f"status={status} "
+            f"fileType={request.fileType if 'request' in locals() else ''} "
+            f"saveMode={save_mode if 'save_mode' in locals() else ''} "
+            f"bizNo={_format_biz_no(request.bizNo) if 'request' in locals() else ''} "
+            + " ".join(segments)
+        )
+
     try:
         request = SaveRequest.model_validate(json.loads(payload))
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"저장 요청 파라미터가 올바르지 않습니다: {exc}") from exc
+    mark_timing("request_parse")
 
     save_mode = str(request.saveMode or "normal").strip() or "normal"
     if save_mode not in {"normal", "archive_only"}:
@@ -1491,6 +1518,7 @@ async def save_excel_edit_data(
     biz_no = request.bizNo.strip()
     db_paths = _resolve_db_paths()
     expected_version = str(request.expectedVersion or "").strip()
+    mark_timing("request_prepare")
 
     updated: dict = {}
     company_name = str(request.data.get("companyName") or "")
@@ -1498,42 +1526,133 @@ async def save_excel_edit_data(
     temp_files = [item for item in request.tempFiles if isinstance(item, dict) and item.get("uploadId")]
     has_archive_files = bool(files) or bool(temp_files)
 
-    if save_mode == "archive_only":
-        if not has_archive_files:
-            raise HTTPException(status_code=400, detail="파일만 저장 모드는 업로드 파일이 필요합니다.")
+    try:
+        if save_mode == "archive_only":
+            if not has_archive_files:
+                raise HTTPException(status_code=400, detail="파일만 저장 모드는 업로드 파일이 필요합니다.")
 
-        if (not company_name or not region_name) and biz_no:
-            for db_type, excel_path in db_paths.items():
-                if not excel_path or not Path(excel_path).exists():
-                    continue
-                position = _find_company_position(excel_path, biz_no)
-                if not position:
-                    continue
-                sheet_name, row, col = position
-                raw = _extract_company_data(excel_path, sheet_name, row, col)
-                company_name = company_name or str(raw.get("상호") or "")
-                region_name = region_name or str(raw.get("지역") or "")
-                if company_name and region_name:
-                    break
+            if (not company_name or not region_name) and biz_no:
+                for db_type, excel_path in db_paths.items():
+                    if not excel_path or not Path(excel_path).exists():
+                        continue
+                    position = _find_company_position(excel_path, biz_no)
+                    if not position:
+                        continue
+                    sheet_name, row, col = position
+                    raw = _extract_company_data(excel_path, sheet_name, row, col)
+                    company_name = company_name or str(raw.get("상호") or "")
+                    region_name = region_name or str(raw.get("지역") or "")
+                    if company_name and region_name:
+                        break
+            mark_timing("archive_lookup")
 
-        if not company_name:
-            raise HTTPException(status_code=400, detail="파일만 저장에는 업체명이 필요합니다.")
-        if not region_name:
-            raise HTTPException(status_code=400, detail="파일만 저장에는 지역이 필요합니다.")
+            if not company_name:
+                raise HTTPException(status_code=400, detail="파일만 저장에는 업체명이 필요합니다.")
+            if not region_name:
+                raise HTTPException(status_code=400, detail="파일만 저장에는 지역이 필요합니다.")
 
-        if expected_version and db_paths:
-            target_paths = [path for path in db_paths.values() if path and Path(path).exists()]
+            if expected_version and db_paths:
+                target_paths = [path for path in db_paths.values() if path and Path(path).exists()]
+                with _exclusive_excel_locks(target_paths):
+                    _validate_expected_version_for_save(request, db_paths, expected_version)
+            mark_timing("validate")
+
+            archived_files = []
+            if temp_files:
+                archived_files.extend(_archive_temp_uploads(temp_files, company_name, request.fileType, region_name))
+            if files:
+                archived_files.extend(_archive_uploaded_files(files, company_name, request.fileType, region_name))
+            mark_timing("archive")
+            log_save_timings("success")
+            return ApiResponse(
+                success=True,
+                message="파일 보관이 완료되었습니다.",
+                data={
+                    "saveMode": save_mode,
+                    "updated": updated,
+                    "archivedFiles": archived_files,
+                    "companyName": company_name,
+                    "region": region_name,
+                },
+            )
+
+        if not biz_no:
+            raise HTTPException(status_code=400, detail="사업자등록번호가 필요합니다.")
+        if not db_paths:
+            raise HTTPException(status_code=400, detail="DB 경로가 설정되지 않았습니다. 환경변수를 확인하세요.")
+
+        if request.fileType == "신용평가":
+            target_paths = [path for _, path in db_paths.items() if path and Path(path).exists()]
             with _exclusive_excel_locks(target_paths):
                 _validate_expected_version_for_save(request, db_paths, expected_version)
+                mark_timing("validate")
+                credit_text = _build_credit_text(request.data)
+                results = _update_credit_data(db_paths, biz_no, credit_text)
+                mark_timing("credit_update")
+                if not any(item.get("updated") for item in results):
+                    raise HTTPException(status_code=404, detail="신용평가 갱신 대상 업체를 찾지 못했습니다.")
+                updated["credit"] = results
+                if not company_name or not region_name:
+                    for db_type, path in db_paths.items():
+                        position = _find_company_position(path, biz_no)
+                        if not position:
+                            continue
+                        sheet_name, row, col = position
+                        raw = _extract_company_data(path, sheet_name, row, col)
+                        company_name = company_name or str(raw.get("상호") or "")
+                        region_name = region_name or str(raw.get("지역") or "")
+                        break
+                mark_timing("company_lookup")
+        else:
+            db_key = FILE_TYPE_TO_DB_KEY.get(request.fileType)
+            if not db_key:
+                raise HTTPException(status_code=400, detail=f"지원하지 않는 자료 종류입니다: {request.fileType}")
+            excel_path = db_paths.get(db_key, "")
+            if not excel_path or not Path(excel_path).exists():
+                raise HTTPException(status_code=400, detail=f"{db_key} DB 경로가 유효하지 않습니다.")
+            with _exclusive_excel_lock(excel_path):
+                _validate_expected_version_for_save(request, db_paths, expected_version)
+                mark_timing("validate")
+                position = _find_company_position(excel_path, biz_no)
+                mark_timing("company_find")
+                if position:
+                    update_result = _update_management_data_at_position(excel_path, request.data, db_key, position)
+                    mark_timing("management_update")
+                    updated_labels = update_result["updatedLabels"]
+                    updated["management"] = {
+                        "dbType": db_key,
+                        "excelPath": excel_path,
+                        "action": "update_existing",
+                        "updatedLabels": updated_labels,
+                    }
+                    if not company_name or not region_name:
+                        company_name = company_name or str(update_result.get("companyName") or "")
+                        region_name = region_name or str(update_result.get("region") or "")
+                else:
+                    added = _add_new_company_data(excel_path, request.data, db_key)
+                    mark_timing("management_add")
+                    company_name = company_name or str(added.get("companyName") or "")
+                    sheet_name = str(added.get("sheetName") or "")
+                    region_name = region_name or sheet_name
+                    updated["management"] = {
+                        "dbType": db_key,
+                        "excelPath": excel_path,
+                        "action": "add_new_company",
+                        "sheetName": sheet_name,
+                        "companyName": company_name,
+                    }
 
         archived_files = []
         if temp_files:
             archived_files.extend(_archive_temp_uploads(temp_files, company_name, request.fileType, region_name))
         if files:
             archived_files.extend(_archive_uploaded_files(files, company_name, request.fileType, region_name))
+        mark_timing("archive")
+        log_save_timings("success")
+
         return ApiResponse(
             success=True,
-            message="파일 보관이 완료되었습니다.",
+            message="확정 및 저장이 완료되었습니다.",
             data={
                 "saveMode": save_mode,
                 "updated": updated,
@@ -1542,83 +1661,12 @@ async def save_excel_edit_data(
                 "region": region_name,
             },
         )
-
-    if not biz_no:
-        raise HTTPException(status_code=400, detail="사업자등록번호가 필요합니다.")
-    if not db_paths:
-        raise HTTPException(status_code=400, detail="DB 경로가 설정되지 않았습니다. 환경변수를 확인하세요.")
-
-    if request.fileType == "신용평가":
-        target_paths = [path for _, path in db_paths.items() if path and Path(path).exists()]
-        with _exclusive_excel_locks(target_paths):
-            _validate_expected_version_for_save(request, db_paths, expected_version)
-            credit_text = _build_credit_text(request.data)
-            results = _update_credit_data(db_paths, biz_no, credit_text)
-            if not any(item.get("updated") for item in results):
-                raise HTTPException(status_code=404, detail="신용평가 갱신 대상 업체를 찾지 못했습니다.")
-            updated["credit"] = results
-            if not company_name or not region_name:
-                for db_type, path in db_paths.items():
-                    position = _find_company_position(path, biz_no)
-                    if not position:
-                        continue
-                    sheet_name, row, col = position
-                    raw = _extract_company_data(path, sheet_name, row, col)
-                    company_name = company_name or str(raw.get("상호") or "")
-                    region_name = region_name or str(raw.get("지역") or "")
-                    break
-    else:
-        db_key = FILE_TYPE_TO_DB_KEY.get(request.fileType)
-        if not db_key:
-            raise HTTPException(status_code=400, detail=f"지원하지 않는 자료 종류입니다: {request.fileType}")
-        excel_path = db_paths.get(db_key, "")
-        if not excel_path or not Path(excel_path).exists():
-            raise HTTPException(status_code=400, detail=f"{db_key} DB 경로가 유효하지 않습니다.")
-        with _exclusive_excel_lock(excel_path):
-            _validate_expected_version_for_save(request, db_paths, expected_version)
-            position = _find_company_position(excel_path, biz_no)
-            if position:
-                update_result = _update_management_data_at_position(excel_path, request.data, db_key, position)
-                updated_labels = update_result["updatedLabels"]
-                updated["management"] = {
-                    "dbType": db_key,
-                    "excelPath": excel_path,
-                    "action": "update_existing",
-                    "updatedLabels": updated_labels,
-                }
-                if not company_name or not region_name:
-                    company_name = company_name or str(update_result.get("companyName") or "")
-                    region_name = region_name or str(update_result.get("region") or "")
-            else:
-                added = _add_new_company_data(excel_path, request.data, db_key)
-                company_name = company_name or str(added.get("companyName") or "")
-                sheet_name = str(added.get("sheetName") or "")
-                region_name = region_name or sheet_name
-                updated["management"] = {
-                    "dbType": db_key,
-                    "excelPath": excel_path,
-                    "action": "add_new_company",
-                    "sheetName": sheet_name,
-                    "companyName": company_name,
-                }
-
-    archived_files = []
-    if temp_files:
-        archived_files.extend(_archive_temp_uploads(temp_files, company_name, request.fileType, region_name))
-    if files:
-        archived_files.extend(_archive_uploaded_files(files, company_name, request.fileType, region_name))
-
-    return ApiResponse(
-        success=True,
-        message="확정 및 저장이 완료되었습니다.",
-        data={
-            "saveMode": save_mode,
-            "updated": updated,
-            "archivedFiles": archived_files,
-            "companyName": company_name,
-            "region": region_name,
-        },
-    )
+    except HTTPException:
+        log_save_timings("http_error")
+        raise
+    except Exception:
+        log_save_timings("exception")
+        raise
 
 
 @app.post("/excel-edit/delete-company", response_model=ApiResponse)
