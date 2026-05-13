@@ -692,6 +692,9 @@ export default function ExcelWebEditPage() {
       return;
     }
 
+    const companyName = String(form.companyName || loadedData?.companyName || '').trim();
+    const region = String(form.region || loadedData?.region || '').trim();
+
     try {
       setIsBackendBusy(true);
       setBackendStatusMessage('엑셀에 반영하고 스캔본을 최종 보관 폴더로 이동하는 중입니다.');
@@ -707,6 +710,8 @@ export default function ExcelWebEditPage() {
         }] : [],
         data: {
           ...form,
+          companyName,
+          region,
           creditText: finalCreditText,
         },
       };
