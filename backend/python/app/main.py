@@ -13,7 +13,7 @@ from contextlib import contextmanager, ExitStack
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal
 
 import fitz
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -1124,14 +1124,23 @@ def _build_credit_text(form_data: dict) -> str:
     return f"{grade}\n({start or '?'}~{end or '?'})"
 
 
-def _update_credit_data(db_paths: dict[str, str], biz_no: str, credit_text: str) -> list[dict]:
+def _update_credit_data(
+    db_paths: dict[str, str],
+    biz_no: str,
+    credit_text: str,
+    timing_logger: Callable[[str, str, float, str], None] | None = None,
+) -> list[dict]:
     results: list[dict] = []
     for db_type, excel_path in db_paths.items():
         if not Path(excel_path).exists():
             continue
 
+        stage_started_at = time.perf_counter()
         position = _find_company_position(excel_path, biz_no)
+        find_elapsed = time.perf_counter() - stage_started_at
         if not position:
+            if timing_logger:
+                timing_logger(db_type, "find", find_elapsed, "not_found")
             results.append({"dbType": db_type, "updated": False, "reason": "not_found"})
             continue
 
@@ -1145,9 +1154,16 @@ def _update_credit_data(db_paths: dict[str, str], biz_no: str, credit_text: str)
                 cell = _resolve_merged_cell(sheet, update_row, target_col)
                 cell.value = credit_text
                 cell.fill = copy(GREEN_FILL)
+                save_started_at = time.perf_counter()
                 workbook.save(excel_path)
+                save_elapsed = time.perf_counter() - save_started_at
+                if timing_logger:
+                    timing_logger(db_type, "find", find_elapsed, "updated")
+                    timing_logger(db_type, "save", save_elapsed, "updated")
                 results.append({"dbType": db_type, "updated": True, "sheetName": sheet_name})
             else:
+                if timing_logger:
+                    timing_logger(db_type, "find", find_elapsed, "invalid_cell")
                 results.append({"dbType": db_type, "updated": False, "reason": "invalid_cell"})
         finally:
             workbook.close()
@@ -1505,6 +1521,14 @@ async def save_excel_edit_data(
             + " ".join(segments)
         )
 
+    def log_credit_stage(db_type: str, stage: str, elapsed: float, outcome: str) -> None:
+        print(
+            "[excel-edit:credit] "
+            f"dbType={db_type} stage={stage} outcome={outcome} "
+            f"elapsed={_format_elapsed_seconds(elapsed)} "
+            f"bizNo={_format_biz_no(request.bizNo) if 'request' in locals() else ''}"
+        )
+
     try:
         request = SaveRequest.model_validate(json.loads(payload))
     except Exception as exc:
@@ -1587,7 +1611,7 @@ async def save_excel_edit_data(
                 _validate_expected_version_for_save(request, db_paths, expected_version)
                 mark_timing("validate")
                 credit_text = _build_credit_text(request.data)
-                results = _update_credit_data(db_paths, biz_no, credit_text)
+                results = _update_credit_data(db_paths, biz_no, credit_text, timing_logger=log_credit_stage)
                 mark_timing("credit_update")
                 if not any(item.get("updated") for item in results):
                     raise HTTPException(status_code=404, detail="신용평가 갱신 대상 업체를 찾지 못했습니다.")
