@@ -13,7 +13,7 @@ from contextlib import contextmanager, ExitStack
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Callable, Literal
+from typing import Literal
 
 import fitz
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -238,10 +238,6 @@ app.add_middleware(
 
 def _now_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-
-
-def _format_elapsed_seconds(value: float) -> str:
-    return f"{max(0.0, float(value)):.2f}s"
 
 
 def _safe_filename(name: str) -> str:
@@ -514,7 +510,6 @@ def _validate_expected_version_for_save(
     request: SaveRequest,
     db_paths: dict[str, str],
     expected_version: str,
-    timing_logger: Callable[[str, str, float, str], None] | None = None,
 ) -> None:
     token = str(expected_version or "").strip()
     if not token:
@@ -540,11 +535,7 @@ def _validate_expected_version_for_save(
             for _, path in db_paths.items():
                 if not path or not Path(path).exists():
                     continue
-                stage_started_at = time.perf_counter()
                 position = _find_company_position(path, request.bizNo)
-                elapsed = time.perf_counter() - stage_started_at
-                if timing_logger:
-                    timing_logger("신용평가", "validate_find", elapsed, "found" if position else "not_found")
                 if position:
                     raise HTTPException(status_code=409, detail="다른 사용자가 업체를 추가했습니다. 다시 조회 후 저장하세요.")
             return
@@ -552,11 +543,7 @@ def _validate_expected_version_for_save(
         db_key = FILE_TYPE_TO_DB_KEY.get(request.fileType)
         target_path = db_paths.get(db_key, "") if db_key else ""
         if target_path and Path(target_path).exists():
-            stage_started_at = time.perf_counter()
             position = _find_company_position(target_path, request.bizNo)
-            elapsed = time.perf_counter() - stage_started_at
-            if timing_logger:
-                timing_logger(db_key or request.fileType, "validate_find", elapsed, "found" if position else "not_found")
             if position:
                 raise HTTPException(status_code=409, detail="다른 사용자가 업체를 추가했습니다. 다시 조회 후 저장하세요.")
         return
@@ -577,20 +564,12 @@ def _validate_expected_version_for_save(
 
     workbook = load_workbook(filename=excel_path, data_only=False)
     try:
-        stage_started_at = time.perf_counter()
         position = _find_company_position_in_workbook(workbook, request.bizNo)
-        elapsed = time.perf_counter() - stage_started_at
-        if timing_logger:
-            timing_logger(db_type, "validate_find", elapsed, "found" if position else "not_found")
         if not position:
             raise HTTPException(status_code=409, detail="조회한 업체 데이터가 변경되었습니다. 다시 조회 후 저장하세요.")
 
         sheet_name, row, col = position
-        stage_started_at = time.perf_counter()
         raw = _extract_company_data_from_workbook(workbook, sheet_name, row, col)
-        elapsed = time.perf_counter() - stage_started_at
-        if timing_logger:
-            timing_logger(db_type, "validate_extract", elapsed, "ok")
     finally:
         workbook.close()
     current_fp = _build_company_fingerprint(db_type, excel_path, sheet_name, row, col, raw)
@@ -1168,19 +1147,14 @@ def _update_credit_data(
     db_paths: dict[str, str],
     biz_no: str,
     credit_text: str,
-    timing_logger: Callable[[str, str, float, str], None] | None = None,
 ) -> list[dict]:
     results: list[dict] = []
     for db_type, excel_path in db_paths.items():
         if not Path(excel_path).exists():
             continue
 
-        stage_started_at = time.perf_counter()
         position = _find_company_position(excel_path, biz_no)
-        find_elapsed = time.perf_counter() - stage_started_at
         if not position:
-            if timing_logger:
-                timing_logger(db_type, "find", find_elapsed, "not_found")
             results.append({"dbType": db_type, "updated": False, "reason": "not_found"})
             continue
 
@@ -1194,16 +1168,9 @@ def _update_credit_data(
                 cell = _resolve_merged_cell(sheet, update_row, target_col)
                 cell.value = credit_text
                 cell.fill = copy(GREEN_FILL)
-                save_started_at = time.perf_counter()
                 workbook.save(excel_path)
-                save_elapsed = time.perf_counter() - save_started_at
-                if timing_logger:
-                    timing_logger(db_type, "find", find_elapsed, "updated")
-                    timing_logger(db_type, "save", save_elapsed, "updated")
                 results.append({"dbType": db_type, "updated": True, "sheetName": sheet_name})
             else:
-                if timing_logger:
-                    timing_logger(db_type, "find", find_elapsed, "invalid_cell")
                 results.append({"dbType": db_type, "updated": False, "reason": "invalid_cell"})
         finally:
             workbook.close()
@@ -1510,34 +1477,17 @@ def company_lookup(payload: LookupRequest) -> ApiResponse:
         target_path = db_paths.get(target_db_type, "")
         candidates = [(target_db_type, target_path)] if target_path else []
 
-    def log_lookup_stage(db_type: str, stage: str, elapsed: float, outcome: str) -> None:
-        print(
-            "[excel-edit:lookup] "
-            f"dbType={db_type} stage={stage} outcome={outcome} "
-            f"elapsed={_format_elapsed_seconds(elapsed)} "
-            f"bizNo={_format_biz_no(biz_no)}"
-        )
-
     for db_type, excel_path in candidates:
         if not excel_path or not Path(excel_path).exists():
             continue
         workbook = load_workbook(filename=excel_path, data_only=False)
         try:
-            stage_started_at = time.perf_counter()
             position = _find_company_position_in_workbook(workbook, biz_no)
-            elapsed = time.perf_counter() - stage_started_at
-            log_lookup_stage(db_type, "find", elapsed, "found" if position else "not_found")
             if not position:
                 continue
             sheet_name, row, col = position
-            stage_started_at = time.perf_counter()
             raw = _extract_company_data_from_workbook(workbook, sheet_name, row, col)
-            elapsed = time.perf_counter() - stage_started_at
-            log_lookup_stage(db_type, "extract", elapsed, "ok")
-            stage_started_at = time.perf_counter()
             raw_cells = _extract_company_cells_from_workbook(workbook, sheet_name, row, col)
-            elapsed = time.perf_counter() - stage_started_at
-            log_lookup_stage(db_type, "cells", elapsed, "ok")
             lookup_payload = _build_lookup_payload(raw, db_type, excel_path, raw_cells=raw_cells)
             lookup_payload["version"] = _build_found_version(db_type, excel_path, biz_no, sheet_name, row, col, raw)
             return ApiResponse(
@@ -1560,41 +1510,10 @@ async def save_excel_edit_data(
     payload: str = Form(...),
     files: list[UploadFile] = File(default=[]),
 ) -> ApiResponse:
-    save_started_at = time.perf_counter()
-    timing_points: dict[str, float] = {}
-
-    def mark_timing(name: str) -> None:
-        timing_points[name] = time.perf_counter()
-
-    def log_save_timings(status: str) -> None:
-        previous = save_started_at
-        segments: list[str] = []
-        for name, current in timing_points.items():
-            segments.append(f"{name}={_format_elapsed_seconds(current - previous)}")
-            previous = current
-        segments.append(f"total={_format_elapsed_seconds(time.perf_counter() - save_started_at)}")
-        print(
-            "[excel-edit:save] "
-            f"status={status} "
-            f"fileType={request.fileType if 'request' in locals() else ''} "
-            f"saveMode={save_mode if 'save_mode' in locals() else ''} "
-            f"bizNo={_format_biz_no(request.bizNo) if 'request' in locals() else ''} "
-            + " ".join(segments)
-        )
-
-    def log_credit_stage(db_type: str, stage: str, elapsed: float, outcome: str) -> None:
-        print(
-            "[excel-edit:credit] "
-            f"dbType={db_type} stage={stage} outcome={outcome} "
-            f"elapsed={_format_elapsed_seconds(elapsed)} "
-            f"bizNo={_format_biz_no(request.bizNo) if 'request' in locals() else ''}"
-        )
-
     try:
         request = SaveRequest.model_validate(json.loads(payload))
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"저장 요청 파라미터가 올바르지 않습니다: {exc}") from exc
-    mark_timing("request_parse")
 
     save_mode = str(request.saveMode or "normal").strip() or "normal"
     if save_mode not in {"normal", "archive_only"}:
@@ -1603,7 +1522,6 @@ async def save_excel_edit_data(
     biz_no = request.bizNo.strip()
     db_paths = _resolve_db_paths()
     expected_version = str(request.expectedVersion or "").strip()
-    mark_timing("request_prepare")
 
     updated: dict = {}
     company_name = str(request.data.get("companyName") or "")
@@ -1629,7 +1547,6 @@ async def save_excel_edit_data(
                     region_name = region_name or str(raw.get("지역") or "")
                     if company_name and region_name:
                         break
-            mark_timing("archive_lookup")
 
             if not company_name:
                 raise HTTPException(status_code=400, detail="파일만 저장에는 업체명이 필요합니다.")
@@ -1640,15 +1557,12 @@ async def save_excel_edit_data(
                 target_paths = [path for path in db_paths.values() if path and Path(path).exists()]
                 with _exclusive_excel_locks(target_paths):
                     _validate_expected_version_for_save(request, db_paths, expected_version)
-            mark_timing("validate")
 
             archived_files = []
             if temp_files:
                 archived_files.extend(_archive_temp_uploads(temp_files, company_name, request.fileType, region_name))
             if files:
                 archived_files.extend(_archive_uploaded_files(files, company_name, request.fileType, region_name))
-            mark_timing("archive")
-            log_save_timings("success")
             return ApiResponse(
                 success=True,
                 message="파일 보관이 완료되었습니다.",
@@ -1669,11 +1583,9 @@ async def save_excel_edit_data(
         if request.fileType == "신용평가":
             target_paths = [path for _, path in db_paths.items() if path and Path(path).exists()]
             with _exclusive_excel_locks(target_paths):
-                _validate_expected_version_for_save(request, db_paths, expected_version, timing_logger=log_credit_stage)
-                mark_timing("validate")
+                _validate_expected_version_for_save(request, db_paths, expected_version)
                 credit_text = _build_credit_text(request.data)
-                results = _update_credit_data(db_paths, biz_no, credit_text, timing_logger=log_credit_stage)
-                mark_timing("credit_update")
+                results = _update_credit_data(db_paths, biz_no, credit_text)
                 if not any(item.get("updated") for item in results):
                     raise HTTPException(status_code=404, detail="신용평가 갱신 대상 업체를 찾지 못했습니다.")
                 updated["credit"] = results
@@ -1694,7 +1606,6 @@ async def save_excel_edit_data(
                                 break
                         finally:
                             workbook.close()
-                mark_timing("company_lookup")
         else:
             db_key = FILE_TYPE_TO_DB_KEY.get(request.fileType)
             if not db_key:
@@ -1704,12 +1615,9 @@ async def save_excel_edit_data(
                 raise HTTPException(status_code=400, detail=f"{db_key} DB 경로가 유효하지 않습니다.")
             with _exclusive_excel_lock(excel_path):
                 _validate_expected_version_for_save(request, db_paths, expected_version)
-                mark_timing("validate")
                 position = _find_company_position(excel_path, biz_no)
-                mark_timing("company_find")
                 if position:
                     update_result = _update_management_data_at_position(excel_path, request.data, db_key, position)
-                    mark_timing("management_update")
                     updated_labels = update_result["updatedLabels"]
                     updated["management"] = {
                         "dbType": db_key,
@@ -1722,7 +1630,6 @@ async def save_excel_edit_data(
                         region_name = region_name or str(update_result.get("region") or "")
                 else:
                     added = _add_new_company_data(excel_path, request.data, db_key)
-                    mark_timing("management_add")
                     company_name = company_name or str(added.get("companyName") or "")
                     sheet_name = str(added.get("sheetName") or "")
                     region_name = region_name or sheet_name
@@ -1739,8 +1646,6 @@ async def save_excel_edit_data(
             archived_files.extend(_archive_temp_uploads(temp_files, company_name, request.fileType, region_name))
         if files:
             archived_files.extend(_archive_uploaded_files(files, company_name, request.fileType, region_name))
-        mark_timing("archive")
-        log_save_timings("success")
 
         return ApiResponse(
             success=True,
@@ -1754,10 +1659,8 @@ async def save_excel_edit_data(
             },
         )
     except HTTPException:
-        log_save_timings("http_error")
         raise
     except Exception:
-        log_save_timings("exception")
         raise
 
 

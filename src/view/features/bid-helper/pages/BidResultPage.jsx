@@ -962,12 +962,10 @@ export default function BidResultPage() {
 
     const orderingBuffer = await orderingFile.arrayBuffer();
     const orderingWorkbook = XLSX.read(orderingBuffer, { type: 'array', cellStyles: true });
-    const orderingSheetName = (orderingWorkbook.SheetNames || []).find(
-      (name) => name.replace(/\s+/g, '') === '입찰금액점수',
-    );
-    if (!orderingSheetName) throw new Error('발주처결과 파일에서 "입찰금액점수" 시트를 찾을 수 없습니다.');
+    const orderingSheetName = (orderingWorkbook.SheetNames || [])[0];
+    if (!orderingSheetName) throw new Error('발주처결과 파일에서 첫 번째 시트를 찾을 수 없습니다.');
     const orderingSheet = orderingWorkbook.Sheets[orderingSheetName];
-    if (!orderingSheet) throw new Error('발주처결과 파일에서 "입찰금액점수" 시트를 찾을 수 없습니다.');
+    if (!orderingSheet) throw new Error('발주처결과 파일에서 첫 번째 시트를 찾을 수 없습니다.');
     const lowerName = String(orderingFile?.name || '').toLowerCase();
     let styleMap = null;
     let winnerRowsFromXml = [];
@@ -1011,7 +1009,7 @@ export default function BidResultPage() {
       winnerInfos.slice(0, 10).map((info) => ({ row: info.sourceRow, bizNo: info.bizNo, rank: info.rank, name: info.companyName })),
     );
     if (!validNumbers.size) {
-      throw new Error('발주처결과 파일에서 순번을 읽지 못했습니다. 입찰금액점수 시트의 순번(A열) 형식을 확인하세요.');
+      throw new Error('발주처결과 파일에서 순번을 읽지 못했습니다. 첫 번째 시트의 순번(A열) 형식을 확인하세요.');
     }
 
     const workbook = new ExcelJS.Workbook();
