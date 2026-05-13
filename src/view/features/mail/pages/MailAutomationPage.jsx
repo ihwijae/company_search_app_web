@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import Sidebar from '../../../../components/Sidebar';
 import * as XLSX from 'xlsx';
 import 'xlsx/dist/cpexcel.js';
@@ -7,6 +8,7 @@ import seedContacts from '../addressBook.seed.json';
 import { loadPersisted, savePersisted } from '../../../../shared/persistence.js';
 import mailAddressBookClient from '../../../../shared/mailAddressBookClient.js';
 import mailClient from '../../../../shared/mailClient.js';
+import { copyDocumentStyles } from '../../../../utils/windowBridge.js';
 
 const DEFAULT_PROJECT_INFO = {
   announcementNumber: '공고번호를 불러오세요',
@@ -69,6 +71,13 @@ const deriveLegacyRecipientFields = (contacts = []) => {
 const mergeRecipientContacts = (current = [], additions = []) => (
   sanitizeRecipientContacts([...(Array.isArray(current) ? current : []), ...(Array.isArray(additions) ? additions : [])])
 );
+const buildRecipientContactKey = (item) => {
+  if (!item || typeof item !== 'object') return '';
+  const contactName = trimValue(item.contactName || item.name || '').toLowerCase();
+  const email = trimValue(item.email || '').toLowerCase();
+  if (!contactName && !email) return '';
+  return `${contactName}|${email}`;
+};
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const buildAttachmentDescriptor = (raw) => {
   if (!raw) return null;
@@ -151,6 +160,8 @@ const sanitizeRecipientDraftList = (list = []) => {
       contactName: legacyFields.contactName,
       email: legacyFields.email,
       recipientContacts,
+      manualContactName: '',
+      manualContactEmail: '',
       tenderAmount: item.tenderAmount || '',
       workerName: item.workerName || '',
       attachments: serializeAttachmentListForPersist(item.attachments),
@@ -288,6 +299,23 @@ const DEFAULT_EX_BODY_TEMPLATE = `
 </div>`;
 
 const SMTP_PROFILE_STORAGE_KEY = 'mail:smtpProfiles';
+const MAIL_ADDRESSBOOK_WINDOW_STORAGE_KEY = '__mailAddressBookWindow';
+
+const getStoredAddressBookWindow = () => {
+  if (typeof window === 'undefined') return null;
+  const existing = window[MAIL_ADDRESSBOOK_WINDOW_STORAGE_KEY];
+  if (existing && !existing.closed) return existing;
+  return null;
+};
+
+const storeAddressBookWindow = (target) => {
+  if (typeof window === 'undefined') return;
+  if (target && !target.closed) {
+    window[MAIL_ADDRESSBOOK_WINDOW_STORAGE_KEY] = target;
+  } else {
+    delete window[MAIL_ADDRESSBOOK_WINDOW_STORAGE_KEY];
+  }
+};
 
 const EMPTY_MAIL_STATE = {
   ownerId: '',
@@ -390,6 +418,8 @@ function MailAutomationPageInner() {
   const [previewData, setPreviewData] = React.useState({ subject: '', html: '', text: '' });
   const [addressBookQuery, setAddressBookQuery] = React.useState('');
   const [progressModal, setProgressModal] = React.useState({ open: false, total: 0, processed: 0, complete: false });
+  const addressBookPopupRef = React.useRef(getStoredAddressBookWindow());
+  const [addressBookPortalContainer, setAddressBookPortalContainer] = React.useState(null);
   const persistedSmtpProfiles = React.useMemo(() => {
     const stored = loadPersisted(SMTP_PROFILE_STORAGE_KEY, []);
     if (!Array.isArray(stored)) return [];
@@ -439,6 +469,16 @@ function MailAutomationPageInner() {
     return index;
   }, [contacts]);
 
+  const filteredContacts = React.useMemo(() => {
+    return contacts.filter((contact) => {
+      if (!addressBookQuery) return true;
+      const keyword = addressBookQuery.trim().toLowerCase();
+      if (!keyword) return true;
+      return [contact.vendorName, contact.contactName, contact.email]
+        .some((value) => (value || '').toLowerCase().includes(keyword));
+    });
+  }, [contacts, addressBookQuery]);
+
   const resolveContactForVendor = React.useCallback((vendor) => {
     const normalized = normalizeVendorName(vendor);
     if (!normalized) return null;
@@ -481,7 +521,6 @@ function MailAutomationPageInner() {
     const nextId = contacts.reduce((max, item) => Math.max(max, Number(item.id) || 0), 0) + 1;
     contactIdRef.current = Math.max(nextId, 1);
   }, [contacts]);
-  const contactIndexRef = React.useRef(new Map());
 
   React.useEffect(() => {
     const nextId = recipients.reduce((max, item) => Math.max(max, Number(item.id) || 0), 0) + 1;
@@ -529,6 +568,109 @@ function MailAutomationPageInner() {
       setSelectedSmtpProfileId(smtpProfiles[0]?.id || '');
     }
   }, [selectedSmtpProfileId, smtpProfiles]);
+
+  const closeAddressBookWindow = React.useCallback(() => {
+    const win = addressBookPopupRef.current;
+    if (win && !win.closed) {
+      if (win.__mailAddressBookCleanup) {
+        try { win.__mailAddressBookCleanup(); } catch {}
+        delete win.__mailAddressBookCleanup;
+      }
+      win.close();
+    }
+    addressBookPopupRef.current = null;
+    setAddressBookPortalContainer(null);
+    storeAddressBookWindow(null);
+  }, []);
+
+  const attachAddressBookBeforeUnload = React.useCallback((target) => {
+    if (!target) return;
+    if (target.__mailAddressBookCleanup) {
+      try { target.__mailAddressBookCleanup(); } catch {}
+      delete target.__mailAddressBookCleanup;
+    }
+    const handler = () => {
+      if (addressBookPopupRef.current === target) {
+        addressBookPopupRef.current = null;
+      }
+      storeAddressBookWindow(null);
+      setAddressBookPortalContainer(null);
+      setAddressBookOpen(false);
+      setAddressBookTargetId(null);
+      setSelectedAddressBookIds([]);
+      setAddressBookQuery('');
+    };
+    target.addEventListener('beforeunload', handler);
+    target.__mailAddressBookCleanup = () => target.removeEventListener('beforeunload', handler);
+  }, []);
+
+  const ensureAddressBookWindow = React.useCallback(() => {
+    if (typeof window === 'undefined') return;
+
+    if (!addressBookPopupRef.current) {
+      const stored = getStoredAddressBookWindow();
+      if (stored) addressBookPopupRef.current = stored;
+    }
+
+    if (addressBookPopupRef.current && addressBookPopupRef.current.closed) {
+      addressBookPopupRef.current = null;
+      storeAddressBookWindow(null);
+      setAddressBookPortalContainer(null);
+    }
+
+    if (!addressBookPopupRef.current) {
+      const width = Math.min(1320, Math.max(1040, window.innerWidth - 80));
+      const height = Math.min(920, Math.max(760, window.innerHeight - 72));
+      const dualScreenLeft = window.screenLeft !== undefined ? window.screenLeft : window.screenX;
+      const dualScreenTop = window.screenTop !== undefined ? window.screenTop : window.screenY;
+      const left = Math.max(24, dualScreenLeft + Math.max(0, (window.innerWidth - width) / 2));
+      const top = Math.max(24, dualScreenTop + Math.max(0, (window.innerHeight - height) / 3));
+      const features = `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`;
+      const child = window.open('', 'company-search-mail-addressbook', features);
+      if (!child) return;
+      addressBookPopupRef.current = child;
+      child.document.title = addressBookTargetId ? '메일 주소록 선택' : '메일 주소록';
+      child.document.body.style.margin = '0';
+      child.document.body.style.background = '#f8fafc';
+      child.document.body.innerHTML = '';
+      const root = child.document.createElement('div');
+      root.id = 'mail-addressbook-window-root';
+      child.document.body.appendChild(root);
+      copyDocumentStyles(document, child.document);
+      setAddressBookPortalContainer(root);
+      storeAddressBookWindow(child);
+      attachAddressBookBeforeUnload(child);
+    } else {
+      const win = addressBookPopupRef.current;
+      storeAddressBookWindow(win);
+      try { win.document.title = addressBookTargetId ? '메일 주소록 선택' : '메일 주소록'; } catch {}
+      if (win.document && win.document.readyState === 'complete') {
+        copyDocumentStyles(document, win.document);
+      }
+      if (win.document) {
+        let root = win.document.getElementById('mail-addressbook-window-root');
+        if (!root) {
+          root = win.document.createElement('div');
+          root.id = 'mail-addressbook-window-root';
+          win.document.body.appendChild(root);
+        }
+        setAddressBookPortalContainer(root);
+      }
+      attachAddressBookBeforeUnload(win);
+      try { win.focus(); } catch {}
+    }
+  }, [addressBookTargetId, attachAddressBookBeforeUnload]);
+
+  React.useEffect(() => {
+    if (addressBookOpen) {
+      ensureAddressBookWindow();
+    } else {
+      closeAddressBookWindow();
+    }
+  }, [addressBookOpen, ensureAddressBookWindow, closeAddressBookWindow]);
+
+  React.useEffect(() => () => { closeAddressBookWindow(); }, [closeAddressBookWindow]);
+
   const ensureOwnerSelected = React.useCallback(() => {
     if (ownerId) return true;
     showStatusMessage('발주처를 먼저 선택해 주세요.', { type: 'warning' });
@@ -844,9 +986,28 @@ function MailAutomationPageInner() {
 
   const handleOpenAddressBook = React.useCallback((targetId = null) => {
     setAddressBookTargetId(targetId);
-    setSelectedAddressBookIds([]);
+    if (!targetId) {
+      setSelectedAddressBookIds([]);
+      setAddressBookOpen(true);
+      return;
+    }
+    const targetRecipient = recipients.find((item) => item.id === targetId);
+    if (!targetRecipient) {
+      setSelectedAddressBookIds([]);
+      setAddressBookOpen(true);
+      return;
+    }
+    const selectedKeys = new Set(
+      sanitizeRecipientContacts(targetRecipient.recipientContacts, targetRecipient)
+        .map(buildRecipientContactKey)
+        .filter(Boolean)
+    );
+    const nextSelectedIds = contacts
+      .filter((contact) => selectedKeys.has(buildRecipientContactKey(contact)))
+      .map((contact) => contact.id);
+    setSelectedAddressBookIds(nextSelectedIds);
     setAddressBookOpen(true);
-  }, []);
+  }, [contacts, recipients]);
 
   const handleCloseAddressBook = React.useCallback(() => {
     setAddressBookOpen(false);
@@ -1050,6 +1211,38 @@ function MailAutomationPageInner() {
     }));
   }, []);
 
+  const handleAddManualRecipientContact = React.useCallback((recipientId) => {
+    let added = false;
+    let missingEmail = false;
+    setRecipients((prev) => prev.map((item) => {
+      if (item.id !== recipientId) return item;
+      const contactName = trimValue(item.manualContactName || '');
+      const email = trimValue(item.manualContactEmail || '');
+      if (!email) {
+        missingEmail = true;
+        return item;
+      }
+      const recipientContacts = mergeRecipientContacts(item.recipientContacts, [{ contactName, email }]);
+      const legacyFields = deriveLegacyRecipientFields(recipientContacts);
+      added = true;
+      return {
+        ...item,
+        contactName: legacyFields.contactName,
+        email: legacyFields.email,
+        recipientContacts,
+        manualContactName: '',
+        manualContactEmail: '',
+      };
+    }));
+    if (missingEmail) {
+      showStatusMessage('직접 추가할 이메일을 입력해 주세요.', { type: 'warning' });
+      return;
+    }
+    if (added) {
+      showStatusMessage('담당자를 직접 추가했습니다.');
+    }
+  }, [showStatusMessage]);
+
   const handleRemoveRecipient = (id) => {
     setRecipients((prev) => {
       const nextList = prev.filter((item) => item.id !== id);
@@ -1066,6 +1259,8 @@ function MailAutomationPageInner() {
       contactName: '',
       email: '',
       recipientContacts: [],
+      manualContactName: '',
+      manualContactEmail: '',
       tenderAmount: '',
       workerName: '',
       attachments: [],
@@ -1487,6 +1682,121 @@ function MailAutomationPageInner() {
     setPreviewOpen(true);
   }, [ensureOwnerSelected, recipients, subjectTemplate, bodyTemplate, buildRecipientContext, buildFallbackText]);
 
+  const addressBookWindowContent = (
+    <div className="mail-addressbook-window">
+      <header className="mail-addressbook-window__header">
+        <div className="mail-addressbook-window__title">
+          <h1>{addressBookTargetId ? '업체 담당자 선택' : '메일 주소록'}</h1>
+          <p>
+            총 {contacts.length}건
+            {contactsLoading ? ' · 불러오는 중' : ''}
+            {!contactsLoading && contactsDirty ? ' · 저장 안 됨' : ''}
+            {addressBookTargetId ? ` · 선택 ${selectedAddressBookIds.length}건` : ''}
+          </p>
+        </div>
+        <div className="mail-addressbook-window__toolbar">
+          <button type="button" className="btn-sm btn-soft" onClick={handleAddContact} disabled={contactsLoading || contactsSaving}>주소 추가</button>
+          <button type="button" className="btn-sm btn-soft" onClick={() => contactsFileInputRef.current?.click()} disabled={contactsLoading || contactsSaving}>가져오기</button>
+          <button type="button" className="btn-sm btn-soft" onClick={handleExportContacts} disabled={!contacts.length}>내보내기</button>
+          <button
+            type="button"
+            className="btn-sm btn-primary"
+            onClick={handleManualSaveContacts}
+            disabled={contactsLoading || contactsSaving || !contactsDirty}
+          >
+            {contactsSaving ? '저장 중...' : '저장'}
+          </button>
+          {addressBookTargetId ? (
+            <button type="button" className="btn-sm btn-primary" onClick={handleApplySelectedContactsToRecipient}>
+              선택한 담당자 추가
+            </button>
+          ) : null}
+          <button type="button" className="btn-sm btn-muted" onClick={handleCloseAddressBook}>창 닫기</button>
+        </div>
+      </header>
+
+      <section className="mail-addressbook-window__search">
+        <input
+          value={addressBookQuery}
+          onChange={(event) => setAddressBookQuery(event.target.value)}
+          placeholder="업체명, 담당자, 이메일 검색"
+        />
+        <input
+          ref={contactsFileInputRef}
+          type="file"
+          accept=".json"
+          style={{ display: 'none' }}
+          onChange={handleImportContacts}
+        />
+      </section>
+
+      <section className="mail-addressbook-window__table">
+        <div
+          className="mail-addressbook-window__table-head"
+          style={addressBookTargetId ? { gridTemplateColumns: '52px minmax(220px,1.5fr) minmax(160px,1fr) minmax(240px,1.3fr) 160px' } : undefined}
+        >
+          {addressBookTargetId ? <span>선택</span> : null}
+          <span>업체명</span>
+          <span>담당자</span>
+          <span>이메일</span>
+          <span>작업</span>
+        </div>
+        <div className="mail-addressbook-window__table-body">
+          {filteredContacts.length ? filteredContacts.map((contact) => (
+            <div
+              key={contact.id}
+              className="mail-addressbook-window__row"
+              style={addressBookTargetId ? { gridTemplateColumns: '52px minmax(220px,1.5fr) minmax(160px,1fr) minmax(240px,1.3fr) 160px' } : undefined}
+            >
+              {addressBookTargetId ? (
+                <label className="mail-addressbook-window__check">
+                  <input
+                    type="checkbox"
+                    checked={selectedAddressBookIds.includes(contact.id)}
+                    onChange={() => handleToggleAddressBookSelection(contact.id)}
+                  />
+                </label>
+              ) : null}
+              <input
+                value={contact.vendorName}
+                onChange={(event) => handleContactFieldChange(contact.id, 'vendorName', event.target.value)}
+                placeholder="업체명"
+              />
+              <input
+                value={contact.contactName}
+                onChange={(event) => handleContactFieldChange(contact.id, 'contactName', event.target.value)}
+                placeholder="담당자"
+              />
+              <input
+                value={contact.email}
+                onChange={(event) => handleContactFieldChange(contact.id, 'email', event.target.value)}
+                placeholder="example@company.com"
+              />
+              <div className="mail-addressbook-window__row-actions">
+                <button
+                  type="button"
+                  className="btn-sm btn-soft"
+                  onClick={() => {
+                    if (addressBookTargetId) {
+                      handleApplyContactToRecipient(addressBookTargetId, contact);
+                    } else {
+                      handleUseContact(contact);
+                    }
+                  }}
+                >
+                  {addressBookTargetId ? '1명 추가' : '추가'}
+                </button>
+                <button type="button" className="btn-sm btn-muted" onClick={() => handleRemoveContact(contact.id)}>삭제</button>
+              </div>
+            </div>
+          )) : (
+            <div className="mail-addressbook-window__empty">주소록이 비어 있습니다. 주소를 추가하거나 가져오세요.</div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+
   return (
     <div className="app-shell">
       <Sidebar active={activeMenu} onSelect={handleMenuSelect} collapsed={true} />
@@ -1679,7 +1989,7 @@ function MailAutomationPageInner() {
                       />
                     </span>
                     <span className="mail-recipient-contact">
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0, flex: 1 }}>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                           {recipientContacts.length ? recipientContacts.map((contact, index) => (
                             <span
@@ -1708,15 +2018,36 @@ function MailAutomationPageInner() {
                           )) : <span className="mail-recipient-attachment-empty">수신자 없음</span>}
                         </div>
                         <div style={{ fontSize: '12px', color: '#64748b' }}>{deliverableCount}명 발송 대상</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,0.8fr) minmax(0,1fr) auto', gap: '6px' }}>
+                          <input
+                            value={recipient.manualContactName || ''}
+                            onChange={(event) => handleRecipientFieldChange(recipient.id, 'manualContactName', event.target.value)}
+                            placeholder="담당자 직접 입력"
+                          />
+                          <input
+                            value={recipient.manualContactEmail || ''}
+                            onChange={(event) => handleRecipientFieldChange(recipient.id, 'manualContactEmail', event.target.value)}
+                            placeholder="email 직접 입력"
+                          />
+                          <button
+                            type="button"
+                            className="btn-sm btn-soft"
+                            onClick={() => handleAddManualRecipientContact(recipient.id)}
+                          >
+                            추가
+                          </button>
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        className="mail-contact-picker"
-                        onClick={() => handleOpenAddressBook(recipient.id)}
-                        title="주소록에서 담당자 추가"
-                      >
-                        🔍
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', paddingTop: '2px' }}>
+                        <button
+                          type="button"
+                          className="mail-contact-picker"
+                          onClick={() => handleOpenAddressBook(recipient.id)}
+                          title="주소록에서 담당자 추가"
+                        >
+                          🔍
+                        </button>
+                      </div>
                     </span>
                     <span>
                       <input
@@ -1783,120 +2114,9 @@ function MailAutomationPageInner() {
           </div>
         </div>
       )}
-      {addressBookOpen && (
-        <div className="mail-addressbook-overlay" role="presentation">
-          <div
-            className="mail-addressbook-modal"
-            role="dialog"
-            aria-modal="true"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header className="mail-addressbook-modal__header">
-              <h2>
-                주소록 ({contacts.length})
-                {contactsLoading ? ' 불러오는 중...' : ''}
-                {!contactsLoading && contactsDirty ? ' · 저장 안 됨' : ''}
-              </h2>
-              <div className="mail-addressbook-modal__actions">
-                <button type="button" className="btn-sm btn-soft" onClick={handleAddContact} disabled={contactsLoading || contactsSaving}>주소 추가</button>
-                <button type="button" className="btn-sm btn-soft" onClick={() => contactsFileInputRef.current?.click()} disabled={contactsLoading || contactsSaving}>가져오기</button>
-                <button type="button" className="btn-sm btn-soft" onClick={handleExportContacts} disabled={!contacts.length}>내보내기</button>
-                <button
-                  type="button"
-                  className="btn-sm btn-primary"
-                  onClick={handleManualSaveContacts}
-                  disabled={contactsLoading || contactsSaving || !contactsDirty}
-                >
-                  {contactsSaving ? '저장 중...' : '저장'}
-                </button>
-                <button type="button" className="btn-sm btn-muted" onClick={handleCloseAddressBook}>닫기</button>
-              </div>
-              <div className="mail-addressbook-search">
-                <input
-                  value={addressBookQuery}
-                  onChange={(event) => setAddressBookQuery(event.target.value)}
-                  placeholder="업체명/담당자/이메일 검색"
-                />
-              </div>
-              <input
-                ref={contactsFileInputRef}
-                type="file"
-                accept=".json"
-                style={{ display: 'none' }}
-                onChange={handleImportContacts}
-              />
-            </header>
-            <div className="mail-addressbook-modal__body">
-              {contacts.length ? contacts
-                .filter((contact) => {
-                  if (!addressBookQuery) return true;
-                  const keyword = addressBookQuery.trim().toLowerCase();
-                  if (!keyword) return true;
-                  return [contact.vendorName, contact.contactName, contact.email]
-                    .some((value) => (value || '').toLowerCase().includes(keyword));
-                })
-                .map((contact) => (
-                <div
-                  key={contact.id}
-                  className="mail-addressbook-modal__row"
-                  style={addressBookTargetId ? { gridTemplateColumns: '36px 1.4fr 1fr 1.2fr 130px' } : undefined}
-                >
-                  {addressBookTargetId ? (
-                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedAddressBookIds.includes(contact.id)}
-                        onChange={() => handleToggleAddressBookSelection(contact.id)}
-                      />
-                    </label>
-                  ) : null}
-                  <input
-                    value={contact.vendorName}
-                    onChange={(event) => handleContactFieldChange(contact.id, 'vendorName', event.target.value)}
-                    placeholder="업체명"
-                  />
-                  <input
-                    value={contact.contactName}
-                    onChange={(event) => handleContactFieldChange(contact.id, 'contactName', event.target.value)}
-                    placeholder="담당자"
-                  />
-                  <input
-                    value={contact.email}
-                    onChange={(event) => handleContactFieldChange(contact.id, 'email', event.target.value)}
-                    placeholder="example@company.com"
-                  />
-                  <div className="mail-addressbook-modal__row-actions">
-                    <button
-                      type="button"
-                      className="btn-sm btn-soft"
-                      onClick={() => {
-                        if (addressBookTargetId) {
-                          handleApplyContactToRecipient(addressBookTargetId, contact);
-                        } else {
-                          handleUseContact(contact);
-                        }
-                      }}
-                    >
-                      {addressBookTargetId ? '1명 추가' : '추가'}
-                    </button>
-                    <button type="button" className="btn-sm btn-muted" onClick={() => handleRemoveContact(contact.id)}>삭제</button>
-                  </div>
-                </div>
-              )) : (
-                <div className="mail-addressbook-modal__empty">주소록이 비어 있습니다. 주소를 추가하거나 가져오세요.</div>
-              )}
-            </div>
-            {addressBookTargetId ? (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px' }}>
-                <div style={{ fontSize: '12px', color: '#64748b' }}>선택 {selectedAddressBookIds.length}건</div>
-                <button type="button" className="btn-sm btn-primary" onClick={handleApplySelectedContactsToRecipient}>
-                  선택한 담당자 추가
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      )}
+      {addressBookOpen && addressBookPortalContainer
+        ? createPortal(addressBookWindowContent, addressBookPortalContainer)
+        : null}
       {progressModal.open && (
         <div className="mail-progress-overlay" role="presentation">
           <div className="mail-progress-modal" role="dialog" aria-modal="true">
