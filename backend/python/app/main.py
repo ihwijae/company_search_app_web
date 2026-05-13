@@ -575,62 +575,74 @@ def _validate_expected_version_for_save(
     if not excel_path or not Path(excel_path).exists():
         raise HTTPException(status_code=409, detail="조회한 원본 DB가 변경되었습니다. 다시 조회 후 저장하세요.")
 
-    stage_started_at = time.perf_counter()
-    position = _find_company_position(excel_path, request.bizNo)
-    elapsed = time.perf_counter() - stage_started_at
-    if timing_logger:
-        timing_logger(db_type, "validate_find", elapsed, "found" if position else "not_found")
-    if not position:
-        raise HTTPException(status_code=409, detail="조회한 업체 데이터가 변경되었습니다. 다시 조회 후 저장하세요.")
+    workbook = load_workbook(filename=excel_path, data_only=False)
+    try:
+        stage_started_at = time.perf_counter()
+        position = _find_company_position_in_workbook(workbook, request.bizNo)
+        elapsed = time.perf_counter() - stage_started_at
+        if timing_logger:
+            timing_logger(db_type, "validate_find", elapsed, "found" if position else "not_found")
+        if not position:
+            raise HTTPException(status_code=409, detail="조회한 업체 데이터가 변경되었습니다. 다시 조회 후 저장하세요.")
 
-    sheet_name, row, col = position
-    stage_started_at = time.perf_counter()
-    raw = _extract_company_data(excel_path, sheet_name, row, col)
-    elapsed = time.perf_counter() - stage_started_at
-    if timing_logger:
-        timing_logger(db_type, "validate_extract", elapsed, "ok")
+        sheet_name, row, col = position
+        stage_started_at = time.perf_counter()
+        raw = _extract_company_data_from_workbook(workbook, sheet_name, row, col)
+        elapsed = time.perf_counter() - stage_started_at
+        if timing_logger:
+            timing_logger(db_type, "validate_extract", elapsed, "ok")
+    finally:
+        workbook.close()
     current_fp = _build_company_fingerprint(db_type, excel_path, sheet_name, row, col, raw)
     if current_fp != expected_fp:
         raise HTTPException(status_code=409, detail="다른 사용자가 먼저 수정했습니다. 다시 조회 후 저장하세요.")
 
 
-def _find_company_position(excel_path: str, biz_no: str) -> tuple[str, int, int] | None:
+def _find_company_position_in_workbook(workbook, biz_no: str) -> tuple[str, int, int] | None:
     normalized_target = _normalize_biz_no(biz_no)
     if not normalized_target:
         return None
+    for sheet_name in workbook.sheetnames:
+        sheet = workbook[sheet_name]
+        for row in sheet.iter_rows():
+            for cell in row:
+                if cell.value is None:
+                    continue
+                normalized_cell = _normalize_biz_no(str(cell.value))
+                if normalized_cell and normalized_cell == normalized_target:
+                    return sheet_name, cell.row, cell.column
+    return None
+
+
+def _find_company_position(excel_path: str, biz_no: str) -> tuple[str, int, int] | None:
     workbook = load_workbook(filename=excel_path, data_only=False)
     try:
-        for sheet_name in workbook.sheetnames:
-            sheet = workbook[sheet_name]
-            for row in sheet.iter_rows():
-                for cell in row:
-                    if cell.value is None:
-                        continue
-                    normalized_cell = _normalize_biz_no(str(cell.value))
-                    if normalized_cell and normalized_cell == normalized_target:
-                        return sheet_name, cell.row, cell.column
-        return None
+        return _find_company_position_in_workbook(workbook, biz_no)
     finally:
         workbook.close()
+
+
+def _extract_company_data_from_workbook(workbook, sheet_name: str, row: int, col: int) -> dict:
+    sheet = workbook[sheet_name]
+    result: dict[str, object] = {}
+    for kr_key, excel_label in COLUMN_MAP.items():
+        offset = RELATIVE_OFFSETS.get(excel_label)
+        if offset is None:
+            continue
+        target_row = row + offset
+        if 1 <= target_row <= sheet.max_row and 1 <= col <= sheet.max_column:
+            cell = _resolve_merged_cell(sheet, target_row, col)
+            result[kr_key] = cell.value
+        else:
+            result[kr_key] = ""
+    result["지역"] = sheet_name
+    return result
 
 
 def _extract_company_data(excel_path: str, sheet_name: str, row: int, col: int) -> dict:
     workbook = load_workbook(filename=excel_path, data_only=False)
     try:
-        sheet = workbook[sheet_name]
-        result: dict[str, object] = {}
-        for kr_key, excel_label in COLUMN_MAP.items():
-            offset = RELATIVE_OFFSETS.get(excel_label)
-            if offset is None:
-                continue
-            target_row = row + offset
-            if 1 <= target_row <= sheet.max_row and 1 <= col <= sheet.max_column:
-                cell = _resolve_merged_cell(sheet, target_row, col)
-                result[kr_key] = cell.value
-            else:
-                result[kr_key] = ""
-        result["지역"] = sheet_name
-        return result
+        return _extract_company_data_from_workbook(workbook, sheet_name, row, col)
     finally:
         workbook.close()
 
@@ -661,28 +673,32 @@ def _resolve_fill_color_hex(cell) -> str:
     return color_hex
 
 
+def _extract_company_cells_from_workbook(workbook, sheet_name: str, row: int, col: int) -> dict:
+    sheet = workbook[sheet_name]
+    result: dict[str, dict] = {}
+    for kr_key, excel_label in COLUMN_MAP.items():
+        offset = RELATIVE_OFFSETS.get(excel_label)
+        if offset is None:
+            continue
+        target_row = row + offset
+        value = ""
+        color = "#FFFFFF"
+        if 1 <= target_row <= sheet.max_row and 1 <= col <= sheet.max_column:
+            cell = _resolve_merged_cell(sheet, target_row, col)
+            value = cell.value
+            color = _resolve_fill_color_hex(cell)
+            number_format = str(getattr(cell, "number_format", "") or "")
+        else:
+            number_format = ""
+        result[kr_key] = {"value": value, "color": color, "numberFormat": number_format}
+    result["지역"] = {"value": sheet_name, "color": "#FFFFFF", "numberFormat": ""}
+    return result
+
+
 def _extract_company_cells(excel_path: str, sheet_name: str, row: int, col: int) -> dict:
     workbook = load_workbook(filename=excel_path, data_only=False)
     try:
-        sheet = workbook[sheet_name]
-        result: dict[str, dict] = {}
-        for kr_key, excel_label in COLUMN_MAP.items():
-            offset = RELATIVE_OFFSETS.get(excel_label)
-            if offset is None:
-                continue
-            target_row = row + offset
-            value = ""
-            color = "#FFFFFF"
-            if 1 <= target_row <= sheet.max_row and 1 <= col <= sheet.max_column:
-                cell = _resolve_merged_cell(sheet, target_row, col)
-                value = cell.value
-                color = _resolve_fill_color_hex(cell)
-                number_format = str(getattr(cell, "number_format", "") or "")
-            else:
-                number_format = ""
-            result[kr_key] = {"value": value, "color": color, "numberFormat": number_format}
-        result["지역"] = {"value": sheet_name, "color": "#FFFFFF", "numberFormat": ""}
-        return result
+        return _extract_company_cells_from_workbook(workbook, sheet_name, row, col)
     finally:
         workbook.close()
 
@@ -1505,28 +1521,32 @@ def company_lookup(payload: LookupRequest) -> ApiResponse:
     for db_type, excel_path in candidates:
         if not excel_path or not Path(excel_path).exists():
             continue
-        stage_started_at = time.perf_counter()
-        position = _find_company_position(excel_path, biz_no)
-        elapsed = time.perf_counter() - stage_started_at
-        log_lookup_stage(db_type, "find", elapsed, "found" if position else "not_found")
-        if not position:
-            continue
-        sheet_name, row, col = position
-        stage_started_at = time.perf_counter()
-        raw = _extract_company_data(excel_path, sheet_name, row, col)
-        elapsed = time.perf_counter() - stage_started_at
-        log_lookup_stage(db_type, "extract", elapsed, "ok")
-        stage_started_at = time.perf_counter()
-        raw_cells = _extract_company_cells(excel_path, sheet_name, row, col)
-        elapsed = time.perf_counter() - stage_started_at
-        log_lookup_stage(db_type, "cells", elapsed, "ok")
-        lookup_payload = _build_lookup_payload(raw, db_type, excel_path, raw_cells=raw_cells)
-        lookup_payload["version"] = _build_found_version(db_type, excel_path, biz_no, sheet_name, row, col, raw)
-        return ApiResponse(
-            success=True,
-            message="업체 조회가 완료되었습니다.",
-            data={"found": True, **lookup_payload},
-        )
+        workbook = load_workbook(filename=excel_path, data_only=False)
+        try:
+            stage_started_at = time.perf_counter()
+            position = _find_company_position_in_workbook(workbook, biz_no)
+            elapsed = time.perf_counter() - stage_started_at
+            log_lookup_stage(db_type, "find", elapsed, "found" if position else "not_found")
+            if not position:
+                continue
+            sheet_name, row, col = position
+            stage_started_at = time.perf_counter()
+            raw = _extract_company_data_from_workbook(workbook, sheet_name, row, col)
+            elapsed = time.perf_counter() - stage_started_at
+            log_lookup_stage(db_type, "extract", elapsed, "ok")
+            stage_started_at = time.perf_counter()
+            raw_cells = _extract_company_cells_from_workbook(workbook, sheet_name, row, col)
+            elapsed = time.perf_counter() - stage_started_at
+            log_lookup_stage(db_type, "cells", elapsed, "ok")
+            lookup_payload = _build_lookup_payload(raw, db_type, excel_path, raw_cells=raw_cells)
+            lookup_payload["version"] = _build_found_version(db_type, excel_path, biz_no, sheet_name, row, col, raw)
+            return ApiResponse(
+                success=True,
+                message="업체 조회가 완료되었습니다.",
+                data={"found": True, **lookup_payload},
+            )
+        finally:
+            workbook.close()
 
     return ApiResponse(
         success=True,
@@ -1659,14 +1679,21 @@ async def save_excel_edit_data(
                 updated["credit"] = results
                 if not company_name or not region_name:
                     for db_type, path in db_paths.items():
-                        position = _find_company_position(path, biz_no)
-                        if not position:
+                        if not path or not Path(path).exists():
                             continue
-                        sheet_name, row, col = position
-                        raw = _extract_company_data(path, sheet_name, row, col)
-                        company_name = company_name or str(raw.get("상호") or "")
-                        region_name = region_name or str(raw.get("지역") or "")
-                        break
+                        workbook = load_workbook(filename=path, data_only=False)
+                        try:
+                            position = _find_company_position_in_workbook(workbook, biz_no)
+                            if not position:
+                                continue
+                            sheet_name, row, col = position
+                            raw = _extract_company_data_from_workbook(workbook, sheet_name, row, col)
+                            company_name = company_name or str(raw.get("상호") or "")
+                            region_name = region_name or str(raw.get("지역") or "")
+                            if company_name and region_name:
+                                break
+                        finally:
+                            workbook.close()
                 mark_timing("company_lookup")
         else:
             db_key = FILE_TYPE_TO_DB_KEY.get(request.fileType)
