@@ -510,7 +510,12 @@ def _build_not_found_version(file_type: str, biz_no: str) -> str:
     return f"nf|{file_type}|{_normalize_biz_no(biz_no)}"
 
 
-def _validate_expected_version_for_save(request: SaveRequest, db_paths: dict[str, str], expected_version: str) -> None:
+def _validate_expected_version_for_save(
+    request: SaveRequest,
+    db_paths: dict[str, str],
+    expected_version: str,
+    timing_logger: Callable[[str, str, float, str], None] | None = None,
+) -> None:
     token = str(expected_version or "").strip()
     if not token:
         return
@@ -535,14 +540,25 @@ def _validate_expected_version_for_save(request: SaveRequest, db_paths: dict[str
             for _, path in db_paths.items():
                 if not path or not Path(path).exists():
                     continue
-                if _find_company_position(path, request.bizNo):
+                stage_started_at = time.perf_counter()
+                position = _find_company_position(path, request.bizNo)
+                elapsed = time.perf_counter() - stage_started_at
+                if timing_logger:
+                    timing_logger("신용평가", "validate_find", elapsed, "found" if position else "not_found")
+                if position:
                     raise HTTPException(status_code=409, detail="다른 사용자가 업체를 추가했습니다. 다시 조회 후 저장하세요.")
             return
 
         db_key = FILE_TYPE_TO_DB_KEY.get(request.fileType)
         target_path = db_paths.get(db_key, "") if db_key else ""
-        if target_path and Path(target_path).exists() and _find_company_position(target_path, request.bizNo):
-            raise HTTPException(status_code=409, detail="다른 사용자가 업체를 추가했습니다. 다시 조회 후 저장하세요.")
+        if target_path and Path(target_path).exists():
+            stage_started_at = time.perf_counter()
+            position = _find_company_position(target_path, request.bizNo)
+            elapsed = time.perf_counter() - stage_started_at
+            if timing_logger:
+                timing_logger(db_key or request.fileType, "validate_find", elapsed, "found" if position else "not_found")
+            if position:
+                raise HTTPException(status_code=409, detail="다른 사용자가 업체를 추가했습니다. 다시 조회 후 저장하세요.")
         return
 
     if token_kind != "found" or len(parts) < 4:
@@ -559,12 +575,20 @@ def _validate_expected_version_for_save(request: SaveRequest, db_paths: dict[str
     if not excel_path or not Path(excel_path).exists():
         raise HTTPException(status_code=409, detail="조회한 원본 DB가 변경되었습니다. 다시 조회 후 저장하세요.")
 
+    stage_started_at = time.perf_counter()
     position = _find_company_position(excel_path, request.bizNo)
+    elapsed = time.perf_counter() - stage_started_at
+    if timing_logger:
+        timing_logger(db_type, "validate_find", elapsed, "found" if position else "not_found")
     if not position:
         raise HTTPException(status_code=409, detail="조회한 업체 데이터가 변경되었습니다. 다시 조회 후 저장하세요.")
 
     sheet_name, row, col = position
+    stage_started_at = time.perf_counter()
     raw = _extract_company_data(excel_path, sheet_name, row, col)
+    elapsed = time.perf_counter() - stage_started_at
+    if timing_logger:
+        timing_logger(db_type, "validate_extract", elapsed, "ok")
     current_fp = _build_company_fingerprint(db_type, excel_path, sheet_name, row, col, raw)
     if current_fp != expected_fp:
         raise HTTPException(status_code=409, detail="다른 사용자가 먼저 수정했습니다. 다시 조회 후 저장하세요.")
@@ -1470,15 +1494,32 @@ def company_lookup(payload: LookupRequest) -> ApiResponse:
         target_path = db_paths.get(target_db_type, "")
         candidates = [(target_db_type, target_path)] if target_path else []
 
+    def log_lookup_stage(db_type: str, stage: str, elapsed: float, outcome: str) -> None:
+        print(
+            "[excel-edit:lookup] "
+            f"dbType={db_type} stage={stage} outcome={outcome} "
+            f"elapsed={_format_elapsed_seconds(elapsed)} "
+            f"bizNo={_format_biz_no(biz_no)}"
+        )
+
     for db_type, excel_path in candidates:
         if not excel_path or not Path(excel_path).exists():
             continue
+        stage_started_at = time.perf_counter()
         position = _find_company_position(excel_path, biz_no)
+        elapsed = time.perf_counter() - stage_started_at
+        log_lookup_stage(db_type, "find", elapsed, "found" if position else "not_found")
         if not position:
             continue
         sheet_name, row, col = position
+        stage_started_at = time.perf_counter()
         raw = _extract_company_data(excel_path, sheet_name, row, col)
+        elapsed = time.perf_counter() - stage_started_at
+        log_lookup_stage(db_type, "extract", elapsed, "ok")
+        stage_started_at = time.perf_counter()
         raw_cells = _extract_company_cells(excel_path, sheet_name, row, col)
+        elapsed = time.perf_counter() - stage_started_at
+        log_lookup_stage(db_type, "cells", elapsed, "ok")
         lookup_payload = _build_lookup_payload(raw, db_type, excel_path, raw_cells=raw_cells)
         lookup_payload["version"] = _build_found_version(db_type, excel_path, biz_no, sheet_name, row, col, raw)
         return ApiResponse(
@@ -1608,7 +1649,7 @@ async def save_excel_edit_data(
         if request.fileType == "신용평가":
             target_paths = [path for _, path in db_paths.items() if path and Path(path).exists()]
             with _exclusive_excel_locks(target_paths):
-                _validate_expected_version_for_save(request, db_paths, expected_version)
+                _validate_expected_version_for_save(request, db_paths, expected_version, timing_logger=log_credit_stage)
                 mark_timing("validate")
                 credit_text = _build_credit_text(request.data)
                 results = _update_credit_data(db_paths, biz_no, credit_text, timing_logger=log_credit_stage)
