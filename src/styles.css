@@ -4617,7 +4617,7 @@ button.primary:hover { background: var(--accent-2); }
   border-color: #9ac2ff;
 }
 
-.scan-archive-list button span:last-child {
+.scan-archive-file-meta {
   color: #64748b;
   font-size: 12px;
   white-space: nowrap;
@@ -4765,6 +4765,10 @@ button.primary:hover { background: var(--accent-2); }
 
 .scan-archive-file-name.fire {
   color: #dc2626;
+}
+
+.scan-archive-file-name.credit {
+  color: #16a34a;
 }
 
 .scan-archive-preview-frame {

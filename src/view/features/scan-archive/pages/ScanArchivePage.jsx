@@ -222,6 +222,7 @@ export default function ScanArchivePage() {
     if (fileName.includes('전기경영상태')) return 'electric';
     if (fileName.includes('통신경영상태')) return 'communication';
     if (fileName.includes('소방경영상태')) return 'fire';
+    if (fileName.includes('신용평가')) return 'credit';
     return 'default';
   };
 
@@ -253,7 +254,7 @@ export default function ScanArchivePage() {
               {folders.map((folder) => (
                 <button key={folder.path} type="button" onClick={() => loadDirectory(folder.path)}>
                   <span>📁 {folder.name}</span>
-                  <span>{formatDate(folder.updatedAt)}</span>
+                  <span className="scan-archive-file-meta">{formatDate(folder.updatedAt)}</span>
                 </button>
               ))}
               {folders.length === 0 && !loading && <p className="muted">하위 폴더가 없습니다.</p>}
@@ -341,7 +342,7 @@ export default function ScanArchivePage() {
                     <span className={`scan-archive-file-name ${fileTypeClassName(file.name)}`}>📄 {file.name}</span>
                     {hasSearchKeyword && <span className="scan-archive-file-path">{file.dirPath || '루트 폴더'}</span>}
                   </span>
-                  {!hasSearchKeyword && <span>{formatBytes(file.size)}</span>}
+                  {!hasSearchKeyword && <span className="scan-archive-file-meta">{formatBytes(file.size)}</span>}
                 </button>
               ))}
               {visibleFiles.length === 0 && !loading && (
