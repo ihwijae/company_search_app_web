@@ -71,6 +71,24 @@ function buildCreditText(form) {
   return `${grade}\n(${start || '?'}~${end || '?'})`;
 }
 
+function getQualityEvalReferenceDateText(now = new Date()) {
+  const currentYear = now.getFullYear();
+  const referenceYear = (now.getMonth() > 4 || (now.getMonth() === 4 && now.getDate() >= 1))
+    ? currentYear
+    : currentYear - 1;
+  return `${String(referenceYear).slice(-2)}.05.01`;
+}
+
+function stripQualityEvalReferenceSuffix(value = '') {
+  return String(value).replace(/\s*\(\d{2}\.\d{2}\.\d{2}\)\s*$/, '').trim();
+}
+
+function formatQualityEvalValue(value = '') {
+  const base = stripQualityEvalReferenceSuffix(value);
+  if (!base) return '';
+  return `${base} (${getQualityEvalReferenceDateText()})`;
+}
+
 function formatBizNoInput(value = '') {
   const digits = String(value).replace(/\D/g, '').slice(0, 10);
   if (digits.length <= 3) return digits;
@@ -186,6 +204,10 @@ export default function ExcelWebEditPage() {
       if (!value) return;
       if (['sipyung', 'perf3y', 'perf5y'].includes(key)) {
         next[key] = formatAmountPreviewValue(value);
+        return;
+      }
+      if (key === 'qualityEval') {
+        next[key] = formatQualityEvalValue(value);
         return;
       }
       next[key] = value;
@@ -453,6 +475,8 @@ export default function ExcelWebEditPage() {
       return;
     } else if (['creditStartDate', 'creditEndDate', 'bizYears'].includes(name)) {
       value = formatDotDateInput(value);
+    } else if (name === 'qualityEval') {
+      value = stripQualityEvalReferenceSuffix(value);
     }
 
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -713,6 +737,7 @@ export default function ExcelWebEditPage() {
           companyName,
           region,
           creditText: finalCreditText,
+          qualityEval: formatQualityEvalValue(form.qualityEval),
         },
       };
       const files = selectedFile?.file && !selectedFile?.uploadId ? [selectedFile.file] : [];
@@ -1218,7 +1243,7 @@ export default function ExcelWebEditPage() {
                   <label>여성기업<input name="womenOwned" value={form.womenOwned} onChange={handleInput} /></label>
                   <label>중소기업<input name="smallBusiness" value={form.smallBusiness} onChange={handleInput} /></label>
                   <label>일자리창출실적<input name="jobCreation" value={form.jobCreation} onChange={handleInput} /></label>
-                  <label>시공품질평가<input name="qualityEval" value={form.qualityEval} onChange={handleInput} /></label>
+                  <label>시공품질평가<input name="qualityEval" value={form.qualityEval} onChange={handleInput} placeholder={`없음 또는 점수만 입력 (저장 시 ${getQualityEvalReferenceDateText()} 자동추가)`} /></label>
                   <label className="full-row">비고<input name="note" value={form.note} onChange={handleInput} /></label>
                 </div>
 

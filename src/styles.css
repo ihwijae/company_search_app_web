@@ -1854,14 +1854,12 @@ button.primary:hover { background: var(--accent-2); }
   position: fixed;
   inset: 0;
   background: rgba(15, 23, 42, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: 1100;
   padding: 24px;
 }
 
 .agreement-load-modal {
+  position: absolute;
   background: #fff;
   border-radius: 18px;
   box-shadow: 0 30px 80px rgba(15, 23, 42, 0.35);
@@ -1878,10 +1876,13 @@ button.primary:hover { background: var(--accent-2); }
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
+  cursor: grab;
+  user-select: none;
 }
 
 .agreement-load-header h3 { margin: 0; font-size: 20px; color: #0f172a; }
 .agreement-load-header p { margin: 4px 0 0; font-size: 13px; color: #475569; }
+.agreement-load-header:active { cursor: grabbing; }
 
 .agreement-load-close {
   border: none;
@@ -1890,8 +1891,13 @@ button.primary:hover { background: var(--accent-2); }
   cursor: pointer;
   line-height: 1;
   color: #94a3b8;
+  user-select: none;
 }
 .agreement-load-close:hover { color: #334155; }
+
+body.agreement-load-dragging {
+  user-select: none;
+}
 
 .agreement-load-root {
   display: flex;

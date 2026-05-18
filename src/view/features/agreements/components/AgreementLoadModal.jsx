@@ -20,12 +20,31 @@ export default function AgreementLoadModal({
   formatAmount,
 }) {
   const pageSize = 5;
+  const modalRef = React.useRef(null);
+  const dragStateRef = React.useRef(null);
   const [currentPage, setCurrentPage] = React.useState(1);
+  const [position, setPosition] = React.useState({ x: 24, y: 24 });
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
   const pagedItems = React.useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return items.slice(start, start + pageSize);
   }, [currentPage, items]);
+
+  const clampPosition = React.useCallback((nextX, nextY) => {
+    const modal = modalRef.current;
+    if (!modal || typeof window === 'undefined') {
+      return { x: Math.max(12, nextX), y: Math.max(12, nextY) };
+    }
+    const padding = window.innerWidth <= 768 ? 12 : 24;
+    const width = modal.offsetWidth || 0;
+    const height = modal.offsetHeight || 0;
+    const maxX = Math.max(padding, window.innerWidth - width - padding);
+    const maxY = Math.max(padding, window.innerHeight - height - padding);
+    return {
+      x: Math.min(Math.max(padding, nextX), maxX),
+      y: Math.min(Math.max(padding, nextY), maxY),
+    };
+  }, []);
 
   React.useEffect(() => {
     if (!open) return;
@@ -36,6 +55,53 @@ export default function AgreementLoadModal({
     if (!open) return;
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages, open]);
+
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const frameId = window.requestAnimationFrame(() => {
+      const modal = modalRef.current;
+      if (!modal) return;
+      const padding = window.innerWidth <= 768 ? 12 : 24;
+      const centeredX = Math.max(padding, Math.round((window.innerWidth - modal.offsetWidth) / 2));
+      const centeredY = Math.max(padding, Math.round((window.innerHeight - modal.offsetHeight) / 2));
+      setPosition(clampPosition(centeredX, centeredY));
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [open, clampPosition]);
+
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const handleResize = () => {
+      setPosition((prev) => clampPosition(prev.x, prev.y));
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [open, clampPosition]);
+
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const handlePointerMove = (event) => {
+      const dragState = dragStateRef.current;
+      if (!dragState) return;
+      setPosition(clampPosition(
+        event.clientX - dragState.offsetX,
+        event.clientY - dragState.offsetY,
+      ));
+    };
+    const handlePointerUp = () => {
+      if (!dragStateRef.current) return;
+      dragStateRef.current = null;
+      document.body.classList.remove('agreement-load-dragging');
+    };
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      document.body.classList.remove('agreement-load-dragging');
+      dragStateRef.current = null;
+    };
+  }, [open, clampPosition]);
 
   if (!open) return null;
 
@@ -55,10 +121,28 @@ export default function AgreementLoadModal({
     return 'agreement-badge';
   };
 
+  const handleDragStart = (event) => {
+    if (event.button !== 0) return;
+    if (event.target instanceof Element && event.target.closest('button, input, select, textarea, a')) return;
+    const modal = modalRef.current;
+    if (!modal) return;
+    const rect = modal.getBoundingClientRect();
+    dragStateRef.current = {
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+    };
+    document.body.classList.add('agreement-load-dragging');
+  };
+
   return (
     <div className="agreement-load-overlay" onClick={onClose}>
-      <div className="agreement-load-modal" onClick={(event) => event.stopPropagation()}>
-        <div className="agreement-load-header">
+      <div
+        ref={modalRef}
+        className="agreement-load-modal"
+        style={{ left: `${position.x}px`, top: `${position.y}px` }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="agreement-load-header" onPointerDown={handleDragStart}>
           <div>
             <h3>협정 불러오기</h3>
             <p>필터를 선택해서 원하는 협정을 찾으세요.</p>

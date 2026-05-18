@@ -246,6 +246,19 @@ def _safe_filename(name: str) -> str:
     return cleaned or f"uploaded_{_now_stamp()}"
 
 
+def _get_quality_eval_reference_date_text(now: datetime | None = None) -> str:
+    current = now or datetime.now()
+    reference_year = current.year if (current.month, current.day) >= (5, 1) else current.year - 1
+    return f"{reference_year % 100:02d}.05.01"
+
+
+def _normalize_quality_eval_value(raw_value: str) -> str:
+    base_value = re.sub(r"\s*\(\d{2}\.\d{2}\.\d{2}\)\s*$", "", str(raw_value or "")).strip()
+    if not base_value:
+        return ""
+    return f"{base_value} ({_get_quality_eval_reference_date_text()})"
+
+
 def _resolve_temp_upload_root() -> Path:
     root = os.getenv("EXCEL_EDIT_TEMP_UPLOAD_ROOT", "").strip()
     return Path(root).resolve() if root else (DEFAULT_STORAGE_ROOT / "temp-uploads").resolve()
@@ -1524,8 +1537,11 @@ async def save_excel_edit_data(
     expected_version = str(request.expectedVersion or "").strip()
 
     updated: dict = {}
-    company_name = str(request.data.get("companyName") or "")
-    region_name = str(request.data.get("region") or "")
+    request_data = dict(request.data or {})
+    if request.fileType != "신용평가":
+        request_data["qualityEval"] = _normalize_quality_eval_value(request_data.get("qualityEval", ""))
+    company_name = str(request_data.get("companyName") or "")
+    region_name = str(request_data.get("region") or "")
     temp_files = [item for item in request.tempFiles if isinstance(item, dict) and item.get("uploadId")]
     has_archive_files = bool(files) or bool(temp_files)
 
@@ -1584,7 +1600,7 @@ async def save_excel_edit_data(
             target_paths = [path for _, path in db_paths.items() if path and Path(path).exists()]
             with _exclusive_excel_locks(target_paths):
                 _validate_expected_version_for_save(request, db_paths, expected_version)
-                credit_text = _build_credit_text(request.data)
+                credit_text = _build_credit_text(request_data)
                 results = _update_credit_data(db_paths, biz_no, credit_text)
                 if not any(item.get("updated") for item in results):
                     raise HTTPException(status_code=404, detail="신용평가 갱신 대상 업체를 찾지 못했습니다.")
@@ -1617,7 +1633,7 @@ async def save_excel_edit_data(
                 _validate_expected_version_for_save(request, db_paths, expected_version)
                 position = _find_company_position(excel_path, biz_no)
                 if position:
-                    update_result = _update_management_data_at_position(excel_path, request.data, db_key, position)
+                    update_result = _update_management_data_at_position(excel_path, request_data, db_key, position)
                     updated_labels = update_result["updatedLabels"]
                     updated["management"] = {
                         "dbType": db_key,
@@ -1629,7 +1645,7 @@ async def save_excel_edit_data(
                         company_name = company_name or str(update_result.get("companyName") or "")
                         region_name = region_name or str(update_result.get("region") or "")
                 else:
-                    added = _add_new_company_data(excel_path, request.data, db_key)
+                    added = _add_new_company_data(excel_path, request_data, db_key)
                     company_name = company_name or str(added.get("companyName") or "")
                     sheet_name = str(added.get("sheetName") or "")
                     region_name = region_name or sheet_name
