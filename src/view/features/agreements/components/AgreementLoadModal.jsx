@@ -22,6 +22,7 @@ export default function AgreementLoadModal({
   const pageSize = 5;
   const modalRef = React.useRef(null);
   const dragStateRef = React.useRef(null);
+  const userMovedRef = React.useRef(false);
   const [currentPage, setCurrentPage] = React.useState(1);
   const [position, setPosition] = React.useState({ x: 24, y: 24 });
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
@@ -58,6 +59,7 @@ export default function AgreementLoadModal({
 
   React.useEffect(() => {
     if (!open) return undefined;
+    userMovedRef.current = false;
     const frameId = window.requestAnimationFrame(() => {
       const modal = modalRef.current;
       if (!modal) return;
@@ -68,6 +70,19 @@ export default function AgreementLoadModal({
     });
     return () => window.cancelAnimationFrame(frameId);
   }, [open, clampPosition]);
+
+  React.useEffect(() => {
+    if (!open || userMovedRef.current) return undefined;
+    const frameId = window.requestAnimationFrame(() => {
+      const modal = modalRef.current;
+      if (!modal) return;
+      const padding = window.innerWidth <= 768 ? 12 : 24;
+      const centeredX = Math.max(padding, Math.round((window.innerWidth - modal.offsetWidth) / 2));
+      const centeredY = Math.max(padding, Math.round((window.innerHeight - modal.offsetHeight) / 2));
+      setPosition(clampPosition(centeredX, centeredY));
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [open, busy, error, items.length, currentPage, totalPages, clampPosition]);
 
   React.useEffect(() => {
     if (!open) return undefined;
@@ -131,6 +146,7 @@ export default function AgreementLoadModal({
       offsetX: event.clientX - rect.left,
       offsetY: event.clientY - rect.top,
     };
+    userMovedRef.current = true;
     document.body.classList.add('agreement-load-dragging');
   };
 

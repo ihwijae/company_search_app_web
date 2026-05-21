@@ -1860,11 +1860,12 @@ button.primary:hover { background: var(--accent-2); }
 
 .agreement-load-modal {
   position: absolute;
+  box-sizing: border-box;
   background: #fff;
   border-radius: 18px;
   box-shadow: 0 30px 80px rgba(15, 23, 42, 0.35);
   width: min(1180px, 97vw);
-  max-height: 94vh;
+  max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -2189,6 +2190,7 @@ body.agreement-load-dragging {
   .excel-board-search-box { width: 100%; }
   .excel-board-search-box .input { min-width: 0; flex: 1; }
   .excel-board-search-overlay { padding-top: 80px; }
+  .agreement-load-modal { max-height: calc(100vh - 24px); }
 }
 
 .excel-btn {
