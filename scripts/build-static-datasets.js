@@ -1,6 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const ExcelJS = require('exceljs');
 const XLSX = require('xlsx');
 const { sanitizeXlsx } = require('../utils/sanitizeXlsx');
 
@@ -116,7 +115,23 @@ const buildDatasetMeta = (filePath, type) => {
   };
 };
 
+let excelJsModule;
+let excelJsLoadError = null;
+
+const getExcelJs = () => {
+  if (excelJsModule) return excelJsModule;
+  if (excelJsLoadError) throw excelJsLoadError;
+  try {
+    excelJsModule = require('exceljs');
+    return excelJsModule;
+  } catch (error) {
+    excelJsLoadError = error;
+    throw error;
+  }
+};
+
 const extractCompaniesFromWorkbook = async (filePath, type, meta) => {
+  const ExcelJS = getExcelJs();
   const workbook = new ExcelJS.Workbook();
   const { sanitizedPath } = sanitizeXlsx(filePath);
   await workbook.xlsx.readFile(sanitizedPath || filePath);
@@ -298,7 +313,10 @@ async function main() {
     try {
       dataset = await extractCompaniesFromWorkbook(filePath, type, meta);
     } catch (error) {
-      console.warn(`[build-static-datasets] exceljs parse failed for ${meta.fileName}, fallback to xlsx:`, error.message || error);
+      const reason = error && error.code === 'MODULE_NOT_FOUND' && /exceljs/.test(error.message || '')
+        ? 'exceljs module unavailable'
+        : 'exceljs parse failed';
+      console.warn(`[build-static-datasets] ${reason} for ${meta.fileName}, fallback to xlsx:`, error.message || error);
       dataset = extractCompaniesWithXlsxFallback(filePath, type, meta);
     }
     fs.writeFileSync(path.join(OUTPUT_DIR, `${type}.json`), JSON.stringify(dataset, null, 2), 'utf8');
