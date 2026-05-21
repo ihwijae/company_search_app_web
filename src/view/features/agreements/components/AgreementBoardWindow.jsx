@@ -358,6 +358,32 @@ const normalizeLhRangeKey = (rangeKey) => {
   return normalized;
 };
 
+const resolveLhQualityPoints = (qualityScore, rangeKey) => {
+  const score = Number(qualityScore);
+  if (!Number.isFinite(score)) return null;
+  const normalizedRangeKey = normalizeLhRangeKey(rangeKey);
+  if (normalizedRangeKey === LH_100_TO_300_KEY) {
+    if (score >= 94) return 4;
+    if (score >= 91) return 3.9;
+    if (score >= 88) return 3.8;
+    if (score >= 85) return 3.7;
+    return 3.6;
+  }
+  if (normalizedRangeKey === LH_50_TO_100_KEY) {
+    if (score >= 90) return 5;
+    if (score >= 88) return 3;
+    if (score >= 85) return 2;
+    if (score >= 83) return 1.5;
+    if (score >= 80) return 1;
+    return 0;
+  }
+  if (score >= 88) return 3;
+  if (score >= 85) return 2;
+  if (score >= 83) return 1.5;
+  if (score >= 80) return 1;
+  return 0;
+};
+
 const parseNumeric = (value) => {
   if (value === null || value === undefined) return null;
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
@@ -2016,28 +2042,7 @@ export default function AgreementBoardWindow({
   }, [effectiveSelectedRangeKey, isLHOwner, selectedRangeOption?.label]);
 
   const resolveQualityPoints = React.useCallback((qualityTotal, rangeKey) => {
-    if (!Number.isFinite(qualityTotal)) return null;
-    const normalizedRangeKey = normalizeLhRangeKey(rangeKey);
-    if (normalizedRangeKey === LH_100_TO_300_KEY) {
-      if (qualityTotal >= 94) return 4;
-      if (qualityTotal >= 91) return 3.9;
-      if (qualityTotal >= 88) return 3.8;
-      if (qualityTotal >= 85) return 3.7;
-      return 3.6;
-    }
-    if (normalizedRangeKey === LH_50_TO_100_KEY) {
-      if (qualityTotal >= 90) return 5;
-      if (qualityTotal >= 88) return 3;
-      if (qualityTotal >= 85) return 2;
-      if (qualityTotal >= 83) return 1.5;
-      if (qualityTotal >= 80) return 1;
-      return 0;
-    }
-    if (qualityTotal >= 88) return 3;
-    if (qualityTotal >= 85) return 2;
-    if (qualityTotal >= 83) return 1.5;
-    if (qualityTotal >= 80) return 1;
-    return 0;
+    return resolveLhQualityPoints(qualityTotal, rangeKey);
   }, []);
 
   const resolveQualityPointsMax = React.useCallback((rangeKey) => (
@@ -5616,7 +5621,7 @@ export default function AgreementBoardWindow({
     const emphasizeQuality = effectiveSelectedRangeKey === LH_100_TO_300_KEY;
     const highlightQualityStyle = { backgroundColor: '#fff3b0' };
     const qualityGuide = (effectiveSelectedRangeKey === LH_100_TO_300_KEY)
-      ? '94점이상:4점/91점이상:3.5점/88점이상:3점/85점이상:2.5점/85점미만:2점'
+      ? '94점이상:4점/91점이상:3.9점/88점이상:3.8점/85점이상:3.7점/85점미만:3.6점'
       : (effectiveSelectedRangeKey === LH_50_TO_100_KEY)
       ? '90점이상:5점/88점이상:3점/85점이상:2점/83점이상:1.5점/80점이상:1점'
       : '품질 88점이상:3점/85점이상:2점/83점이상:1.5점/80점이상:1점';
@@ -5686,7 +5691,15 @@ export default function AgreementBoardWindow({
                       const shown = meta.qualityInput !== undefined && meta.qualityInput !== null && meta.qualityInput !== ''
                         ? String(meta.qualityInput)
                         : (meta.qualityScore != null ? formatScore(meta.qualityScore, 2) : '');
-                      return shown || '-';
+                      if (!shown) return '-';
+                      if (!emphasizeQuality) return shown;
+                      const converted = resolveLhQualityPoints(qualityScoreValue, effectiveSelectedRangeKey);
+                      return (
+                        <span className="quality-score-stack">
+                          <span>{shown}</span>
+                          <span className="quality-score-converted">{converted != null ? formatScore(converted, 1) : '-'}</span>
+                        </span>
+                      );
                     })()}
                   </button>
                 )
@@ -5714,7 +5727,7 @@ export default function AgreementBoardWindow({
       ...meta,
       overLimit: participantLimitExceeded && !meta.empty && meta.slotIndex >= safeParticipantLimit,
     }));
-    const qualityTotal = isLHOwner
+    const qualityTotalRaw = isLHOwner
       ? slotMetasWithLimit.reduce((acc, meta) => {
         if (meta.empty || isSplitAssignedSlot(meta.slotIndex)) return acc;
         const share = toNumber(meta.shareForCalc);
@@ -5723,6 +5736,17 @@ export default function AgreementBoardWindow({
         return acc + (score * (share / 100));
       }, 0)
       : null;
+    const qualityWeightedPoints = isLHOwner && isLh100To300
+      ? slotMetasWithLimit.reduce((acc, meta) => {
+        if (meta.empty || isSplitAssignedSlot(meta.slotIndex)) return acc;
+        const share = toNumber(meta.shareForCalc);
+        const score = toNumber(meta.qualityScore);
+        const points = resolveLhQualityPoints(score, effectiveSelectedRangeKey);
+        if (share == null || points == null) return acc;
+        return acc + (points * (share / 100));
+      }, 0)
+      : null;
+    const qualityTotal = isLh100To300 ? qualityWeightedPoints : qualityTotalRaw;
     const dutyRateValue = parseNumeric(regionDutyRate);
     const dutyShareTotal = slotMetasWithLimit.reduce((acc, meta) => {
       if (meta.empty || !meta.isDutyRegion) return acc;
@@ -5739,7 +5763,9 @@ export default function AgreementBoardWindow({
     const baseTotalMax = credibilityEnabled
       ? summaryInfo?.totalMaxWithCred
       : summaryInfo?.totalMaxBase;
-    const qualityPoints = isLHOwner ? resolveQualityPoints(qualityTotal, effectiveSelectedRangeKey) : null;
+    const qualityPoints = isLHOwner
+      ? (isLh100To300 ? qualityWeightedPoints : resolveQualityPoints(qualityTotalRaw, effectiveSelectedRangeKey))
+      : null;
     const cappedPerformanceScoreForTotal = toNumber(summaryInfo?.performanceScore);
     const constructionExperienceScore = showConstructionExperience
       ? resolveConstructionExperienceScore(cappedPerformanceScoreForTotal, qualityPoints)

@@ -6,6 +6,16 @@ import {
 const LH_100_TO_300_KEY = 'lh-100to300';
 const LH_QUALITY_DEFAULT_OVER_100B = 88;
 
+function resolveLhSimpleQualityPoints(qualityScore) {
+  const score = Number(qualityScore);
+  if (!Number.isFinite(score)) return null;
+  if (score >= 94) return 4;
+  if (score >= 91) return 3.9;
+  if (score >= 88) return 3.8;
+  if (score >= 85) return 3.7;
+  return 3.6;
+}
+
 function buildExportDisplayName({
   companyName = '',
   managerName = '',
@@ -191,11 +201,17 @@ export function buildAgreementExportPayload({
         const scoreValue = Number(member.qualityScore);
         if (!Number.isFinite(shareValue) || !Number.isFinite(scoreValue)) return;
         if (shareValue <= 0) return;
-        qualityTotal += scoreValue * (shareValue / 100);
+        const qualityValue = isLh100To300
+          ? resolveLhSimpleQualityPoints(scoreValue)
+          : scoreValue;
+        if (!Number.isFinite(Number(qualityValue))) return;
+        qualityTotal += Number(qualityValue) * (shareValue / 100);
         hasQuality = true;
       });
       if (hasQuality) {
-        qualityPoints = resolveQualityPoints(qualityTotal, selectedRangeKey);
+        qualityPoints = isLh100To300
+          ? qualityTotal
+          : resolveQualityPoints(qualityTotal, selectedRangeKey);
       }
     }
 
