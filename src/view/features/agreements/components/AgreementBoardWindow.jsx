@@ -1452,12 +1452,13 @@ export default function AgreementBoardWindow({
       if (isLHOwner && kind === 'performance') return 2;
       if (isLHOwner && kind === 'credibility') return 2;
       if (isLHOwner && kind === 'total') return 2;
+      if (isLh100To300 && kind === 'quality') return 3;
       if (kind === 'management') return 2;
       if (kind === 'netCost') return 2;
       if (kind === 'quality') return 2;
       return 3;
     },
-    [isKrailUnder50, isLHOwner, isMois50To100, isMoisUnderOr30To50, isPpsUnder50, technicianEnabled],
+    [isKrailUnder50, isLHOwner, isLh100To300, isMois50To100, isMoisUnderOr30To50, isPpsUnder50, technicianEnabled],
   );
   const ownerDisplayLabel = selectedGroup?.label || '발주처 미지정';
   const rangeDisplayLabel = selectedRangeOption?.label || '금액대 선택';
@@ -5637,8 +5638,9 @@ export default function AgreementBoardWindow({
       if (share == null || score == null) return acc;
       return acc + (score * (share / 100));
     }, 0);
+    const qualityTotalDigits = emphasizeQuality ? 3 : 2;
     const qualityTotalDisplay = slotMetas.some((meta) => !meta.empty)
-      ? formatScore(resolvedQualityTotal, 2)
+      ? formatScore(resolvedQualityTotal, qualityTotalDigits)
       : '-';
     return (
       <tr key={`${group.id}-quality`} className="excel-board-row quality-row">
@@ -5736,7 +5738,7 @@ export default function AgreementBoardWindow({
         return acc + (score * (share / 100));
       }, 0)
       : null;
-    const qualityWeightedPoints = isLHOwner && isLh100To300
+    const qualityWeightedPointsRaw = isLHOwner && isLh100To300
       ? slotMetasWithLimit.reduce((acc, meta) => {
         if (meta.empty || isSplitAssignedSlot(meta.slotIndex)) return acc;
         const share = toNumber(meta.shareForCalc);
@@ -5746,6 +5748,7 @@ export default function AgreementBoardWindow({
         return acc + (points * (share / 100));
       }, 0)
       : null;
+    const qualityWeightedPoints = isLh100To300 ? roundTo(qualityWeightedPointsRaw, 3) : null;
     const qualityTotal = isLh100To300 ? qualityWeightedPoints : qualityTotalRaw;
     const dutyRateValue = parseNumeric(regionDutyRate);
     const dutyShareTotal = slotMetasWithLimit.reduce((acc, meta) => {

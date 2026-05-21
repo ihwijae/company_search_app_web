@@ -16,6 +16,13 @@ function resolveLhSimpleQualityPoints(qualityScore) {
   return 3.6;
 }
 
+function roundTo(value, digits = 3) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const factor = 10 ** digits;
+  return Math.round(numeric * factor) / factor;
+}
+
 function buildExportDisplayName({
   companyName = '',
   managerName = '',
@@ -210,7 +217,7 @@ export function buildAgreementExportPayload({
       });
       if (hasQuality) {
         qualityPoints = isLh100To300
-          ? qualityTotal
+          ? roundTo(qualityTotal, 3)
           : resolveQualityPoints(qualityTotal, selectedRangeKey);
       }
     }
