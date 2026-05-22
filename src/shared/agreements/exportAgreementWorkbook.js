@@ -379,13 +379,19 @@ async function exportAgreementExcel({
     .map((part) => (part ? String(part).trim() : ''))
     .filter(Boolean)
     .join(' ');
-  const noticeCell = headerCells.noticeTitle || 'M1';
-  worksheet.getCell(noticeCell).value = compositeTitle;
+  const noticeCell = headerCells.noticeTitle || (isLh100To300 ? null : 'M1');
+  if (noticeCell) {
+    worksheet.getCell(noticeCell).value = compositeTitle;
+  }
   const deadlineText = header.bidDeadline || header.rawBidDeadline || '';
-  const deadlineCell = headerCells.bidDeadline || 'P2';
-  const dutyCell = headerCells.dutySummary || 'W2';
-  worksheet.getCell(deadlineCell).value = deadlineText ? String(deadlineText) : '';
-  worksheet.getCell(dutyCell).value = header.dutySummary || '';
+  const deadlineCell = headerCells.bidDeadline || (isLh100To300 ? null : 'P2');
+  const dutyCell = headerCells.dutySummary || (isLh100To300 ? null : 'W2');
+  if (deadlineCell) {
+    worksheet.getCell(deadlineCell).value = deadlineText ? String(deadlineText) : '';
+  }
+  if (dutyCell) {
+    worksheet.getCell(dutyCell).value = header.dutySummary || '';
+  }
   if (netCostPenaltyNoticeCell) {
     const noticeText = header.netCostPenaltyNotice ? '올라탈수록 점수 깎임' : '';
     const noticeCell = worksheet.getCell(netCostPenaltyNoticeCell);
@@ -446,10 +452,10 @@ async function exportAgreementExcel({
       }
     }
     const indexValue = Number(group.index);
-    if (Number.isFinite(indexValue)) {
+    if (!isLh100To300 && Number.isFinite(indexValue)) {
       worksheet.getCell(`A${rowIndex}`).value = indexValue;
     }
-    if (approvalColumn !== 'B') {
+    if (!isLh100To300 && approvalColumn !== 'B') {
       worksheet.getCell(`B${rowIndex}`).value = '';
     }
 
@@ -662,7 +668,7 @@ async function exportAgreementExcel({
     }
   });
 
-  if (slotCount > 0 && Array.isArray(candidates) && candidates.length > 0) {
+  if (!isLh100To300 && slotCount > 0 && Array.isArray(candidates) && candidates.length > 0) {
     const candidateRowStep = rowStep > 0 ? rowStep : 1;
     const candidateStartRow = groups.length > 0
       ? (config.startRow + ((groups.length - 1) * rowStep) + (3 * candidateRowStep))

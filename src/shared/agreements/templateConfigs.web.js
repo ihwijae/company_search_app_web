@@ -202,12 +202,8 @@ export const AGREEMENT_TEMPLATE_CONFIGS_WEB = {
       estimatedAmount: 'E1',
       baseAmount: 'E2',
       ratioBaseAmount: 'H1',
-      noticeTitle: 'O1',
-      bidDeadline: 'P2',
-      dutySummary: 'U2',
     },
-    approvalColumn: 'B',
-    summaryColumns: { credibility: 'AF', netCostBonus: 'AG' },
+    summaryColumns: { credibility: 'AF' },
     regionFill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' }, bgColor: { indexed: 64 } },
   },
   'krail-under50': {
