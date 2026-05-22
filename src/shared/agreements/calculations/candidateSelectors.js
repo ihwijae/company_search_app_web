@@ -22,7 +22,6 @@ export function buildCandidateDrawerEntries({
   clampScore,
   hasRecentAwardHistory = () => false,
   noticeDate = '',
-  possibleShareFormatMode = 'round',
 }) {
   const perSlotMax = isMois30To50 ? managementScoreMax : managementMax;
 
@@ -46,8 +45,7 @@ export function buildCandidateDrawerEntries({
       const managementScore = clampScore(toNumber(getCandidateManagementScore(candidate)), perSlotMax);
       const sipyungAmount = getCandidateSipyungAmount(candidate);
       const possibleShareText = formatPossibleShareText(
-        calculatePossibleShareRatio(possibleShareBase, sipyungAmount),
-        { mode: possibleShareFormatMode }
+        calculatePossibleShareRatio(possibleShareBase, sipyungAmount)
       );
       const searchText = [
         companyName,

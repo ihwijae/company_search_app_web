@@ -1,5 +1,19 @@
 const PERFORMANCE_DEFAULT_MAX = 13;
 
+function truncateTo(value, digits = 4) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const factor = 10 ** digits;
+  return Math.trunc(numeric * factor + 1e-10) / factor;
+}
+
+function roundTo(value, digits = 3) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const factor = 10 ** digits;
+  return Math.round(numeric * factor) / factor;
+}
+
 export function resolvePerformanceCap(value, fallback = PERFORMANCE_DEFAULT_MAX) {
   if (value === null || value === undefined) return fallback;
   const parsed = Number(value);
@@ -29,6 +43,32 @@ export async function evaluateAgreementPerformanceScore(perfAmount, {
   if (!performanceBaseReady || perfAmount == null) return null;
   const isKrailUnder50SobangDebug = String(agencyId || '').toLowerCase() === 'krail'
     && String(fileType || '').toLowerCase() === 'sobang';
+
+  if (Number.isFinite(Number(perfCoefficient)) && Number(perfCoefficient) > 0) {
+    const amount = Number(perfAmount);
+    const base = Number(perfBase);
+    const coefficient = Number(perfCoefficient);
+    const denominator = base * coefficient;
+    if (Number.isFinite(amount) && Number.isFinite(denominator) && denominator > 0) {
+      const ratioRaw = amount / denominator;
+      const ratioRounded = truncateTo(ratioRaw, 4);
+      const rawScore = ratioRounded != null ? roundTo(ratioRounded * 11, 3) : null;
+      const maxScore = resolvePerformanceCap(11, PERFORMANCE_DEFAULT_MAX);
+      const score = rawScore != null ? clampScore(rawScore, maxScore) : null;
+      if (score != null) {
+        if (returnDetails) {
+          return {
+            score,
+            rawScore,
+            maxScore,
+            ratioRaw,
+            ratioRounded,
+          };
+        }
+        return score;
+      }
+    }
+  }
 
   if (isKrailUnder50SobangDebug) {
     const base = Number(perfBase);

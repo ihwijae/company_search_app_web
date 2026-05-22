@@ -12,7 +12,6 @@ export function buildBoardNameCellText({
   parseAmountValue,
   possibleShareBase,
   toNumber,
-  possibleShareFormatMode = 'round',
 }) {
   const rawName = getCompanyName(candidate) || '';
   const cleanName = sanitizeCompanyName(rawName) || rawName;
@@ -22,7 +21,7 @@ export function buildBoardNameCellText({
   const sipyungAmountRaw = getCandidateSipyungAmount(candidate);
   const sipyungAmount = parseAmountValue(sipyungAmountRaw);
   const possibleShareRatio = calculatePossibleShareRatio(possibleShareBase, sipyungAmount);
-  const possibleShareDisplay = formatPossibleShareValue(possibleShareRatio, { mode: possibleShareFormatMode });
+  const possibleShareDisplay = formatPossibleShareValue(possibleShareRatio);
 
   const lines = [cleanName];
   if (possibleShareDisplay) {

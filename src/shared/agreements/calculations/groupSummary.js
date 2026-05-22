@@ -181,6 +181,7 @@ export async function computeGroupSummaries({
   roundForKrailUnder50,
   roundForExManagement,
   roundForPerformanceTotals,
+  roundForLhPerformanceTotals = roundForLhTotals,
   resolveKrailTechnicianAbilityScore,
   getPerformanceCap,
   derivedPerformanceMax,
@@ -278,8 +279,8 @@ export async function computeGroupSummaries({
       });
     }
 
-    performanceScore = roundForLhTotals(roundUpForPpsUnder50(roundForKrailUnder50(performanceScore)));
-    performanceScoreRaw = roundForLhTotals(roundUpForPpsUnder50(roundForKrailUnder50(performanceScoreRaw)));
+    performanceScore = roundForLhPerformanceTotals(roundUpForPpsUnder50(roundForKrailUnder50(performanceScore)));
+    performanceScoreRaw = roundForLhPerformanceTotals(roundUpForPpsUnder50(roundForKrailUnder50(performanceScoreRaw)));
     performanceScore = roundForPerformanceTotals(performanceScore);
     performanceScoreRaw = roundForPerformanceTotals(performanceScoreRaw);
     performanceRatio = roundForKrailUnder50(performanceRatio);

@@ -598,8 +598,8 @@
               ],
               "maxScore": 11,
               "rounding": {
-                "method": "truncate",
-                "digits": 2
+                "method": "round",
+                "digits": 3
               },
               "mode": "formula"
             },

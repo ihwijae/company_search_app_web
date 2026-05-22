@@ -1403,6 +1403,13 @@ export default function AgreementBoardWindow({
     (value) => (isLHOwner ? roundTo(value, 2) : value),
     [isLHOwner],
   );
+  const roundForLhPerformanceTotals = React.useCallback(
+    (value) => {
+      if (!isLHOwner) return value;
+      return roundTo(value, isLh100To300 ? 3 : 2);
+    },
+    [isLHOwner, isLh100To300],
+  );
   const roundForPerformanceTotals = React.useCallback(
     (value) => (isExOwner ? roundTo(value, 2) : value),
     [isExOwner],
@@ -1450,6 +1457,7 @@ export default function AgreementBoardWindow({
       if (isMoisUnderOr30To50 && kind === 'performance') return 2;
       if (isMoisUnderOr30To50 && kind === 'total') return 4;
       if (isMois50To100 && kind === 'performance') return 4;
+      if (isLh100To300 && kind === 'performance') return 3;
       if (isLHOwner && kind === 'performance') return 2;
       if (isLHOwner && kind === 'credibility') return 2;
       if (isLHOwner && kind === 'total') return 2;
@@ -3512,9 +3520,9 @@ export default function AgreementBoardWindow({
   }, [possibleShareBase, getCandidateSipyungAmount]);
 
   const formatPossibleShareInputValue = React.useCallback((value) => {
-    const formatted = formatPossibleShareValue(value, { mode: isLh100To300 ? 'truncate' : 'round' });
+    const formatted = formatPossibleShareValue(value);
     return formatted || '';
-  }, [isLh100To300]);
+  }, []);
 
   const getDefaultShareValue = React.useCallback((candidate) => {
     const possibleShareLimit = getPossibleShareLimit(candidate);
@@ -3745,7 +3753,6 @@ export default function AgreementBoardWindow({
       managementMax,
       managementScoreMax: MANAGEMENT_SCORE_MAX,
       possibleShareBase,
-      possibleShareFormatMode: isLh100To300 ? 'truncate' : 'round',
       toNumber,
       clampScore,
       hasRecentAwardHistory: isRecentAwardHistoryCompany,
@@ -3759,7 +3766,6 @@ export default function AgreementBoardWindow({
     candidateMetricsVersion,
     managementMax,
     isMois30To50,
-    isLh100To300,
     possibleShareBase,
     isDutyRegionCompany,
     getCandidatePerformanceAmountForCurrentRange,
@@ -4372,6 +4378,7 @@ export default function AgreementBoardWindow({
         roundForKrailUnder50,
         roundForExManagement,
         roundForPerformanceTotals,
+        roundForLhPerformanceTotals,
         resolveKrailTechnicianAbilityScore,
         getPerformanceCap,
         derivedPerformanceMax,
@@ -4410,7 +4417,7 @@ export default function AgreementBoardWindow({
     return () => {
       canceled = true;
     };
-  }, [open, participantSignature, groupAssignments, groupShares, groupCredibility, groupTechnicianScores, participantMap, ownerId, ownerKeyUpper, selectedRangeOption?.key, selectedRangeOption?.label, estimatedAmount, baseAmount, entryAmount, entryModeResolved, getSharePercent, getEffectiveCredibilityValue, getTechnicianValue, credibilityEnabled, ownerCredibilityMax, candidateMetricsVersion, derivedMaxScores, effectiveGroupManagementBonus, effectiveNetCostBonusScore, managementScale, managementBonusMultiplier, managementMax, isMois30To50, isMois50To100, isMoisUnderOr30To50, isKrailUnder50, isKrail50To100, isPpsUnder50, isLh50To100, isLh100To300, isDutyRegionCompany, roundForLhTotals, roundForMoisManagement, roundForKrailUnder50, roundUpForPpsUnder50, roundForExManagement, resolveKrailTechnicianAbilityScore, resolveSummaryDigits, technicianEditable, technicianEnabled, technicianAbilityMax, getCandidatePerformanceAmountForCurrentRange]);
+  }, [open, participantSignature, groupAssignments, groupShares, groupCredibility, groupTechnicianScores, participantMap, ownerId, ownerKeyUpper, selectedRangeOption?.key, selectedRangeOption?.label, estimatedAmount, baseAmount, entryAmount, entryModeResolved, getSharePercent, getEffectiveCredibilityValue, getTechnicianValue, credibilityEnabled, ownerCredibilityMax, candidateMetricsVersion, derivedMaxScores, effectiveGroupManagementBonus, effectiveNetCostBonusScore, managementScale, managementBonusMultiplier, managementMax, isMois30To50, isMois50To100, isMoisUnderOr30To50, isKrailUnder50, isKrail50To100, isPpsUnder50, isLh50To100, isLh100To300, isDutyRegionCompany, roundForLhTotals, roundForLhPerformanceTotals, roundForMoisManagement, roundForKrailUnder50, roundUpForPpsUnder50, roundForExManagement, resolveKrailTechnicianAbilityScore, resolveSummaryDigits, technicianEditable, technicianEnabled, technicianAbilityMax, getCandidatePerformanceAmountForCurrentRange]);
 
   React.useEffect(() => {
     attemptPendingPlacement();
@@ -5222,7 +5229,6 @@ export default function AgreementBoardWindow({
       getCompanyName,
       hasRecentAwardHistory: isRecentAwardHistoryCompany,
       noticeDate,
-      possibleShareFormatMode: isLh100To300 ? 'truncate' : 'round',
       isSplitAssignedSlot,
       splitEntryLimitValue,
     });
