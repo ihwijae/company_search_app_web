@@ -118,6 +118,7 @@ const LH_QUALITY_DEFAULT_UNDER_100B = 85;
 const LH_QUALITY_DEFAULT_OVER_100B = 88;
 const LH_SIMPLE_PERFORMANCE_COEFFICIENT = 3;
 const LH_SIMPLE_REGION_ADJUSTMENT_COEFFICIENT = 1;
+const LH_SIMPLE_REGIONAL_CONTRIBUTION_MAX = 0.8;
 const LH_UNDER_50_KEY = 'lh-under50';
 const LH_50_TO_100_KEY = 'lh-50to100';
 const LH_100_TO_300_KEY = 'lh-100to300';
@@ -1741,7 +1742,7 @@ export default function AgreementBoardWindow({
   }, [minRatingOpen, regionDutyRate]);
 
   const credibilityConfig = React.useMemo(() => {
-    if (ownerKeyUpper === 'LH') return { enabled: true, max: isLh100To300 ? 0.3 : null };
+    if (ownerKeyUpper === 'LH') return { enabled: true, max: isLh100To300 ? LH_SIMPLE_REGIONAL_CONTRIBUTION_MAX : null };
     if (ownerKeyUpper === 'PPS') return { enabled: true, max: null };
     if (ownerKeyUpper === 'KRAIL') return { enabled: true, max: null };
     if (ownerKeyUpper === 'EX') return { enabled: true, max: null };
@@ -5852,10 +5853,10 @@ export default function AgreementBoardWindow({
       : null;
     const credibilityFull = showMiscScore
       && toNumber(summaryInfo?.credibilityScore) != null
-      && toNumber(summaryInfo?.credibilityScore) >= 0.3 - 0.0001;
+      && toNumber(summaryInfo?.credibilityScore) >= LH_SIMPLE_REGIONAL_CONTRIBUTION_MAX - 0.0001;
     const credibilityWarn = showMiscScore
       && toNumber(summaryInfo?.credibilityScore) != null
-      && toNumber(summaryInfo?.credibilityScore) < 0.3 - 0.0001;
+      && toNumber(summaryInfo?.credibilityScore) < LH_SIMPLE_REGIONAL_CONTRIBUTION_MAX - 0.0001;
     const qualityPointsDisplay = isLHOwner
       ? (qualityPoints != null ? formatScore(qualityPoints, resolveSummaryDigits('quality')) : '-')
       : null;

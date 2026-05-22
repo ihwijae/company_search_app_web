@@ -10,7 +10,7 @@ export function buildGroupSummaryMetrics({
   credibilityEnabled = false,
   credibilityMode = 'weighted-credibility',
   regionalContributionTargetShare = 20,
-  regionalContributionMaxScore = 0.3,
+  regionalContributionMaxScore = 0.8,
   regionalContributionAdjustmentCoefficient = 1,
   isDutyRegionCompany = () => false,
   getCredibilityValue,
@@ -20,6 +20,14 @@ export function buildGroupSummaryMetrics({
   isKrailOwner = false,
   krailCredibilityScale = 1,
 }) {
+  const resolveRegionalContributionScore = (sharePercent) => {
+    if (!Number.isFinite(Number(sharePercent))) return null;
+    if (sharePercent >= 40) return 0.8;
+    if (sharePercent >= 35) return 0.6;
+    if (sharePercent > 30) return 0.4;
+    return 0;
+  };
+
   return groupAssignments.map((memberIds, groupIndex) => {
     const members = memberIds.map((uid, slotIndex) => {
       if (!shouldIncludeSlot(groupIndex, slotIndex, uid)) return null;
@@ -76,15 +84,7 @@ export function buildGroupSummaryMetrics({
           if (!member.isDutyRegion || !Number.isFinite(rawShare)) return acc;
           return acc + Math.max(rawShare, 0);
         }, 0);
-        if (dutyRegionShare >= 40) {
-          aggregatedCredibility = 0.3;
-        } else if (dutyRegionShare >= 35) {
-          aggregatedCredibility = 0.2;
-        } else if (dutyRegionShare > 30) {
-          aggregatedCredibility = 0.1;
-        } else {
-          aggregatedCredibility = 0;
-        }
+        aggregatedCredibility = resolveRegionalContributionScore(dutyRegionShare);
       }
     } else if (credibilityEnabled) {
       aggregatedCredibility = shareValid
