@@ -135,6 +135,7 @@ const EX_50_TO_100_KEY = 'ex-50to100';
 const KOREAN_UNIT = 100000000;
 const LH_FULL_SCORE = 95;
 const PPS_FULL_SCORE = 95;
+const SCORE_COMPARISON_EPSILON = 1e-9;
 const INDUSTRY_OPTIONS = ['전기', '통신', '소방'];
 const industryToFileType = (label) => {
   const normalized = String(label || '').trim();
@@ -5811,7 +5812,7 @@ export default function AgreementBoardWindow({
         : null);
     if (totalScore != null && (isLh100To300 ? 40 : (isLHOwner ? LH_FULL_SCORE : (ownerKeyUpper === 'PPS' ? PPS_FULL_SCORE : totalMax))) != null) {
       const threshold = isLh100To300 ? 40 : (isLHOwner ? LH_FULL_SCORE : (ownerKeyUpper === 'PPS' ? PPS_FULL_SCORE : totalMax));
-      scoreState = totalScore >= (threshold - 0.01) ? 'full' : 'partial';
+      scoreState = totalScore + SCORE_COMPARISON_EPSILON >= threshold ? 'full' : 'partial';
     }
     const managementSummary = summaryInfo?.managementScore != null
       ? formatScore(summaryInfo.managementScore, resolveSummaryDigits('management'))
@@ -5897,10 +5898,10 @@ export default function AgreementBoardWindow({
     const bonusChecked = showManagementBonus && Boolean(groupManagementBonus[groupIndex]);
 
     const managementState = summaryInfo?.managementScore != null
-      ? (summaryInfo.managementScore >= ((summaryInfo.managementMax ?? managementMax) - 0.01) ? 'ok' : 'warn')
+      ? (summaryInfo.managementScore + SCORE_COMPARISON_EPSILON >= (summaryInfo.managementMax ?? managementMax) ? 'ok' : 'warn')
       : '';
     const performanceState = summaryInfo?.performanceScore != null
-      ? (summaryInfo.performanceScore >= ((summaryInfo.performanceMax ?? ownerPerformanceFallback) - 0.01) ? 'ok' : 'warn')
+      ? (summaryInfo.performanceScore + SCORE_COMPARISON_EPSILON >= (summaryInfo.performanceMax ?? ownerPerformanceFallback) ? 'ok' : 'warn')
       : '';
 
     const entryFailed = summaryInfo?.entryLimit != null
