@@ -4056,7 +4056,7 @@ export default function AgreementBoardWindow({
       return true;
     } catch (error) {
       console.error('[AgreementBoard] Excel export failed:', error);
-      showHeaderAlert('엑셀 내보내기 중 오류가 발생했습니다.');
+      showHeaderAlert(error?.message || '엑셀 내보내기 중 오류가 발생했습니다.');
       return false;
     } finally {
       setExporting(false);

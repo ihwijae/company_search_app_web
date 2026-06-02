@@ -823,7 +823,18 @@ async function exportAgreementExcel({
 
   if (appendWorkbookBuffer) {
     const targetWorkbook = new ExcelJS.Workbook();
-    await targetWorkbook.xlsx.load(appendWorkbookBuffer);
+    try {
+      await targetWorkbook.xlsx.load(appendWorkbookBuffer);
+    } catch (error) {
+      console.error('[exportAgreementWorkbook] append workbook load failed:', {
+        isLh100To300,
+        templateKey,
+        rangeId,
+        ownerId,
+        error,
+      });
+      throw new Error('선택한 기존 엑셀 파일을 읽지 못했습니다. 파일 형식이나 손상 여부를 확인해 주세요.');
+    }
     targetWorkbook.calcProperties = {
       ...targetWorkbook.calcProperties,
       fullCalcOnLoad: true,
@@ -856,8 +867,20 @@ async function exportAgreementExcel({
     if (sheetColor) {
       targetSheet.properties.tabColor = { argb: sheetColor };
     }
-    copyWorksheet(worksheet, targetSheet);
-    clearHoverArtifacts(targetSheet);
+    try {
+      copyWorksheet(worksheet, targetSheet);
+      clearHoverArtifacts(targetSheet);
+    } catch (error) {
+      console.error('[exportAgreementWorkbook] append worksheet copy failed:', {
+        isLh100To300,
+        templateKey,
+        rangeId,
+        ownerId,
+        sheetName: resolvedName,
+        error,
+      });
+      throw new Error('기존 엑셀 파일에 간이종심제 시트를 추가하는 중 오류가 발생했습니다.');
+    }
 
     layoutSnapshot.forEach((layout, name) => {
       const sheet = targetWorkbook.getWorksheet(name);
@@ -885,7 +908,20 @@ async function exportAgreementExcel({
       }
     });
 
-    const buffer = await targetWorkbook.xlsx.writeBuffer();
+    let buffer;
+    try {
+      buffer = await targetWorkbook.xlsx.writeBuffer();
+    } catch (error) {
+      console.error('[exportAgreementWorkbook] append workbook write failed:', {
+        isLh100To300,
+        templateKey,
+        rangeId,
+        ownerId,
+        sheetName: resolvedName,
+        error,
+      });
+      throw new Error('시트 추가 후 엑셀 파일을 다시 저장하지 못했습니다. 기존 파일 구조와 충돌할 수 있습니다.');
+    }
     return { buffer, sheetName: resolvedName };
   }
 
