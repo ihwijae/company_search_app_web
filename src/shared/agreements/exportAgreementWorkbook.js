@@ -456,7 +456,7 @@ async function exportAgreementExcel({
       }
     }
     const indexValue = Number(group.index);
-    if (!isLh100To300 && Number.isFinite(indexValue)) {
+    if (Number.isFinite(indexValue)) {
       worksheet.getCell(`A${rowIndex}`).value = indexValue;
     }
     if (!isLh100To300 && approvalColumn !== 'B') {
