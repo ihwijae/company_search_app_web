@@ -72,6 +72,10 @@ const normalizeWorksheetViews = (views) => {
   return [{ state: 'normal', zoomScale: 100, zoomScaleNormal: 100 }];
 };
 
+const getWorksheetColumns = (sheet) => (
+  Array.isArray(sheet?.columns) ? sheet.columns : []
+);
+
 const buildCredibilityFormula = (members, shareColumns, rowIndex, scaleValue = 1, scaleExpr = '') => {
   if (!Array.isArray(members) || !Array.isArray(shareColumns) || !rowIndex) return null;
   const parts = [];
@@ -119,7 +123,7 @@ const copyWorksheet = (source, target) => {
   target.pageSetup = cloneCellStyle(source.pageSetup);
   target.views = normalizeWorksheetViews(source.views);
   target.autoFilter = cloneCellStyle(source.autoFilter);
-  source.columns.forEach((column, index) => {
+  getWorksheetColumns(source).forEach((column, index) => {
     const targetColumn = target.getColumn(index + 1);
     targetColumn.width = column.width;
     targetColumn.hidden = column.hidden;
@@ -271,7 +275,7 @@ async function exportAgreementExcel({
   if (!workbook.calcProperties) workbook.calcProperties = {};
   workbook.calcProperties.fullCalcOnLoad = true;
 
-  const preservedColumns = worksheet.columns.map((column) => ({
+  const preservedColumns = getWorksheetColumns(worksheet).map((column) => ({
     width: column?.width,
     hidden: column?.hidden,
   }));
@@ -764,7 +768,7 @@ async function exportAgreementExcel({
   }
 
   if (Array.isArray(preservedColumns) && preservedColumns.length > 0) {
-    worksheet.columns.forEach((column, index) => {
+    getWorksheetColumns(worksheet).forEach((column, index) => {
       const preset = preservedColumns[index];
       if (!preset) return;
       if (preset.width != null) {
@@ -845,7 +849,7 @@ async function exportAgreementExcel({
 
     const layoutSnapshot = new Map();
     targetWorkbook.worksheets.forEach((sheet) => {
-      const columns = sheet.columns.map((column) => ({
+      const columns = getWorksheetColumns(sheet).map((column) => ({
         width: column?.width,
         hidden: column?.hidden,
       }));
@@ -887,7 +891,7 @@ async function exportAgreementExcel({
       if (!sheet) return;
       if (sheet.name === resolvedName) return;
       if (Array.isArray(layout.columns)) {
-        sheet.columns.forEach((column, index) => {
+        getWorksheetColumns(sheet).forEach((column, index) => {
           const preset = layout.columns[index];
           if (!preset) return;
           if (preset.width != null) {
