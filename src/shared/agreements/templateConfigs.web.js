@@ -186,7 +186,7 @@ export const AGREEMENT_TEMPLATE_CONFIGS_WEB = {
     templateUrl: buildTemplateUrl('LH간이종심100-300억_템플릿.xlsx'),
     sheetName: '양식',
     startRow: 5,
-    maxRows: 68,
+    maxRows: 90,
     rowStep: 2,
     qualityRowOffset: 1,
     managementScoreMax: 8,
