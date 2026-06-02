@@ -190,7 +190,7 @@ export const AGREEMENT_TEMPLATE_CONFIGS_WEB = {
     rowStep: 2,
     qualityRowOffset: 1,
     managementScoreMax: 8,
-    qualityHighlightMin: 88,
+    qualityHighlightMin: 3.9,
     slotColumns: {
       name: ['C', 'D', 'E', 'F', 'G'],
       share: ['I', 'J', 'K', 'L', 'M'],
@@ -206,7 +206,7 @@ export const AGREEMENT_TEMPLATE_CONFIGS_WEB = {
       bidDeadline: 'P2',
       dutySummary: 'T2',
     },
-    summaryColumns: { credibility: 'AF' },
+    summaryColumns: { credibility: 'AE' },
     regionFill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' }, bgColor: { indexed: 64 } },
   },
   'krail-under50': {
