@@ -117,6 +117,15 @@ function formatDotDateInput(value = '') {
   return `${digits.slice(0, 4)}.${digits.slice(4, 6)}.${digits.slice(6)}`;
 }
 
+function formatShortDotDateInput(value = '') {
+  const rawDigits = String(value).replace(/\D/g, '');
+  const digits = (rawDigits.length >= 8 ? rawDigits.slice(2, 8) : rawDigits).slice(0, 6);
+  if (!digits) return '';
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`;
+}
+
 function formatAmountPreviewValue(value = '') {
   const digits = String(value).replace(/\D/g, '');
   if (!digits) return '';
@@ -473,7 +482,9 @@ export default function ExcelWebEditPage() {
         return { ...prev, [name]: nextValue };
       });
       return;
-    } else if (['creditStartDate', 'creditEndDate', 'bizYears'].includes(name)) {
+    } else if (['creditStartDate', 'creditEndDate'].includes(name)) {
+      value = formatShortDotDateInput(value);
+    } else if (name === 'bizYears') {
       value = formatDotDateInput(value);
     } else if (name === 'qualityEval') {
       value = stripQualityEvalReferenceSuffix(value);
@@ -1288,8 +1299,8 @@ export default function ExcelWebEditPage() {
                   <label>사업자등록번호<input name="bizNo" value={form.bizNo} onChange={handleInput} onKeyDown={handleBizNoKeyDown} /></label>
                   <label>신용평가등급<input name="creditGrade" value={form.creditGrade} onChange={handleInput} /></label>
                   <div className="inline-dates">
-                    <label>시작일<input name="creditStartDate" value={form.creditStartDate} onChange={handleInput} placeholder="YYYY.MM.DD" /></label>
-                    <label>종료일<input name="creditEndDate" value={form.creditEndDate} onChange={handleInput} placeholder="YYYY.MM.DD" /></label>
+                    <label>시작일<input name="creditStartDate" value={form.creditStartDate} onChange={handleInput} placeholder="YY.MM.DD" /></label>
+                    <label>종료일<input name="creditEndDate" value={form.creditEndDate} onChange={handleInput} placeholder="YY.MM.DD" /></label>
                   </div>
                   <label className="full-row">
                     최종 저장값 (신용평가)

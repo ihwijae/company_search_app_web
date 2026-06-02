@@ -241,6 +241,7 @@ export async function fetchAgreementCandidates(params = {}) {
     const qualityEval = toNumber(company['품질평가']);
     const creditGrade = extractCreditGrade({ ...company, snapshot: company });
     const creditExpired = isCreditScoreExpired({ ...company, snapshot: company }, { evaluationDate });
+    const creditGradeForEvaluation = creditExpired ? '' : creditGrade;
 
     const evaluation = evaluateScores({
       agencyId: normalizedOwnerId,
@@ -254,7 +255,7 @@ export async function fetchAgreementCandidates(params = {}) {
         perf3y,
         baseAmount: baseAmountNumber,
         estimatedAmount: tierAmount,
-        creditGrade,
+        creditGrade: creditGradeForEvaluation,
         fileType,
       },
       industryAvg,
