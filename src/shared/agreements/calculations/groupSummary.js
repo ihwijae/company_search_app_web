@@ -42,6 +42,8 @@ export function buildGroupSummaryMetrics({
       const credibilityBonus = credibilityEnabled ? getCredibilityValue(groupIndex, slotIndex, candidate) : 0;
       const sipyungAmount = getCandidateSipyungAmount(candidate);
       return {
+        slotIndex,
+        role: slotIndex === 0 ? 'representative' : 'member',
         sharePercent,
         managementScore,
         performanceAmount,
@@ -80,6 +82,7 @@ export function buildGroupSummaryMetrics({
     if (credibilityEnabled && credibilityMode === 'regional-share') {
       if (shareValid) {
         const dutyRegionShare = normalizedMembers.reduce((acc, member) => {
+          if (member.role === 'representative' || member.slotIndex === 0) return acc;
           const rawShare = Number(member.sharePercent);
           if (!member.isDutyRegion || !Number.isFinite(rawShare)) return acc;
           return acc + Math.max(rawShare, 0);
