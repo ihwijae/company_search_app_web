@@ -942,7 +942,26 @@ async function downloadAgreementWorkbook(buffer, fileName, options = {}) {
   const preferFileHandle = Boolean(options?.preferFileHandle);
 
   if (targetFileHandle && typeof targetFileHandle.createWritable === 'function') {
+    const ensureWritablePermission = async () => {
+      if (typeof targetFileHandle.queryPermission === 'function') {
+        const current = await targetFileHandle.queryPermission({ mode: 'readwrite' });
+        if (current === 'granted') return true;
+      }
+      if (typeof targetFileHandle.requestPermission === 'function') {
+        const requested = await targetFileHandle.requestPermission({ mode: 'readwrite' });
+        if (requested === 'granted') return true;
+      }
+      return false;
+    };
+
     try {
+      const hasPermission = await ensureWritablePermission();
+      if (!hasPermission) {
+        return {
+          error: true,
+          message: '선택한 파일에 쓸 수 있는 권한이 없습니다. 파일 선택 후 권한을 다시 허용해 주세요.',
+        };
+      }
       const writable = await targetFileHandle.createWritable();
       await writable.write(blob);
       await writable.close();
@@ -952,10 +971,31 @@ async function downloadAgreementWorkbook(buffer, fileName, options = {}) {
         return { canceled: true };
       }
       console.warn('[exportAgreementWorkbook] direct file write failed:', error);
+      if (typeof targetFileHandle.requestPermission === 'function') {
+        try {
+          const permission = await targetFileHandle.requestPermission({ mode: 'readwrite' });
+          if (permission === 'granted') {
+            const writable = await targetFileHandle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            return { savedWithPicker: true, overwritten: true };
+          }
+        } catch (retryError) {
+          console.warn('[exportAgreementWorkbook] direct file write retry failed:', retryError);
+          if (preferFileHandle) {
+            const detail = retryError?.name || error?.name || 'UnknownError';
+            return {
+              error: true,
+              message: `선택한 파일에 직접 저장하지 못했습니다. ${detail} 오류가 발생했습니다.`,
+            };
+          }
+        }
+      }
       if (preferFileHandle) {
+        const detail = error?.name || 'UnknownError';
         return {
           error: true,
-          message: '선택한 파일에 직접 저장하지 못했습니다. 브라우저 파일 권한을 확인해 주세요.',
+          message: `선택한 파일에 직접 저장하지 못했습니다. ${detail} 오류가 발생했습니다.`,
         };
       }
     }
