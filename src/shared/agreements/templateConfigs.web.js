@@ -194,10 +194,10 @@ export const AGREEMENT_TEMPLATE_CONFIGS_WEB = {
     slotColumns: {
       name: ['C', 'D', 'E', 'F', 'G'],
       share: ['I', 'J', 'K', 'L', 'M'],
-      management: ['P', 'Q', 'R', 'S', 'T'],
-      performance: ['W', 'X', 'Y', 'Z', 'AA'],
+      management: ['O', 'P', 'Q', 'R', 'S'],
+      performance: ['V', 'W', 'X', 'Y', 'Z'],
     },
-    qualityColumns: ['P', 'Q', 'R', 'S', 'T'],
+    qualityColumns: ['O', 'P', 'Q', 'R', 'S'],
     headerCells: {
       estimatedAmount: 'E1',
       baseAmount: 'E2',

@@ -76,6 +76,16 @@ const getWorksheetColumns = (sheet) => (
   Array.isArray(sheet?.columns) ? sheet.columns : []
 );
 
+const resolveLhSimpleQualityPoints = (qualityScore) => {
+  const score = Number(qualityScore);
+  if (!Number.isFinite(score)) return null;
+  if (score >= 94) return 4;
+  if (score >= 91) return 3.9;
+  if (score >= 88) return 3.8;
+  if (score >= 85) return 3.7;
+  return 3.6;
+};
+
 const buildCredibilityFormula = (members, shareColumns, rowIndex, scaleValue = 1, scaleExpr = '') => {
   if (!Array.isArray(members) || !Array.isArray(shareColumns) || !rowIndex) return null;
   const parts = [];
@@ -565,7 +575,9 @@ async function exportAgreementExcel({
         if (qualityColumn) {
           const qualityRowIndex = rowIndex + qualityRowOffset;
           const qualityCell = worksheet.getCell(`${qualityColumn}${qualityRowIndex}`);
-          const qualityValue = toExcelNumber(member.qualityScore);
+          const qualityValue = isLh100To300
+            ? resolveLhSimpleQualityPoints(member.qualityScore)
+            : toExcelNumber(member.qualityScore);
           if (qualityValue != null) qualityCell.value = qualityValue;
           const baseStyle = qualityCell.style ? { ...qualityCell.style } : {};
           qualityCell.style = {
@@ -749,7 +761,9 @@ async function exportAgreementExcel({
         const qualityColumn = qualityColumns[slotIndex];
         if (qualityColumn) {
           const qualityCell = worksheet.getCell(`${qualityColumn}${rowIndex + qualityRowOffset}`);
-          const qualityValue = toExcelNumber(candidate.qualityScore);
+          const qualityValue = isLh100To300
+            ? resolveLhSimpleQualityPoints(candidate.qualityScore)
+            : toExcelNumber(candidate.qualityScore);
           if (qualityValue != null) qualityCell.value = qualityValue;
           const baseStyle = qualityCell.style ? { ...qualityCell.style } : {};
           qualityCell.style = {
