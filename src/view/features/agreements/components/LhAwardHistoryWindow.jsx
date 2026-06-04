@@ -66,6 +66,14 @@ export default function LhAwardHistoryWindow({
   const [importing, setImporting] = React.useState(false);
   const rootRef = React.useRef(null);
 
+  const getOwnerDocument = React.useCallback(() => (
+    rootRef.current?.ownerDocument || null
+  ), []);
+
+  const getOwnerWindow = React.useCallback(() => (
+    getOwnerDocument()?.defaultView || null
+  ), [getOwnerDocument]);
+
   const getFeedbackTarget = React.useCallback(() => (
     rootRef.current?.ownerDocument?.body || null
   ), []);
@@ -188,20 +196,27 @@ export default function LhAwardHistoryWindow({
       notify({ type: 'warning', message: '복사할 낙찰이력이 없습니다.', portalTarget: getFeedbackTarget() });
       return;
     }
-    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+    const ownerWindow = getOwnerWindow();
+    const clipboard = ownerWindow?.navigator?.clipboard;
+    if (!clipboard?.writeText) {
       notify({ type: 'error', message: '이 브라우저에서는 복사 기능을 사용할 수 없습니다.', portalTarget: getFeedbackTarget() });
       return;
     }
     try {
       setCopying(true);
-      await navigator.clipboard.writeText(getLhAwardHistoryText(normalizedEntries));
+      try {
+        ownerWindow.focus();
+      } catch (focusError) {
+        void focusError;
+      }
+      await clipboard.writeText(getLhAwardHistoryText(normalizedEntries));
       notify({ type: 'success', message: '공유용 낙찰이력 텍스트를 복사했습니다.', portalTarget: getFeedbackTarget() });
     } catch (error) {
       notify({ type: 'error', message: error?.message || '복사에 실패했습니다.', portalTarget: getFeedbackTarget() });
     } finally {
       setCopying(false);
     }
-  }, [copying, getFeedbackTarget, normalizedEntries, notify]);
+  }, [copying, getFeedbackTarget, getOwnerWindow, normalizedEntries, notify]);
 
   const handleExport = React.useCallback(async () => {
     if (exporting) return;
@@ -211,7 +226,9 @@ export default function LhAwardHistoryWindow({
     }
     try {
       setExporting(true);
-      const result = await lhAwardHistoryClient.exportData(normalizedEntries);
+      const result = await lhAwardHistoryClient.exportData(normalizedEntries, {
+        document: getOwnerDocument(),
+      });
       if (!result?.canceled) {
         notify({ type: 'success', message: `낙찰이력 ${normalizedEntries.length}건을 내보냈습니다.`, portalTarget: getFeedbackTarget() });
       }
@@ -220,7 +237,7 @@ export default function LhAwardHistoryWindow({
     } finally {
       setExporting(false);
     }
-  }, [exporting, getFeedbackTarget, normalizedEntries, notify]);
+  }, [exporting, getFeedbackTarget, getOwnerDocument, normalizedEntries, notify]);
 
   const handleImport = React.useCallback(async () => {
     if (importing) return;
@@ -234,7 +251,9 @@ export default function LhAwardHistoryWindow({
     if (!ok) return;
     try {
       setImporting(true);
-      const result = await lhAwardHistoryClient.importData();
+      const result = await lhAwardHistoryClient.importData({
+        document: getOwnerDocument(),
+      });
       if (result?.canceled) return;
       const importedEntries = normalizeLhAwardHistoryEntries(result?.entries || []);
       updateEntries(importedEntries);
@@ -251,7 +270,7 @@ export default function LhAwardHistoryWindow({
     } finally {
       setImporting(false);
     }
-  }, [confirm, getFeedbackTarget, importing, notify, resetForm, updateEntries]);
+  }, [confirm, getFeedbackTarget, getOwnerDocument, importing, notify, resetForm, updateEntries]);
 
   return (
     <div ref={rootRef} style={{

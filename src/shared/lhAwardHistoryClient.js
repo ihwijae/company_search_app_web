@@ -1,29 +1,57 @@
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
-const createJsonDownload = (payload, fileName) => {
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+const getResolvedWindow = (sourceDocument = null) => {
+  if (sourceDocument?.defaultView) return sourceDocument.defaultView;
+  if (typeof window !== 'undefined') return window;
+  return null;
 };
 
-const pickJsonFile = () => new Promise((resolve) => {
-  const input = document.createElement('input');
+const getResolvedDocument = (sourceDocument = null) => {
+  if (sourceDocument) return sourceDocument;
+  if (typeof document !== 'undefined') return document;
+  return null;
+};
+
+const createJsonDownload = (payload, fileName, sourceDocument = null) => {
+  const resolvedWindow = getResolvedWindow(sourceDocument);
+  const resolvedDocument = getResolvedDocument(sourceDocument);
+  if (!resolvedWindow || !resolvedDocument) {
+    throw new Error('내보내기 문서를 찾을 수 없습니다.');
+  }
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = resolvedWindow.URL.createObjectURL(blob);
+  const anchor = resolvedDocument.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  resolvedDocument.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  resolvedWindow.setTimeout(() => resolvedWindow.URL.revokeObjectURL(url), 1000);
+};
+
+const pickJsonFile = (sourceDocument = null) => new Promise((resolve) => {
+  const resolvedWindow = getResolvedWindow(sourceDocument);
+  const resolvedDocument = getResolvedDocument(sourceDocument);
+  if (!resolvedWindow || !resolvedDocument) {
+    resolve(null);
+    return;
+  }
+  const input = resolvedDocument.createElement('input');
   input.type = 'file';
   input.accept = 'application/json,.json';
   input.style.display = 'none';
-  document.body.appendChild(input);
+  resolvedDocument.body.appendChild(input);
   input.onchange = () => {
     const selected = input.files && input.files[0] ? input.files[0] : null;
     input.remove();
     resolve(selected);
   };
-  input.click();
+  try {
+    input.click();
+  } catch {
+    input.remove();
+    resolve(null);
+  }
 });
 
 async function fetchJson(url, init = {}) {
@@ -50,18 +78,22 @@ const lhAwardHistoryClient = {
     return payload?.data || { entries };
   },
 
-  async exportData(entries = []) {
+  async exportData(entries = [], options = {}) {
     const payload = {
       version: 1,
       exportedAt: new Date().toISOString(),
       entries: Array.isArray(entries) ? entries : [],
     };
-    createJsonDownload(payload, `lh-award-history-${new Date().toISOString().slice(0, 10)}.json`);
+    createJsonDownload(
+      payload,
+      `lh-award-history-${new Date().toISOString().slice(0, 10)}.json`,
+      options?.document || null,
+    );
     return { canceled: false, count: payload.entries.length };
   },
 
-  async importData() {
-    const file = await pickJsonFile();
+  async importData(options = {}) {
+    const file = await pickJsonFile(options?.document || null);
     if (!file) return { canceled: true, entries: [] };
 
     const text = await file.text();
