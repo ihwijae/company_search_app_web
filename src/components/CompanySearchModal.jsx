@@ -14,6 +14,18 @@ const FILE_TYPE_LABELS = {
   sobang: '소방',
 };
 
+const normalizeBizNo = (value) => String(value || '').replace(/\D/g, '');
+
+const normalizeCompanyKey = (value) => String(value || '')
+  .trim()
+  .replace(/㈜/g, '')
+  .replace(/\(주\)/g, '')
+  .replace(/\(유\)/g, '')
+  .replace(/\(합\)/g, '')
+  .replace(/주식회사/g, '')
+  .replace(/\s+/g, ' ')
+  .toLowerCase();
+
 const normalizeFileType = (value) => {
   const token = String(value ?? '').trim();
   if (!token) return '';
@@ -39,6 +51,10 @@ export default function CompanySearchModal({
   onPick,
   initialQuery = '',
   allowAll = true,
+  forceAllFileTypes = false,
+  dedupeResults = false,
+  simpleView = false,
+  forceWebSearch = false,
 }) {
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(false);
@@ -68,14 +84,32 @@ export default function CompanySearchModal({
     try {
       const query = overrideQuery !== undefined ? String(overrideQuery) : q;
       const criteria = { name: String(query || '').trim() };
-      const normalizedType = normalizeFileType(fileType);
+      const normalizedType = forceAllFileTypes ? 'all' : normalizeFileType(fileType);
       const effectiveType = normalizedType || (allowAll ? 'all' : '');
       if (!effectiveType) {
         throw new Error('공종을 먼저 선택하세요.');
       }
-      const r = await searchClient.searchCompanies(criteria, effectiveType);
+      const r = await searchClient.searchCompanies(criteria, effectiveType, { forceWebSearch });
       if (!r?.success) throw new Error(r?.message || '검색 실패');
-      setResults(r.data || []);
+      const nextResults = Array.isArray(r.data) ? r.data : [];
+      if (!dedupeResults) {
+        setResults(nextResults);
+        return;
+      }
+      const deduped = [];
+      const seen = new Set();
+      nextResults.forEach((item) => {
+        const companyName = getCandidateTextField(item, ['검색된 회사', '업체명', 'name'])
+          || item['검색된 회사']
+          || item.name
+          || '';
+        const bizNo = getCandidateTextField(item, ['사업자번호', 'bizNo']) || item['사업자번호'] || '';
+        const key = normalizeBizNo(bizNo) || normalizeCompanyKey(companyName);
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        deduped.push(item);
+      });
+      setResults(deduped);
     } catch (e) { setError(String(e.message || e)); }
     finally { setLoading(false); }
   };
@@ -96,9 +130,9 @@ export default function CompanySearchModal({
             <h3>업체 조회</h3>
             <p>업체명으로 검색 후 원하는 업체를 선택하세요.</p>
           </div>
-          {fileType && (
-            <span className={`company-search-badge company-search-badge-${normalizeFileType(fileType)}`}>
-              {FILE_TYPE_LABELS[normalizeFileType(fileType)] || '전체'}
+          {!simpleView && (fileType || forceAllFileTypes) && (
+            <span className={`company-search-badge company-search-badge-${forceAllFileTypes ? 'all' : normalizeFileType(fileType)}`}>
+              {forceAllFileTypes ? '전체' : (FILE_TYPE_LABELS[normalizeFileType(fileType)] || '전체')}
             </span>
           )}
         </div>
@@ -124,11 +158,11 @@ export default function CompanySearchModal({
           <table className="details-table" style={{ width: '100%' }}>
             <thead>
               <tr>
-                <th style={{ width: '40%' }}>업체명</th>
-                <th style={{ width: '18%' }}>대표자</th>
-                <th style={{ width: '16%' }}>지역</th>
-                <th style={{ width: '18%' }}>사업자번호</th>
-                <th style={{ width: '8%', textAlign: 'center' }}></th>
+                <th style={{ width: simpleView ? '64%' : '40%' }}>업체명</th>
+                {!simpleView && <th style={{ width: '18%' }}>대표자</th>}
+                {!simpleView && <th style={{ width: '16%' }}>지역</th>}
+                <th style={{ width: simpleView ? '24%' : '18%' }}>사업자번호</th>
+                <th style={{ width: simpleView ? '12%' : '8%', textAlign: 'center' }}></th>
               </tr>
             </thead>
             <tbody>
@@ -155,7 +189,7 @@ export default function CompanySearchModal({
                       <div className="company-cell">
                         <div className="company-name-line">
                           <span className="company-name-text">{companyName}</span>
-                        {typeLabel && (
+                        {!simpleView && typeLabel && (
                           <span className={`file-type-badge-small file-type-${typeKey}`}>
                             {typeLabel}
                           </span>
@@ -177,8 +211,8 @@ export default function CompanySearchModal({
                         )}
                       </div>
                     </td>
-                    <td>{representative}</td>
-                    <td>{region}</td>
+                    {!simpleView && <td>{representative}</td>}
+                    {!simpleView && <td>{region}</td>}
                     <td>{bizNo}</td>
                     <td style={{ textAlign: 'center' }}>
                       <button
@@ -186,7 +220,7 @@ export default function CompanySearchModal({
                         style={{ minWidth: 64, whiteSpace: 'nowrap', height: 32 }}
                         onClick={() => {
                           if (!onPick) return;
-                          const effectiveType = fileType || (allowAll ? 'all' : '');
+                          const effectiveType = forceAllFileTypes ? 'all' : (fileType || (allowAll ? 'all' : ''));
                           const snapshot = { ...c };
                           const payload = {
                             bizNo,
@@ -203,7 +237,7 @@ export default function CompanySearchModal({
               })}
               {(!results || results.length === 0) && (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: 16, color: '#6b7280' }}>
+                  <td colSpan={simpleView ? 3 : 5} style={{ textAlign: 'center', padding: 16, color: '#6b7280' }}>
                     {loading ? '검색 중...' : '검색 결과가 없습니다'}
                   </td>
                 </tr>

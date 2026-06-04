@@ -155,19 +155,20 @@ export const searchClient = {
   },
 
   async searchCompanies(criteria, fileType, options) {
+    const normalizedOptions = options || {};
     const api = getElectronApi();
-    if (api && typeof api.searchCompanies === 'function') {
-      return api.searchCompanies(criteria, fileType, options);
+    if (!normalizedOptions.forceWebSearch && api && typeof api.searchCompanies === 'function') {
+      return api.searchCompanies(criteria, fileType, normalizedOptions);
     }
     try {
       if (shouldUseWebStore()) {
         await syncSharedDatasetsIfNeeded(fileType);
-        return await webSearchStore.searchCompanies(criteria, normalizeFileType(fileType), options);
+        return await webSearchStore.searchCompanies(criteria, normalizeFileType(fileType), normalizedOptions);
       }
       return await fetchJson('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ criteria, fileType, options }),
+        body: JSON.stringify({ criteria, fileType, options: normalizedOptions }),
       });
     } catch (error) {
       console.warn('[searchClient] shared search failed, clearing local datasets:', error);

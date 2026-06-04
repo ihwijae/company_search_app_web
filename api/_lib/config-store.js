@@ -3,6 +3,7 @@ const { ROOTS, ensureDir, readJsonFile, writeJsonFile } = require('./local-stora
 
 const FORMULAS_OVERRIDES_PATH = path.join(ROOTS.config, 'formulas.overrides.json');
 const AGREEMENTS_RULES_PATH = path.join(ROOTS.config, 'agreements.rules.json');
+const LH_AWARD_HISTORY_PATH = path.join(ROOTS.config, 'lh.award-history.json');
 
 async function readConfigJson(pathname, fallback = null) {
   try {
@@ -22,6 +23,7 @@ async function writeConfigJson(pathname, value) {
 module.exports = {
   FORMULAS_OVERRIDES_PATH,
   AGREEMENTS_RULES_PATH,
+  LH_AWARD_HISTORY_PATH,
   readConfigJson,
   writeConfigJson,
 };

@@ -56,7 +56,7 @@ const LH_AWARD_HISTORY_RAW_TEXT = `< LH 낙찰이력 보유 현황 > - ①
 ㈜녹십자이엠
 - 계약일 : 2025.11.12`;
 
-const sanitizeCompanyName = (value) => {
+export const sanitizeLhAwardCompanyName = (value) => {
   if (!value) return '';
   let result = String(value).trim();
   result = result.replace(/㈜/g, '');
@@ -68,9 +68,11 @@ const sanitizeCompanyName = (value) => {
   return result;
 };
 
-const normalizeCompanyKey = (value) => sanitizeCompanyName(value).toLowerCase();
+export const normalizeLhAwardCompanyKey = (value) => sanitizeLhAwardCompanyName(value).toLowerCase();
 
-const parseSimpleDate = (value) => {
+export const normalizeLhAwardBizNo = (value) => String(value || '').replace(/\D/g, '');
+
+export const parseLhAwardDate = (value) => {
   if (!value) return null;
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : new Date(value.getFullYear(), value.getMonth(), value.getDate());
@@ -89,6 +91,15 @@ const parseSimpleDate = (value) => {
   return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
 };
 
+export const formatLhAwardDateInput = (value) => {
+  const date = parseLhAwardDate(value);
+  if (!date) return '';
+  const year = String(date.getFullYear()).padStart(4, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const withinPreviousYear = (contractDate, noticeDate) => {
   if (!(contractDate instanceof Date) || Number.isNaN(contractDate.getTime())) return false;
   if (!(noticeDate instanceof Date) || Number.isNaN(noticeDate.getTime())) return false;
@@ -97,45 +108,122 @@ const withinPreviousYear = (contractDate, noticeDate) => {
   return contractDate.getTime() >= oneYearAgo.getTime();
 };
 
-const LH_AWARD_HISTORY = [
-  { companyName: '㈜지음이엔아이', contracts: ['2025.03.20', '2025.09.03'] },
-  { companyName: '㈜아람이엔테크', contracts: ['2025.10.16'] },
-  { companyName: '㈜대흥디씨티', contracts: ['2025.10.16'] },
-  { companyName: '㈜성전사', contracts: ['2025.03.06'] },
-  { companyName: '㈜대상전력', contracts: ['2025.03.06'] },
-  { companyName: '일렉파워㈜', contracts: ['2025.03.13'] },
-  { companyName: '㈜송원이앤씨', contracts: ['2025.03.13'] },
-  { companyName: '㈜부현전기', contracts: ['2025.10.16', '2025.06.25'] },
-  { companyName: '신신이앤씨㈜', contracts: ['2025.04.03'] },
-  { companyName: '㈜도화엔지니어링', contracts: ['2025.03.20'] },
-  { companyName: '㈜온세이엔씨', contracts: ['2025.03.12'] },
-  { companyName: '㈜보원엔지니어링', contracts: ['2025.03.12'] },
-  { companyName: '(유)우전', contracts: ['2026.01.14'] },
-  { companyName: '대명에너지㈜', contracts: ['2026.01.14'] },
-  { companyName: '에스지씨이앤씨㈜', contracts: ['2025.12.22'] },
-  { companyName: '일성건설㈜', contracts: ['2025.12.22'] },
-  { companyName: '㈜대광건영', contracts: ['2025.12.16'] },
-  { companyName: '㈜녹십자이엠', contracts: ['2025.11.12'] },
-].map((entry) => ({
-  ...entry,
-  companyKey: normalizeCompanyKey(entry.companyName),
-  contractDates: entry.contracts.map(parseSimpleDate).filter(Boolean),
-}));
+const parseRawHistoryEntries = (rawText) => {
+  const entries = [];
+  let companyName = '';
+  String(rawText || '').split(/\r?\n/).forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('<')) return;
+    if (!trimmed.startsWith('-')) {
+      companyName = trimmed;
+      return;
+    }
+    const match = trimmed.match(/계약일\s*:\s*(\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2})\s*(?:\(([^)]*)\))?\s*(?:-\s*(.*))?$/);
+    if (!match || !companyName) return;
+    const contractDate = formatLhAwardDateInput(match[1]);
+    const contractAmount = match[2] ? Number(String(match[2]).replace(/\D/g, '')) : null;
+    const projectName = String(match[3] || '').trim();
+    entries.push({
+      id: `legacy-${entries.length + 1}`,
+      companyName,
+      bizNo: '',
+      fileType: 'eung',
+      contractDate,
+      contractAmount: Number.isFinite(contractAmount) && contractAmount > 0 ? contractAmount : null,
+      projectName,
+      matchMode: 'name',
+      source: 'legacy',
+    });
+  });
+  return entries;
+};
 
-const LH_AWARD_HISTORY_BY_COMPANY = new Map(
-  LH_AWARD_HISTORY.map((entry) => [entry.companyKey, entry]),
-);
+export const DEFAULT_LH_AWARD_HISTORY_ENTRIES = parseRawHistoryEntries(LH_AWARD_HISTORY_RAW_TEXT);
 
-export function getLhAwardHistoryText() {
-  return LH_AWARD_HISTORY_RAW_TEXT;
+const LH_AWARD_HISTORY_TEXT_HEADER = '< LH 낙찰이력 보유 현황 > - ①';
+
+const formatLhAwardDateDisplay = (value) => {
+  const date = parseLhAwardDate(value);
+  if (!date) return String(value || '').trim();
+  const year = String(date.getFullYear()).padStart(4, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}.${month}.${day}`;
+};
+
+export function getLhAwardHistoryText(entries = DEFAULT_LH_AWARD_HISTORY_ENTRIES) {
+  const normalizedEntries = normalizeLhAwardHistoryEntries(entries);
+  if (!normalizedEntries.length) return LH_AWARD_HISTORY_TEXT_HEADER;
+
+  const groupedEntries = [];
+  const groupIndexByCompany = new Map();
+  normalizedEntries.forEach((entry) => {
+    const companyKey = `${entry.companyName}__${entry.bizNo || ''}`;
+    const groupIndex = groupIndexByCompany.get(companyKey);
+    if (groupIndex !== undefined) {
+      groupedEntries[groupIndex].entries.push(entry);
+      return;
+    }
+    groupIndexByCompany.set(companyKey, groupedEntries.length);
+    groupedEntries.push({
+      companyName: entry.companyName,
+      entries: [entry],
+    });
+  });
+
+  const blocks = groupedEntries.map((group) => {
+    const lines = group.entries.map((entry) => {
+      const amount = entry.contractAmount != null ? ` (${Number(entry.contractAmount).toLocaleString('ko-KR')}원)` : '';
+      const project = entry.projectName ? ` - ${entry.projectName}` : '';
+      return `- 계약일 : ${formatLhAwardDateDisplay(entry.contractDate)}${amount}${project}`;
+    });
+    return `${group.companyName}\n${lines.join('\n')}`;
+  });
+
+  return [LH_AWARD_HISTORY_TEXT_HEADER, '', blocks.join('\n\n')].join('\n');
 }
 
-export function hasRecentLhAwardHistory(companyName, noticeDate) {
-  const notice = parseSimpleDate(noticeDate);
+export function normalizeLhAwardHistoryEntries(entries = []) {
+  const source = Array.isArray(entries) ? entries : [];
+  return source.map((entry, index) => {
+    const companyName = String(entry?.companyName || '').trim();
+    const contractDate = formatLhAwardDateInput(entry?.contractDate);
+    const bizNo = String(entry?.bizNo || '').trim();
+    const contractAmount = entry?.contractAmount === null || entry?.contractAmount === undefined || entry?.contractAmount === ''
+      ? null
+      : Number(entry.contractAmount);
+    return {
+      id: String(entry?.id || `award-${Date.now()}-${index}`),
+      companyName,
+      bizNo,
+      fileType: String(entry?.fileType || 'eung').trim() || 'eung',
+      contractDate,
+      contractAmount: Number.isFinite(contractAmount) ? contractAmount : null,
+      projectName: String(entry?.projectName || '').trim(),
+      matchMode: bizNo ? 'bizNo' : 'name',
+      source: entry?.source || '',
+    };
+  }).filter((entry) => entry.companyName && entry.contractDate);
+}
+
+export function hasRecentLhAwardHistory(companyOrName, noticeDate, entries = DEFAULT_LH_AWARD_HISTORY_ENTRIES) {
+  const notice = parseLhAwardDate(noticeDate);
   if (!notice) return false;
-  const key = normalizeCompanyKey(companyName);
-  if (!key) return false;
-  const entry = LH_AWARD_HISTORY_BY_COMPANY.get(key);
-  if (!entry) return false;
-  return entry.contractDates.some((contractDate) => withinPreviousYear(contractDate, notice));
+  const candidate = companyOrName && typeof companyOrName === 'object' ? companyOrName : null;
+  const candidateName = candidate
+    ? (candidate['검색된 회사'] || candidate['업체명'] || candidate.name || candidate.companyName || '')
+    : companyOrName;
+  const candidateBizNo = normalizeLhAwardBizNo(
+    candidate ? (candidate['사업자번호'] || candidate.bizNo || candidate.businessNumber || '') : '',
+  );
+  const companyKey = normalizeLhAwardCompanyKey(candidateName);
+  if (!candidateBizNo && !companyKey) return false;
+
+  return normalizeLhAwardHistoryEntries(entries).some((entry) => {
+    const contractDate = parseLhAwardDate(entry.contractDate);
+    if (!withinPreviousYear(contractDate, notice)) return false;
+    const entryBizNo = normalizeLhAwardBizNo(entry.bizNo);
+    if (entryBizNo && candidateBizNo) return entryBizNo === candidateBizNo;
+    return companyKey && normalizeLhAwardCompanyKey(entry.companyName) === companyKey;
+  });
 }

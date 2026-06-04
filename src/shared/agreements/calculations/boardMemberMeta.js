@@ -136,7 +136,7 @@ export function buildBoardMemberMeta({
     label,
     uid,
     companyName: getCompanyName(candidate),
-    hasRecentAwardHistory: hasRecentAwardHistory(getCompanyName(candidate), noticeDate),
+    hasRecentAwardHistory: hasRecentAwardHistory(candidate, noticeDate),
     isDutyRegion,
     managerName,
     tags,

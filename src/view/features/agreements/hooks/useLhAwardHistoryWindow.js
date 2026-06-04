@@ -13,7 +13,9 @@ export default function useLhAwardHistoryWindow({
     const win = windowRef.current;
     if (win && !win.closed) {
       if (win.__agreementBoardCleanup) {
-        try { win.__agreementBoardCleanup(); } catch {}
+        try { win.__agreementBoardCleanup(); } catch {
+          // Ignore cleanup errors while closing the auxiliary window.
+        }
         delete win.__agreementBoardCleanup;
       }
       win.close();
@@ -31,8 +33,8 @@ export default function useLhAwardHistoryWindow({
     }
 
     if (!windowRef.current) {
-      const width = Math.min(860, Math.max(680, window.innerWidth - 260));
-      const height = Math.min(820, Math.max(620, window.innerHeight - 140));
+      const width = Math.min(1120, Math.max(920, window.innerWidth - 120));
+      const height = Math.min(900, Math.max(720, window.innerHeight - 80));
       const dualScreenLeft = window.screenLeft !== undefined ? window.screenLeft : window.screenX;
       const dualScreenTop = window.screenTop !== undefined ? window.screenTop : window.screenY;
       const left = Math.max(60, dualScreenLeft + window.innerWidth - width - 56);
@@ -71,7 +73,9 @@ export default function useLhAwardHistoryWindow({
         if (existingRoot) setPortalContainer(existingRoot);
       }
       win.document.title = '낙찰이력업체';
-      try { win.focus(); } catch {}
+      try { win.focus(); } catch {
+        // Ignore focus errors from browsers that restrict popup focus.
+      }
     }
   }, [open, portalContainer, setOpen, sourceDocument]);
 

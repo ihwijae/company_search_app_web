@@ -183,7 +183,7 @@ export function buildAgreementExportPayload({
         isSplitMember: Boolean(isSplitMember),
         type: entry.type,
         isRegion: Boolean(isRegionMember),
-        hasRecentAwardHistory: hasRecentAwardHistory(getCompanyName(candidate), bidDeadline),
+        hasRecentAwardHistory: hasRecentAwardHistory(candidate, bidDeadline),
         name: displayName,
         manager: managerName,
         region: getRegionLabel(candidate),

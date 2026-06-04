@@ -59,7 +59,7 @@ export function buildCandidateDrawerEntries({
         uid: entry.uid,
         candidate,
         companyName,
-        hasRecentAwardHistory: hasRecentAwardHistory(companyName, noticeDate),
+        hasRecentAwardHistory: hasRecentAwardHistory(candidate, noticeDate),
         isTempCompany: Boolean(candidate._is_temp_company || candidate.snapshot?._is_temp_company),
         managerName,
         regionLabel,

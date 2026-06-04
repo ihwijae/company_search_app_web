@@ -25,6 +25,7 @@ import { sanitizeHtml } from '../../../../shared/sanitizeHtml.js';
 import { normalizeRegionName } from '../../../../shared/regionNormalizer.js';
 import searchClient from '../../../../shared/searchClient.js';
 import formulasClient from '../../../../shared/formulasClient.js';
+import lhAwardHistoryClient from '../../../../shared/lhAwardHistoryClient.js';
 import { AGREEMENT_BAN_CONFIG } from '../../../../shared/agreements/banConfig.js';
 import { buildAgreementExportPayload } from '../../../../shared/agreements/agreementExportPayload.js';
 import {
@@ -78,8 +79,9 @@ import {
 import { runAgreementCandidateScoreEvaluation } from '../../../../shared/agreements/runner/candidateScoreRunner.js';
 import { evaluateSingleBidEligibility } from '../../../../shared/agreements/rules/singleBidEligibility.js';
 import {
-  getLhAwardHistoryText,
+  DEFAULT_LH_AWARD_HISTORY_ENTRIES,
   hasRecentLhAwardHistory,
+  normalizeLhAwardHistoryEntries,
 } from '../../../../shared/agreements/lhAwardHistory.js';
 import {
   applyDropToAssignments,
@@ -1216,6 +1218,11 @@ export default function AgreementBoardWindow({
   ));
   const [candidateWindowOpen, setCandidateWindowOpen] = React.useState(false);
   const [awardHistoryWindowOpen, setAwardHistoryWindowOpen] = React.useState(false);
+  const [awardHistoryEntries, setAwardHistoryEntries] = React.useState(() => (
+    normalizeLhAwardHistoryEntries(DEFAULT_LH_AWARD_HISTORY_ENTRIES)
+  ));
+  const [awardHistoryLoading, setAwardHistoryLoading] = React.useState(false);
+  const [awardHistoryError, setAwardHistoryError] = React.useState('');
   const [candidateDrawerQuery, setCandidateDrawerQuery] = React.useState('');
   const [candidateSearchOpen, setCandidateSearchOpen] = React.useState(false);
   const [selectedCandidateUid, setSelectedCandidateUid] = React.useState(null);
@@ -1243,6 +1250,7 @@ export default function AgreementBoardWindow({
     setOpen: setAwardHistoryWindowOpen,
     sourceDocument: typeof document !== 'undefined' ? document : null,
   });
+
   const [exportTargetFile, setExportTargetFile] = React.useState(null);
   const [exportTargetFileHandle, setExportTargetFileHandle] = React.useState(null);
   const [exportTargetName, setExportTargetName] = React.useState('');
@@ -1330,6 +1338,41 @@ export default function AgreementBoardWindow({
     if (typeof window === 'undefined') return null;
     return window.__companySearchAuth?.user || null;
   });
+
+  React.useEffect(() => {
+    if (!open || !isLh100To300) return undefined;
+    let canceled = false;
+    setAwardHistoryLoading(true);
+    setAwardHistoryError('');
+    lhAwardHistoryClient.load()
+      .then((data) => {
+        if (canceled) return;
+        setAwardHistoryEntries(normalizeLhAwardHistoryEntries(data?.entries || DEFAULT_LH_AWARD_HISTORY_ENTRIES));
+      })
+      .catch((error) => {
+        if (canceled) return;
+        setAwardHistoryError(error?.message || '낙찰이력 데이터를 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!canceled) setAwardHistoryLoading(false);
+      });
+    return () => {
+      canceled = true;
+    };
+  }, [isLh100To300, open]);
+
+  const handleAwardHistoryEntriesChange = React.useCallback((nextEntries) => {
+    const normalized = normalizeLhAwardHistoryEntries(nextEntries);
+    setAwardHistoryEntries(normalized);
+    setAwardHistoryError('');
+    lhAwardHistoryClient.save(normalized)
+      .then((data) => {
+        setAwardHistoryEntries(normalizeLhAwardHistoryEntries(data?.entries || normalized));
+      })
+      .catch((error) => {
+        setAwardHistoryError(error?.message || '낙찰이력 데이터를 저장하지 못했습니다.');
+      });
+  }, []);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -2926,10 +2969,10 @@ export default function AgreementBoardWindow({
     setCandidatePortalContainer(null);
   }, []);
 
-  const isRecentAwardHistoryCompany = React.useCallback((companyName, baseNoticeDate = noticeDate) => {
+  const isRecentAwardHistoryCompany = React.useCallback((companyOrName, baseNoticeDate = noticeDate) => {
     if (!isLh100To300) return false;
-    return hasRecentLhAwardHistory(companyName, baseNoticeDate);
-  }, [isLh100To300, noticeDate]);
+    return hasRecentLhAwardHistory(companyOrName, baseNoticeDate, awardHistoryEntries);
+  }, [awardHistoryEntries, isLh100To300, noticeDate]);
 
   const ensureTechnicianWindow = React.useCallback(() => {
     if (typeof window === 'undefined') return;
@@ -7236,7 +7279,11 @@ export default function AgreementBoardWindow({
     ? createPortal(
       <LhAwardHistoryWindow
         onClose={() => setAwardHistoryWindowOpen(false)}
-        content={getLhAwardHistoryText()}
+        entries={awardHistoryEntries}
+        onEntriesChange={handleAwardHistoryEntriesChange}
+        fileType={fileType}
+        loading={awardHistoryLoading}
+        error={awardHistoryError}
       />,
       awardHistoryPortalContainer,
     )
