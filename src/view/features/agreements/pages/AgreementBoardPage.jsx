@@ -6,6 +6,7 @@ import { useAgreementBoard } from '../context/AgreementBoardContext.jsx';
 import { BASE_ROUTES } from '../../../../shared/navigation.js';
 
 const BOARD_HEALTHCHECK_INTERVAL_MS = 4000;
+const resolveBoardDocumentTitle = (noticeTitle) => String(noticeTitle || '').trim() || '협정보드';
 
 export default function AgreementBoardPage() {
   const {
@@ -39,8 +40,8 @@ export default function AgreementBoardPage() {
 
   React.useEffect(() => {
     if (!boardState.inlineMode) return;
-    document.title = boardState.title || '협정보드';
-  }, [boardState.inlineMode, boardState.open, updateBoard]);
+    document.title = resolveBoardDocumentTitle(boardState.noticeTitle);
+  }, [boardState.inlineMode, boardState.noticeTitle]);
 
   React.useEffect(() => {
     let active = true;

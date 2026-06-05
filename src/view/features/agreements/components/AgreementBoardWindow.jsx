@@ -95,6 +95,8 @@ import {
   swapOrMoveBoardEntries,
 } from '../../../../shared/agreements/placement/boardPlacement.js';
 
+const resolveBoardDocumentTitle = (noticeTitle) => String(noticeTitle || '').trim() || '협정보드';
+
 const DEFAULT_GROUP_SIZE = 5;
 const MIN_GROUPS = 4;
 const BID_SCORE_DEFAULT = 65;
@@ -3218,8 +3220,8 @@ export default function AgreementBoardWindow({
     if (!open) return;
     const win = boardWindowRef.current;
     if (!win || win.closed || !win.document) return;
-    win.document.title = title || '협정보드';
-  }, [inlineMode, title, open]);
+    win.document.title = resolveBoardDocumentTitle(noticeTitle);
+  }, [inlineMode, noticeTitle, open]);
 
   const dutyRegionSet = React.useMemo(() => {
     const entries = Array.isArray(dutyRegions) ? dutyRegions : [];
