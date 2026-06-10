@@ -1852,26 +1852,6 @@ export default function AgreementBoardWindow({
     parseNumeric,
   ]);
 
-  const openMinimumPerformanceModal = React.useCallback((groupIndex, slotIndex) => {
-    const context = getGroupMinimumPerformanceContext(groupIndex);
-    if (context.assignedMemberCount > 0 && context.hasMissingAssignedShare) {
-      showHeaderAlert('기존 업체의 지분율을 먼저 입력하세요.');
-      return;
-    }
-    if (context.assignedMemberCount > 0 && context.hasMissingAssignedPerformance) {
-      showHeaderAlert('기존 업체의 실적금액을 먼저 입력하거나 확인하세요.');
-      return;
-    }
-    if (!(perfectPerformanceAmount > 0)) {
-      showHeaderAlert('현재 발주처/금액대 기준으로 실적 만점 기준을 계산할 수 없습니다.');
-      return;
-    }
-    const defaultShare = context.remainingShare > 0 ? formatShareDecimal(context.remainingShare) : '';
-    setMinimumPerformanceTarget({ groupIndex, slotIndex });
-    setMinimumPerformanceShareInput(defaultShare);
-    setMinimumPerformanceModalOpen(true);
-  }, [getGroupMinimumPerformanceContext, perfectPerformanceAmount, showHeaderAlert]);
-
   const credibilityConfig = React.useMemo(() => {
     if (ownerKeyUpper === 'LH') return { enabled: true, max: isLh100To300 ? LH_SIMPLE_REGIONAL_CONTRIBUTION_MAX : null };
     if (ownerKeyUpper === 'PPS') return { enabled: true, max: null };
@@ -2054,6 +2034,26 @@ export default function AgreementBoardWindow({
     const formatted = Math.round(perfectPerformanceAmount).toLocaleString();
     return perfectPerformanceBasis ? `${formatted} (${perfectPerformanceBasis})` : formatted;
   }, [perfectPerformanceAmount, perfectPerformanceBasis]);
+
+  const openMinimumPerformanceModal = React.useCallback((groupIndex, slotIndex) => {
+    const context = getGroupMinimumPerformanceContext(groupIndex);
+    if (context.assignedMemberCount > 0 && context.hasMissingAssignedShare) {
+      showHeaderAlert('기존 업체의 지분율을 먼저 입력하세요.');
+      return;
+    }
+    if (context.assignedMemberCount > 0 && context.hasMissingAssignedPerformance) {
+      showHeaderAlert('기존 업체의 실적금액을 먼저 입력하거나 확인하세요.');
+      return;
+    }
+    if (!(perfectPerformanceAmount > 0)) {
+      showHeaderAlert('현재 발주처/금액대 기준으로 실적 만점 기준을 계산할 수 없습니다.');
+      return;
+    }
+    const defaultShare = context.remainingShare > 0 ? formatShareDecimal(context.remainingShare) : '';
+    setMinimumPerformanceTarget({ groupIndex, slotIndex });
+    setMinimumPerformanceShareInput(defaultShare);
+    setMinimumPerformanceModalOpen(true);
+  }, [getGroupMinimumPerformanceContext, perfectPerformanceAmount, showHeaderAlert]);
 
   const buildRegionSearchPayload = React.useCallback(() => ({
     ownerId,
