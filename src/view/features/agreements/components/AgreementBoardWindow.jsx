@@ -49,6 +49,7 @@ import {
   computeGroupSummaries,
 } from '../../../../shared/agreements/calculations/groupSummary.js';
 import { buildInconMemoText } from '../../../../shared/agreements/calculations/inconMemo.js';
+import { calculateMinimumPerformanceAmount } from '../../../../shared/agreements/calculations/minimumPerformanceAmount.js';
 import {
   extractCreditGrade,
   getCandidateManagementScore as resolveCandidateManagementScore,
@@ -1262,6 +1263,9 @@ export default function AgreementBoardWindow({
   const technicianWindowRef = React.useRef(null);
   const [technicianPortalContainer, setTechnicianPortalContainer] = React.useState(null);
   const [minRatingOpen, setMinRatingOpen] = React.useState(false);
+  const [minimumPerformanceModalOpen, setMinimumPerformanceModalOpen] = React.useState(false);
+  const [minimumPerformanceTarget, setMinimumPerformanceTarget] = React.useState(null);
+  const [minimumPerformanceShareInput, setMinimumPerformanceShareInput] = React.useState('');
   const [minRatingRequiredShare, setMinRatingRequiredShare] = React.useState('');
   const [minRatingNetCostBonus, setMinRatingNetCostBonus] = React.useState('');
   const [minRatingCredibilityScore, setMinRatingCredibilityScore] = React.useState('');
@@ -1784,6 +1788,11 @@ export default function AgreementBoardWindow({
   const closeMinRatingModal = React.useCallback(() => {
     setMinRatingOpen(false);
   }, []);
+  const closeMinimumPerformanceModal = React.useCallback(() => {
+    setMinimumPerformanceModalOpen(false);
+    setMinimumPerformanceTarget(null);
+    setMinimumPerformanceShareInput('');
+  }, []);
 
   React.useEffect(() => {
     if (!minRatingOpen) return;
@@ -1794,6 +1803,74 @@ export default function AgreementBoardWindow({
       setMinRatingRequiredShare('');
     }
   }, [minRatingOpen, regionDutyRate]);
+
+  const getGroupMinimumPerformanceContext = React.useCallback((groupIndex) => {
+    const memberIds = Array.isArray(groupAssignments[groupIndex]) ? groupAssignments[groupIndex] : [];
+    const assignedMembers = memberIds
+      .map((uid, slotIndex) => {
+        if (!uid || isSplitAssignedSlot(slotIndex)) return null;
+        const entry = participantMap.get(uid);
+        const candidate = entry?.candidate;
+        if (!candidate) return null;
+        const shareRaw = groupShareRawInputs[groupIndex]?.[slotIndex];
+        const storedShare = groupShares[groupIndex]?.[slotIndex];
+        const shareValue = shareRaw !== undefined ? shareRaw : (storedShare !== undefined ? storedShare : '');
+        const sharePercent = parseNumeric(shareValue);
+        const performanceAmount = getCandidatePerformanceAmountForCurrentRange(candidate);
+        return {
+          slotIndex,
+          sharePercent,
+          performanceAmount,
+        };
+      })
+      .filter(Boolean);
+
+    const assignedShareTotal = assignedMembers.reduce((sum, member) => (
+      member.sharePercent != null ? sum + member.sharePercent : sum
+    ), 0);
+    const currentContributionAmount = assignedMembers.reduce((sum, member) => {
+      if (member.sharePercent == null || member.performanceAmount == null) return sum;
+      return sum + (member.performanceAmount * (member.sharePercent / 100));
+    }, 0);
+
+    return {
+      assignedMembers,
+      assignedMemberCount: assignedMembers.length,
+      assignedShareTotal,
+      remainingShare: Math.max(0, 100 - assignedShareTotal),
+      hasMissingAssignedShare: assignedMembers.some((member) => member.sharePercent == null),
+      hasMissingAssignedPerformance: assignedMembers.some((member) => member.performanceAmount == null),
+      currentContributionAmount,
+    };
+  }, [
+    getCandidatePerformanceAmountForCurrentRange,
+    groupAssignments,
+    groupShareRawInputs,
+    groupShares,
+    isSplitAssignedSlot,
+    participantMap,
+    parseNumeric,
+  ]);
+
+  const openMinimumPerformanceModal = React.useCallback((groupIndex, slotIndex) => {
+    const context = getGroupMinimumPerformanceContext(groupIndex);
+    if (context.assignedMemberCount > 0 && context.hasMissingAssignedShare) {
+      showHeaderAlert('기존 업체의 지분율을 먼저 입력하세요.');
+      return;
+    }
+    if (context.assignedMemberCount > 0 && context.hasMissingAssignedPerformance) {
+      showHeaderAlert('기존 업체의 실적금액을 먼저 입력하거나 확인하세요.');
+      return;
+    }
+    if (!(perfectPerformanceAmount > 0)) {
+      showHeaderAlert('현재 발주처/금액대 기준으로 실적 만점 기준을 계산할 수 없습니다.');
+      return;
+    }
+    const defaultShare = context.remainingShare > 0 ? formatShareDecimal(context.remainingShare) : '';
+    setMinimumPerformanceTarget({ groupIndex, slotIndex });
+    setMinimumPerformanceShareInput(defaultShare);
+    setMinimumPerformanceModalOpen(true);
+  }, [getGroupMinimumPerformanceContext, perfectPerformanceAmount, showHeaderAlert]);
 
   const credibilityConfig = React.useMemo(() => {
     if (ownerKeyUpper === 'LH') return { enabled: true, max: isLh100To300 ? LH_SIMPLE_REGIONAL_CONTRIBUTION_MAX : null };
@@ -2694,6 +2771,44 @@ export default function AgreementBoardWindow({
     resolveQualityPoints,
     roundForLhTotals,
     effectiveSelectedRangeKey,
+  ]);
+
+  const minimumPerformanceContext = React.useMemo(() => {
+    if (!minimumPerformanceTarget) return null;
+    return getGroupMinimumPerformanceContext(minimumPerformanceTarget.groupIndex);
+  }, [getGroupMinimumPerformanceContext, minimumPerformanceTarget]);
+
+  const minimumPerformanceResult = React.useMemo(() => {
+    if (!minimumPerformanceContext) return { status: 'inactive' };
+    if (!(perfectPerformanceAmount > 0)) return { status: 'missing-threshold' };
+
+    const targetShare = parseNumeric(minimumPerformanceShareInput);
+    const remainingShare = minimumPerformanceContext.remainingShare;
+
+    if (minimumPerformanceShareInput === '') {
+      return { status: 'need-share', remainingShare };
+    }
+    if (targetShare == null || targetShare <= 0) {
+      return { status: 'invalid-share', remainingShare };
+    }
+    if (targetShare - remainingShare > 0.0001) {
+      return { status: 'exceeds-remaining', remainingShare, targetShare };
+    }
+
+    return {
+      ...calculateMinimumPerformanceAmount({
+        perfectPerformanceAmount,
+        currentContributionAmount: minimumPerformanceContext.currentContributionAmount,
+        targetSharePercent: targetShare,
+      }),
+      assignedShareTotal: minimumPerformanceContext.assignedShareTotal,
+      remainingShare,
+    };
+  }, [
+    minimumPerformanceContext,
+    minimumPerformanceShareInput,
+    parseNumeric,
+    perfectPerformanceAmount,
   ]);
 
   React.useEffect(() => {
@@ -5526,9 +5641,22 @@ export default function AgreementBoardWindow({
     </td>
   );
 
-  const renderPerformanceCell = (meta, rowSpan) => (
+  const renderPerformanceCell = (meta, rowSpan, { showMinimumButton = false } = {}) => (
     <td key={`perf-${meta.groupIndex}-${meta.slotIndex}`} className="excel-cell excel-perf-cell" rowSpan={rowSpan}>
-      {meta.empty ? null : (
+      {meta.empty ? (
+        showMinimumButton ? (
+          <div className="excel-performance excel-performance-empty">
+            <span className="perf-label">{performanceAmountLabel}</span>
+            <button
+              type="button"
+              className="excel-minimum-performance-button"
+              onClick={() => openMinimumPerformanceModal(meta.groupIndex, meta.slotIndex)}
+            >
+              최소금액
+            </button>
+          </div>
+        ) : null
+      ) : (
         <div className="excel-performance">
           <span className="perf-label">{performanceAmountLabel}</span>
           {isAmountCellEditing(meta, 'performance') ? (
@@ -5788,6 +5916,7 @@ export default function AgreementBoardWindow({
     const summaryInfo = group.summary;
     let scoreState = null;
     const slotMetas = slotLabels.map((label, slotIndex) => buildSlotMeta(group, groupIndex, slotIndex, label));
+    const minimumPerformanceGroupContext = getGroupMinimumPerformanceContext(groupIndex);
     const memberCount = slotMetas.filter((meta) => !meta.empty).length;
     const participantLimitExceeded = safeParticipantLimit > 0 && memberCount > safeParticipantLimit;
     const slotMetasWithLimit = slotMetas.map((meta) => ({
@@ -6060,7 +6189,11 @@ export default function AgreementBoardWindow({
         )}
         {collapsedColumns.performance
           ? renderCollapsedStubCell('performance', rightRowSpan)
-          : slotMetas.map((meta) => renderPerformanceCell(meta, rightRowSpan))}
+          : slotMetas.map((meta) => renderPerformanceCell(meta, rightRowSpan, {
+            showMinimumButton: meta.empty
+              && !isSplitAssignedSlot(meta.slotIndex)
+              && minimumPerformanceGroupContext.remainingShare > 0.0001,
+          }))}
         {isLh100To300 && (
           <td className="excel-cell total-cell performance-coefficient-cell" rowSpan={rightRowSpan}>
             {performanceCoefficientDisplay}
@@ -7172,6 +7305,87 @@ export default function AgreementBoardWindow({
                 </p>
             )}
             <p className="export-sheet-hint">기준: 경영 15점, 실적 만점, 품질 85점, 입찰 65점 기준.</p>
+          </div>
+        </div>
+      </Modal>
+      <Modal
+        open={minimumPerformanceModalOpen}
+        title="최소 실적금액 계산"
+        onClose={closeMinimumPerformanceModal}
+        onCancel={closeMinimumPerformanceModal}
+        onSave={closeMinimumPerformanceModal}
+        closeOnSave
+        confirmLabel="닫기"
+        size="sm"
+      >
+        <div className="export-sheet-modal">
+          <div className="export-sheet-field">
+            <span className="export-sheet-label">실적 만점 기준</span>
+            <div className="minimum-performance-result">
+              <div>{formatAmount(perfectPerformanceAmount)}</div>
+              {perfectPerformanceBasis && (
+                <p className="export-sheet-hint">{perfectPerformanceBasis}</p>
+              )}
+            </div>
+          </div>
+          <div className="export-sheet-field">
+            <span className="export-sheet-label">현재 반영 지분</span>
+            <div className="minimum-performance-result">
+              {minimumPerformanceContext
+                ? formatPercentValue(minimumPerformanceContext.assignedShareTotal, 1)
+                : '-'}
+            </div>
+          </div>
+          <div className="export-sheet-field">
+            <span className="export-sheet-label">현재 반영 실적</span>
+            <div className="minimum-performance-result">
+              {minimumPerformanceContext
+                ? formatAmount(minimumPerformanceContext.currentContributionAmount)
+                : '-'}
+            </div>
+          </div>
+          <div className="export-sheet-field">
+            <span className="export-sheet-label">계산 지분(%)</span>
+            <input
+              type="text"
+              value={minimumPerformanceShareInput}
+              onChange={(event) => setMinimumPerformanceShareInput(event.target.value)}
+              placeholder="예: 40"
+            />
+            <p className="export-sheet-hint">
+              기본값은 남은 지분입니다.
+              {minimumPerformanceContext ? ` 현재 남은 지분: ${formatPercentValue(minimumPerformanceContext.remainingShare, 1)}` : ''}
+            </p>
+          </div>
+          <div className="export-sheet-field">
+            <span className="export-sheet-label">결과</span>
+            {minimumPerformanceResult.status === 'need-share' && (
+              <p className="export-sheet-hint">계산할 지분율을 입력하세요.</p>
+            )}
+            {minimumPerformanceResult.status === 'invalid-share' && (
+              <p className="export-sheet-hint" style={{ color: '#b91c1c' }}>
+                0보다 큰 지분율을 입력하세요.
+              </p>
+            )}
+            {minimumPerformanceResult.status === 'exceeds-remaining' && (
+              <p className="export-sheet-hint" style={{ color: '#b91c1c' }}>
+                입력 지분율이 남은 지분을 초과합니다. 남은 지분 이하로 입력하세요.
+              </p>
+            )}
+            {minimumPerformanceResult.status === 'missing-threshold' && (
+              <p className="export-sheet-hint" style={{ color: '#b91c1c' }}>
+                현재 발주처/금액대 기준의 실적 만점값을 계산할 수 없습니다.
+              </p>
+            )}
+            {minimumPerformanceResult.status === 'ok' && (
+              <div className="minimum-performance-result">
+                <div>필요 최소 실적금액: <strong>{formatAmount(minimumPerformanceResult.minimumPerformanceAmount)}</strong></div>
+                <div>가정 지분: {formatPercentValue(minimumPerformanceResult.targetSharePercent, 1)}</div>
+                {minimumPerformanceResult.minimumPerformanceAmount <= 0 && (
+                  <p className="export-sheet-hint">현재 배치된 업체만으로 이미 실적 만점을 충족합니다.</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </Modal>
