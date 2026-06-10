@@ -2336,6 +2336,18 @@ export default function AgreementBoardWindow({
     parseNumeric,
   });
 
+  const handleConfirmSaveAgreement = React.useCallback(async () => {
+    const ok = await confirm({
+      title: '협정을 저장하시겠습니까?',
+      message: '확인을 누르면 현재 협정보드 내용이 저장됩니다.',
+      confirmText: '확인',
+      cancelText: '취소',
+      tone: 'warning',
+      portalTarget: portalContainer || null,
+    });
+    if (!ok) return;
+    await handleSaveAgreement();
+  }, [confirm, handleSaveAgreement, portalContainer]);
 
   const loadRangeOptions = React.useMemo(() => {
     if (loadFilters.ownerId) {
@@ -6539,7 +6551,7 @@ export default function AgreementBoardWindow({
                 <button type="button" className="excel-btn" onClick={handleAddGroup}>빈 행 추가</button>
                 <button type="button" className="excel-btn" onClick={handleDeleteGroups}>선택 삭제</button>
                 <button type="button" className="excel-btn" onClick={handleResetGroups}>초기화</button>
-                <button type="button" className="excel-btn" onClick={handleSaveAgreement}>저장</button>
+                <button type="button" className="excel-btn" onClick={handleConfirmSaveAgreement}>저장</button>
                 <button type="button" className="excel-btn" onClick={openLoadModal}>불러오기</button>
                 <button
                   type="button"
