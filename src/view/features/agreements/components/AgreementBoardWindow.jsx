@@ -1804,54 +1804,6 @@ export default function AgreementBoardWindow({
     }
   }, [minRatingOpen, regionDutyRate]);
 
-  const getGroupMinimumPerformanceContext = React.useCallback((groupIndex) => {
-    const memberIds = Array.isArray(groupAssignments[groupIndex]) ? groupAssignments[groupIndex] : [];
-    const assignedMembers = memberIds
-      .map((uid, slotIndex) => {
-        if (!uid || isSplitAssignedSlot(slotIndex)) return null;
-        const entry = participantMap.get(uid);
-        const candidate = entry?.candidate;
-        if (!candidate) return null;
-        const shareRaw = groupShareRawInputs[groupIndex]?.[slotIndex];
-        const storedShare = groupShares[groupIndex]?.[slotIndex];
-        const shareValue = shareRaw !== undefined ? shareRaw : (storedShare !== undefined ? storedShare : '');
-        const sharePercent = parseNumeric(shareValue);
-        const performanceAmount = getCandidatePerformanceAmountForCurrentRange(candidate);
-        return {
-          slotIndex,
-          sharePercent,
-          performanceAmount,
-        };
-      })
-      .filter(Boolean);
-
-    const assignedShareTotal = assignedMembers.reduce((sum, member) => (
-      member.sharePercent != null ? sum + member.sharePercent : sum
-    ), 0);
-    const currentContributionAmount = assignedMembers.reduce((sum, member) => {
-      if (member.sharePercent == null || member.performanceAmount == null) return sum;
-      return sum + (member.performanceAmount * (member.sharePercent / 100));
-    }, 0);
-
-    return {
-      assignedMembers,
-      assignedMemberCount: assignedMembers.length,
-      assignedShareTotal,
-      remainingShare: Math.max(0, 100 - assignedShareTotal),
-      hasMissingAssignedShare: assignedMembers.some((member) => member.sharePercent == null),
-      hasMissingAssignedPerformance: assignedMembers.some((member) => member.performanceAmount == null),
-      currentContributionAmount,
-    };
-  }, [
-    getCandidatePerformanceAmountForCurrentRange,
-    groupAssignments,
-    groupShareRawInputs,
-    groupShares,
-    isSplitAssignedSlot,
-    participantMap,
-    parseNumeric,
-  ]);
-
   const credibilityConfig = React.useMemo(() => {
     if (ownerKeyUpper === 'LH') return { enabled: true, max: isLh100To300 ? LH_SIMPLE_REGIONAL_CONTRIBUTION_MAX : null };
     if (ownerKeyUpper === 'PPS') return { enabled: true, max: null };
@@ -2034,26 +1986,6 @@ export default function AgreementBoardWindow({
     const formatted = Math.round(perfectPerformanceAmount).toLocaleString();
     return perfectPerformanceBasis ? `${formatted} (${perfectPerformanceBasis})` : formatted;
   }, [perfectPerformanceAmount, perfectPerformanceBasis]);
-
-  const openMinimumPerformanceModal = React.useCallback((groupIndex, slotIndex) => {
-    const context = getGroupMinimumPerformanceContext(groupIndex);
-    if (context.assignedMemberCount > 0 && context.hasMissingAssignedShare) {
-      showHeaderAlert('기존 업체의 지분율을 먼저 입력하세요.');
-      return;
-    }
-    if (context.assignedMemberCount > 0 && context.hasMissingAssignedPerformance) {
-      showHeaderAlert('기존 업체의 실적금액을 먼저 입력하거나 확인하세요.');
-      return;
-    }
-    if (!(perfectPerformanceAmount > 0)) {
-      showHeaderAlert('현재 발주처/금액대 기준으로 실적 만점 기준을 계산할 수 없습니다.');
-      return;
-    }
-    const defaultShare = context.remainingShare > 0 ? formatShareDecimal(context.remainingShare) : '';
-    setMinimumPerformanceTarget({ groupIndex, slotIndex });
-    setMinimumPerformanceShareInput(defaultShare);
-    setMinimumPerformanceModalOpen(true);
-  }, [getGroupMinimumPerformanceContext, perfectPerformanceAmount, showHeaderAlert]);
 
   const buildRegionSearchPayload = React.useCallback(() => ({
     ownerId,
@@ -2771,44 +2703,6 @@ export default function AgreementBoardWindow({
     resolveQualityPoints,
     roundForLhTotals,
     effectiveSelectedRangeKey,
-  ]);
-
-  const minimumPerformanceContext = React.useMemo(() => {
-    if (!minimumPerformanceTarget) return null;
-    return getGroupMinimumPerformanceContext(minimumPerformanceTarget.groupIndex);
-  }, [getGroupMinimumPerformanceContext, minimumPerformanceTarget]);
-
-  const minimumPerformanceResult = React.useMemo(() => {
-    if (!minimumPerformanceContext) return { status: 'inactive' };
-    if (!(perfectPerformanceAmount > 0)) return { status: 'missing-threshold' };
-
-    const targetShare = parseNumeric(minimumPerformanceShareInput);
-    const remainingShare = minimumPerformanceContext.remainingShare;
-
-    if (minimumPerformanceShareInput === '') {
-      return { status: 'need-share', remainingShare };
-    }
-    if (targetShare == null || targetShare <= 0) {
-      return { status: 'invalid-share', remainingShare };
-    }
-    if (targetShare - remainingShare > 0.0001) {
-      return { status: 'exceeds-remaining', remainingShare, targetShare };
-    }
-
-    return {
-      ...calculateMinimumPerformanceAmount({
-        perfectPerformanceAmount,
-        currentContributionAmount: minimumPerformanceContext.currentContributionAmount,
-        targetSharePercent: targetShare,
-      }),
-      assignedShareTotal: minimumPerformanceContext.assignedShareTotal,
-      remainingShare,
-    };
-  }, [
-    minimumPerformanceContext,
-    minimumPerformanceShareInput,
-    parseNumeric,
-    perfectPerformanceAmount,
   ]);
 
   React.useEffect(() => {
@@ -3631,6 +3525,112 @@ export default function AgreementBoardWindow({
     }
     return map;
   }, [representativeEntries, regionEntries]);
+
+  const getGroupMinimumPerformanceContext = React.useCallback((groupIndex) => {
+    const memberIds = Array.isArray(groupAssignments[groupIndex]) ? groupAssignments[groupIndex] : [];
+    const assignedMembers = memberIds
+      .map((uid, slotIndex) => {
+        if (!uid || isSplitAssignedSlot(slotIndex)) return null;
+        const entry = participantMap.get(uid);
+        const candidate = entry?.candidate;
+        if (!candidate) return null;
+        const shareRaw = groupShareRawInputs[groupIndex]?.[slotIndex];
+        const storedShare = groupShares[groupIndex]?.[slotIndex];
+        const shareValue = shareRaw !== undefined ? shareRaw : (storedShare !== undefined ? storedShare : '');
+        const sharePercent = parseNumeric(shareValue);
+        const performanceAmount = getCandidatePerformanceAmountForCurrentRange(candidate);
+        return {
+          slotIndex,
+          sharePercent,
+          performanceAmount,
+        };
+      })
+      .filter(Boolean);
+
+    const assignedShareTotal = assignedMembers.reduce((sum, member) => (
+      member.sharePercent != null ? sum + member.sharePercent : sum
+    ), 0);
+    const currentContributionAmount = assignedMembers.reduce((sum, member) => {
+      if (member.sharePercent == null || member.performanceAmount == null) return sum;
+      return sum + (member.performanceAmount * (member.sharePercent / 100));
+    }, 0);
+
+    return {
+      assignedMembers,
+      assignedMemberCount: assignedMembers.length,
+      assignedShareTotal,
+      remainingShare: Math.max(0, 100 - assignedShareTotal),
+      hasMissingAssignedShare: assignedMembers.some((member) => member.sharePercent == null),
+      hasMissingAssignedPerformance: assignedMembers.some((member) => member.performanceAmount == null),
+      currentContributionAmount,
+    };
+  }, [
+    getCandidatePerformanceAmountForCurrentRange,
+    groupAssignments,
+    groupShareRawInputs,
+    groupShares,
+    isSplitAssignedSlot,
+    participantMap,
+    parseNumeric,
+  ]);
+
+  const openMinimumPerformanceModal = React.useCallback((groupIndex, slotIndex) => {
+    const context = getGroupMinimumPerformanceContext(groupIndex);
+    if (context.assignedMemberCount > 0 && context.hasMissingAssignedShare) {
+      showHeaderAlert('기존 업체의 지분율을 먼저 입력하세요.');
+      return;
+    }
+    if (context.assignedMemberCount > 0 && context.hasMissingAssignedPerformance) {
+      showHeaderAlert('기존 업체의 실적금액을 먼저 입력하거나 확인하세요.');
+      return;
+    }
+    if (!(perfectPerformanceAmount > 0)) {
+      showHeaderAlert('현재 발주처/금액대 기준으로 실적 만점 기준을 계산할 수 없습니다.');
+      return;
+    }
+    const defaultShare = context.remainingShare > 0 ? formatShareDecimal(context.remainingShare) : '';
+    setMinimumPerformanceTarget({ groupIndex, slotIndex });
+    setMinimumPerformanceShareInput(defaultShare);
+    setMinimumPerformanceModalOpen(true);
+  }, [getGroupMinimumPerformanceContext, perfectPerformanceAmount, showHeaderAlert]);
+
+  const minimumPerformanceContext = React.useMemo(() => {
+    if (!minimumPerformanceTarget) return null;
+    return getGroupMinimumPerformanceContext(minimumPerformanceTarget.groupIndex);
+  }, [getGroupMinimumPerformanceContext, minimumPerformanceTarget]);
+
+  const minimumPerformanceResult = React.useMemo(() => {
+    if (!minimumPerformanceContext) return { status: 'inactive' };
+    if (!(perfectPerformanceAmount > 0)) return { status: 'missing-threshold' };
+
+    const targetShare = parseNumeric(minimumPerformanceShareInput);
+    const remainingShare = minimumPerformanceContext.remainingShare;
+
+    if (minimumPerformanceShareInput === '') {
+      return { status: 'need-share', remainingShare };
+    }
+    if (targetShare == null || targetShare <= 0) {
+      return { status: 'invalid-share', remainingShare };
+    }
+    if (targetShare - remainingShare > 0.0001) {
+      return { status: 'exceeds-remaining', remainingShare, targetShare };
+    }
+
+    return {
+      ...calculateMinimumPerformanceAmount({
+        perfectPerformanceAmount,
+        currentContributionAmount: minimumPerformanceContext.currentContributionAmount,
+        targetSharePercent: targetShare,
+      }),
+      assignedShareTotal: minimumPerformanceContext.assignedShareTotal,
+      remainingShare,
+    };
+  }, [
+    minimumPerformanceContext,
+    minimumPerformanceShareInput,
+    parseNumeric,
+    perfectPerformanceAmount,
+  ]);
 
   const handleGenerateInconMemo = React.useCallback(async () => {
     const resolvedSplitLabel = `${String(splitIndustryLabel || '').trim() || '분담'}분담`;
