@@ -27,6 +27,10 @@ const OWNER_OPTIONS = [
   { value: 'EX', label: '한국도로공사' },
   { value: 'KRAIL', label: '국가철도공단' },
 ];
+const BID_AMOUNT_NAME_COLUMN_BY_OWNER = {
+  MOIS: 3,
+  PPS: 2,
+};
 
 const BIZ_FIELDS = ['사업자번호', 'bizNo', '사업자 번호'];
 const NAME_FIELDS = ['업체명', '회사명', 'name', '검색된 회사'];
@@ -1481,6 +1485,7 @@ export default function BidResultPage() {
     const entries = [];
     const excludedNames = [];
     const isLhOwner = bidAmountOwnerId === 'LH';
+    const nameColumnIndex = BID_AMOUNT_NAME_COLUMN_BY_OWNER[bidAmountOwnerId] ?? 2;
     const maxConsecutiveEmptyRows = isLhOwner ? 2 : 1;
     let consecutiveEmptyRows = 0;
     for (let row = 5; row <= 1000; row += 1) {
@@ -1494,7 +1499,7 @@ export default function BidResultPage() {
         continue;
       }
       consecutiveEmptyRows = 0;
-      const nameAddress = XLSX.utils.encode_cell({ r: row - 1, c: 2 });
+      const nameAddress = XLSX.utils.encode_cell({ r: row - 1, c: nameColumnIndex });
       const nameCell = sheet[nameAddress];
       const raw = nameCell ? XLSX.utils.format_cell(nameCell) : '';
       const rawName = String(raw || '').trim();
