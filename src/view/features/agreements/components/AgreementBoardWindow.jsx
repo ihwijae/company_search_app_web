@@ -51,6 +51,10 @@ import {
 import { buildInconMemoText } from '../../../../shared/agreements/calculations/inconMemo.js';
 import { calculateMinimumPerformanceAmount } from '../../../../shared/agreements/calculations/minimumPerformanceAmount.js';
 import {
+  calculateMinimumSipyungAmountForRatio,
+  calculateMinimumSipyungAmountForSum,
+} from '../../../../shared/agreements/calculations/minimumSipyungAmount.js';
+import {
   extractCreditGrade,
   getCandidateManagementScore as resolveCandidateManagementScore,
   isCreditScoreExpired,
@@ -1266,6 +1270,9 @@ export default function AgreementBoardWindow({
   const [minimumPerformanceModalOpen, setMinimumPerformanceModalOpen] = React.useState(false);
   const [minimumPerformanceTarget, setMinimumPerformanceTarget] = React.useState(null);
   const [minimumPerformanceShareInput, setMinimumPerformanceShareInput] = React.useState('');
+  const [minimumSipyungModalOpen, setMinimumSipyungModalOpen] = React.useState(false);
+  const [minimumSipyungTarget, setMinimumSipyungTarget] = React.useState(null);
+  const [minimumSipyungShareInput, setMinimumSipyungShareInput] = React.useState('');
   const [minRatingRequiredShare, setMinRatingRequiredShare] = React.useState('');
   const [minRatingNetCostBonus, setMinRatingNetCostBonus] = React.useState('');
   const [minRatingCredibilityScore, setMinRatingCredibilityScore] = React.useState('');
@@ -1793,6 +1800,11 @@ export default function AgreementBoardWindow({
     setMinimumPerformanceTarget(null);
     setMinimumPerformanceShareInput('');
   }, []);
+  const closeMinimumSipyungModal = React.useCallback(() => {
+    setMinimumSipyungModalOpen(false);
+    setMinimumSipyungTarget(null);
+    setMinimumSipyungShareInput('');
+  }, []);
 
   React.useEffect(() => {
     if (!minRatingOpen) return;
@@ -1986,6 +1998,10 @@ export default function AgreementBoardWindow({
     const formatted = Math.round(perfectPerformanceAmount).toLocaleString();
     return perfectPerformanceBasis ? `${formatted} (${perfectPerformanceBasis})` : formatted;
   }, [perfectPerformanceAmount, perfectPerformanceBasis]);
+  const qualificationEntryLimitAmount = React.useMemo(() => {
+    if (entryModeResolved === 'none') return 0;
+    return parseAmountValue(entryAmount) || 0;
+  }, [entryAmount, entryModeResolved]);
 
   const buildRegionSearchPayload = React.useCallback(() => ({
     ownerId,
@@ -3539,10 +3555,12 @@ export default function AgreementBoardWindow({
         const shareValue = shareRaw !== undefined ? shareRaw : (storedShare !== undefined ? storedShare : '');
         const sharePercent = parseNumeric(shareValue);
         const performanceAmount = getCandidatePerformanceAmountForCurrentRange(candidate);
+        const sipyungAmount = getCandidateSipyungAmount(candidate);
         return {
           slotIndex,
           sharePercent,
           performanceAmount,
+          sipyungAmount,
         };
       })
       .filter(Boolean);
@@ -3554,6 +3572,14 @@ export default function AgreementBoardWindow({
       if (member.sharePercent == null || member.performanceAmount == null) return sum;
       return sum + (member.performanceAmount * (member.sharePercent / 100));
     }, 0);
+    const currentSipyungAmount = assignedMembers.reduce((sum, member) => {
+      if (member.sipyungAmount == null) return sum;
+      return sum + member.sipyungAmount;
+    }, 0);
+    const currentSipyungContributionAmount = assignedMembers.reduce((sum, member) => {
+      if (member.sharePercent == null || member.sipyungAmount == null) return sum;
+      return sum + (member.sipyungAmount * (member.sharePercent / 100));
+    }, 0);
 
     return {
       assignedMembers,
@@ -3562,10 +3588,14 @@ export default function AgreementBoardWindow({
       remainingShare: Math.max(0, 100 - assignedShareTotal),
       hasMissingAssignedShare: assignedMembers.some((member) => member.sharePercent == null),
       hasMissingAssignedPerformance: assignedMembers.some((member) => member.performanceAmount == null),
+      hasMissingAssignedSipyung: assignedMembers.some((member) => member.sipyungAmount == null),
       currentContributionAmount,
+      currentSipyungAmount,
+      currentSipyungContributionAmount,
     };
   }, [
     getCandidatePerformanceAmountForCurrentRange,
+    getCandidateSipyungAmount,
     groupAssignments,
     groupShareRawInputs,
     groupShares,
@@ -3594,10 +3624,37 @@ export default function AgreementBoardWindow({
     setMinimumPerformanceModalOpen(true);
   }, [getGroupMinimumPerformanceContext, perfectPerformanceAmount, showHeaderAlert]);
 
+  const openMinimumSipyungModal = React.useCallback((groupIndex, slotIndex) => {
+    const context = getGroupMinimumPerformanceContext(groupIndex);
+    if (!(qualificationEntryLimitAmount > 0) || entryModeResolved === 'none') {
+      showHeaderAlert('참가자격금액이 있을 때만 최소 시평액을 계산할 수 있습니다.');
+      return;
+    }
+    if (entryModeResolved === 'ratio' && context.assignedMemberCount > 0 && context.hasMissingAssignedShare) {
+      showHeaderAlert('기존 업체의 지분율을 먼저 입력하세요.');
+      return;
+    }
+    if (context.assignedMemberCount > 0 && context.hasMissingAssignedSipyung) {
+      showHeaderAlert('기존 업체의 시평액을 먼저 입력하거나 확인하세요.');
+      return;
+    }
+    const defaultShare = entryModeResolved === 'ratio' && context.remainingShare > 0
+      ? formatShareDecimal(context.remainingShare)
+      : '';
+    setMinimumSipyungTarget({ groupIndex, slotIndex });
+    setMinimumSipyungShareInput(defaultShare);
+    setMinimumSipyungModalOpen(true);
+  }, [entryModeResolved, getGroupMinimumPerformanceContext, qualificationEntryLimitAmount, showHeaderAlert]);
+
   const minimumPerformanceContext = React.useMemo(() => {
     if (!minimumPerformanceTarget) return null;
     return getGroupMinimumPerformanceContext(minimumPerformanceTarget.groupIndex);
   }, [getGroupMinimumPerformanceContext, minimumPerformanceTarget]);
+
+  const minimumSipyungContext = React.useMemo(() => {
+    if (!minimumSipyungTarget) return null;
+    return getGroupMinimumPerformanceContext(minimumSipyungTarget.groupIndex);
+  }, [getGroupMinimumPerformanceContext, minimumSipyungTarget]);
 
   const minimumPerformanceResult = React.useMemo(() => {
     if (!minimumPerformanceContext) return { status: 'inactive' };
@@ -3630,6 +3687,49 @@ export default function AgreementBoardWindow({
     minimumPerformanceShareInput,
     parseNumeric,
     perfectPerformanceAmount,
+  ]);
+
+  const minimumSipyungResult = React.useMemo(() => {
+    if (!minimumSipyungContext) return { status: 'inactive' };
+    if (!(qualificationEntryLimitAmount > 0) || entryModeResolved === 'none') {
+      return { status: 'missing-threshold' };
+    }
+
+    if (entryModeResolved === 'sum') {
+      return calculateMinimumSipyungAmountForSum({
+        qualificationAmount: qualificationEntryLimitAmount,
+        currentSipyungAmount: minimumSipyungContext.currentSipyungAmount,
+      });
+    }
+
+    const targetShare = parseNumeric(minimumSipyungShareInput);
+    const remainingShare = minimumSipyungContext.remainingShare;
+
+    if (minimumSipyungShareInput === '') {
+      return { status: 'need-share', remainingShare };
+    }
+    if (targetShare == null || targetShare <= 0) {
+      return { status: 'invalid-share', remainingShare };
+    }
+    if (targetShare - remainingShare > 0.0001) {
+      return { status: 'exceeds-remaining', remainingShare, targetShare };
+    }
+
+    return {
+      ...calculateMinimumSipyungAmountForRatio({
+        qualificationAmount: qualificationEntryLimitAmount,
+        currentContributionAmount: minimumSipyungContext.currentSipyungContributionAmount,
+        targetSharePercent: targetShare,
+      }),
+      assignedShareTotal: minimumSipyungContext.assignedShareTotal,
+      remainingShare,
+    };
+  }, [
+    entryModeResolved,
+    minimumSipyungContext,
+    minimumSipyungShareInput,
+    parseNumeric,
+    qualificationEntryLimitAmount,
   ]);
 
   const handleGenerateInconMemo = React.useCallback(async () => {
@@ -5687,13 +5787,26 @@ export default function AgreementBoardWindow({
     </td>
   );
 
-  const renderSipyungCell = (meta, rowSpan, entryDisabled) => (
+  const renderSipyungCell = (meta, rowSpan, entryDisabled, { showMinimumButton = false } = {}) => (
     <td
       key={`sipyung-${meta.groupIndex}-${meta.slotIndex}`}
       className={`excel-cell excel-sipyung-cell${entryDisabled ? ' entry-disabled' : ''}`}
       rowSpan={rowSpan}
     >
-      {meta.empty ? null : (
+      {meta.empty ? (
+        showMinimumButton ? (
+          <div className="excel-performance excel-performance-empty">
+            <span className="perf-label">시평액</span>
+            <button
+              type="button"
+              className="excel-minimum-performance-button"
+              onClick={() => openMinimumSipyungModal(meta.groupIndex, meta.slotIndex)}
+            >
+              최소금액
+            </button>
+          </div>
+        ) : null
+      ) : (
         <div className="excel-performance">
           <span className="perf-label">시평액</span>
           {isAmountCellEditing(meta, 'sipyung') ? (
@@ -5917,6 +6030,7 @@ export default function AgreementBoardWindow({
     let scoreState = null;
     const slotMetas = slotLabels.map((label, slotIndex) => buildSlotMeta(group, groupIndex, slotIndex, label));
     const minimumPerformanceGroupContext = getGroupMinimumPerformanceContext(groupIndex);
+    const minimumSipyungGroupContext = minimumPerformanceGroupContext;
     const memberCount = slotMetas.filter((meta) => !meta.empty).length;
     const participantLimitExceeded = safeParticipantLimit > 0 && memberCount > safeParticipantLimit;
     const slotMetasWithLimit = slotMetas.map((meta) => ({
@@ -6287,7 +6401,13 @@ export default function AgreementBoardWindow({
         </td>
         {collapsedColumns.sipyung
           ? renderCollapsedStubCell('sipyung', rightRowSpan)
-          : slotMetas.map((meta) => renderSipyungCell(meta, rightRowSpan, entryDisabled))}
+          : slotMetas.map((meta) => renderSipyungCell(meta, rightRowSpan, entryDisabled, {
+            showMinimumButton: !entryDisabled
+              && qualificationEntryLimitAmount > 0
+              && meta.empty
+              && !isSplitAssignedSlot(meta.slotIndex)
+              && (entryModeResolved === 'sum' || minimumSipyungGroupContext.remainingShare > 0.0001),
+          }))}
         <td
           className={`excel-cell total-cell sipyung-summary-cell${entryDisabled ? ' entry-disabled' : ''}`}
           rowSpan={rightRowSpan}
@@ -7383,6 +7503,102 @@ export default function AgreementBoardWindow({
                 <div>가정 지분: {formatPercentValue(minimumPerformanceResult.targetSharePercent, 1)}</div>
                 {minimumPerformanceResult.minimumPerformanceAmount <= 0 && (
                   <p className="export-sheet-hint">현재 배치된 업체만으로 이미 실적 만점을 충족합니다.</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </Modal>
+      <Modal
+        open={minimumSipyungModalOpen}
+        title="참가자격 최소 시평액 계산"
+        onClose={closeMinimumSipyungModal}
+        onCancel={closeMinimumSipyungModal}
+        onSave={closeMinimumSipyungModal}
+        closeOnSave
+        confirmLabel="닫기"
+        size="sm"
+      >
+        <div className="export-sheet-modal">
+          <div className="export-sheet-field">
+            <span className="export-sheet-label">참가자격금액</span>
+            <div className="minimum-performance-result">
+              <div>{formatAmount(qualificationEntryLimitAmount)}</div>
+              <p className="export-sheet-hint">
+                {entryModeResolved === 'sum' ? '단순합산제' : '비율제'}
+              </p>
+            </div>
+          </div>
+          {entryModeResolved === 'sum' ? (
+            <div className="export-sheet-field">
+              <span className="export-sheet-label">현재 반영 시평액 합계</span>
+              <div className="minimum-performance-result">
+                {minimumSipyungContext
+                  ? formatAmount(minimumSipyungContext.currentSipyungAmount)
+                  : '-'}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="export-sheet-field">
+                <span className="export-sheet-label">현재 반영 지분</span>
+                <div className="minimum-performance-result">
+                  {minimumSipyungContext
+                    ? formatPercentValue(minimumSipyungContext.assignedShareTotal, 1)
+                    : '-'}
+                </div>
+              </div>
+              <div className="export-sheet-field">
+                <span className="export-sheet-label">현재 반영 시평액</span>
+                <div className="minimum-performance-result">
+                  {minimumSipyungContext
+                    ? formatAmount(minimumSipyungContext.currentSipyungContributionAmount)
+                    : '-'}
+                </div>
+              </div>
+              <div className="export-sheet-field">
+                <span className="export-sheet-label">계산 지분(%)</span>
+                <input
+                  type="text"
+                  value={minimumSipyungShareInput}
+                  onChange={(event) => setMinimumSipyungShareInput(event.target.value)}
+                  placeholder="예: 40"
+                />
+                <p className="export-sheet-hint">
+                  기본값은 남은 지분입니다.
+                  {minimumSipyungContext ? ` 현재 남은 지분: ${formatPercentValue(minimumSipyungContext.remainingShare, 1)}` : ''}
+                </p>
+              </div>
+            </>
+          )}
+          <div className="export-sheet-field">
+            <span className="export-sheet-label">결과</span>
+            {minimumSipyungResult.status === 'need-share' && (
+              <p className="export-sheet-hint">계산할 지분율을 입력하세요.</p>
+            )}
+            {minimumSipyungResult.status === 'invalid-share' && (
+              <p className="export-sheet-hint" style={{ color: '#b91c1c' }}>
+                0보다 큰 지분율을 입력하세요.
+              </p>
+            )}
+            {minimumSipyungResult.status === 'exceeds-remaining' && (
+              <p className="export-sheet-hint" style={{ color: '#b91c1c' }}>
+                입력 지분율이 남은 지분을 초과합니다. 남은 지분 이하로 입력하세요.
+              </p>
+            )}
+            {minimumSipyungResult.status === 'missing-threshold' && (
+              <p className="export-sheet-hint" style={{ color: '#b91c1c' }}>
+                참가자격금액이 있을 때만 계산할 수 있습니다.
+              </p>
+            )}
+            {minimumSipyungResult.status === 'ok' && (
+              <div className="minimum-performance-result">
+                <div>필요 최소 시평액: <strong>{formatAmount(minimumSipyungResult.minimumSipyungAmount)}</strong></div>
+                {entryModeResolved === 'ratio' && (
+                  <div>가정 지분: {formatPercentValue(minimumSipyungResult.targetSharePercent, 1)}</div>
+                )}
+                {minimumSipyungResult.minimumSipyungAmount <= 0 && (
+                  <p className="export-sheet-hint">현재 배치된 업체만으로 이미 참가자격금액을 충족합니다.</p>
                 )}
               </div>
             )}
