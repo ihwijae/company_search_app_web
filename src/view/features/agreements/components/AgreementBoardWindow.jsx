@@ -216,6 +216,11 @@ const COLLAPSED_COLUMN_WIDTHS = {
   sipyungCell: 26,
   sipyungSummary: 28,
 };
+const KRAIL_COLUMN_WIDTHS = {
+  technicianCell: 64,
+  technicianSummary: 48,
+  technicianAbilitySummary: 48,
+};
 const BOARD_ACTION_BUTTON_STYLE = { fontSize: '13px' };
 const resolveOwnerPerformanceMax = (ownerId) => {
   const upper = String(ownerId || '').toUpperCase();
@@ -2506,6 +2511,11 @@ export default function AgreementBoardWindow({
   const subcontractColWidth = isLh50To100 ? 26 : COLUMN_WIDTHS.subcontract;
   const materialColWidth = isLh50To100 ? 26 : COLUMN_WIDTHS.material;
   const netCostBonusColWidth = isLHOwner ? 42 : COLUMN_WIDTHS.netCostBonus;
+  const technicianCellColWidth = isKrailOwner ? KRAIL_COLUMN_WIDTHS.technicianCell : COLUMN_WIDTHS.technicianCell;
+  const technicianSummaryColWidth = isKrailOwner ? KRAIL_COLUMN_WIDTHS.technicianSummary : COLUMN_WIDTHS.technicianSummary;
+  const technicianAbilityColWidth = isKrailOwner
+    ? KRAIL_COLUMN_WIDTHS.technicianAbilitySummary
+    : COLUMN_WIDTHS.technicianAbilitySummary;
 
   const renderColToggle = React.useCallback((key, label, options = {}) => {
     const collapsed = collapsedColumns[key];
@@ -2551,7 +2561,7 @@ export default function AgreementBoardWindow({
     const statusWidth = columnSpans.statusSpan * (collapsedColumns.status ? COLLAPSED_COLUMN_WIDTHS.status : COLUMN_WIDTHS.status);
     const perfCellsWidth = columnSpans.performanceSpan * (collapsedColumns.performance ? COLLAPSED_COLUMN_WIDTHS.performanceCell : COLUMN_WIDTHS.performanceCell);
     const technicianCellsWidth = technicianEnabled
-      ? columnSpans.technicianSpan * (collapsedColumns.technician ? COLLAPSED_COLUMN_WIDTHS.technicianCell : COLUMN_WIDTHS.technicianCell)
+      ? columnSpans.technicianSpan * (collapsedColumns.technician ? COLLAPSED_COLUMN_WIDTHS.technicianCell : technicianCellColWidth)
       : 0;
     const sipyungCellsWidth = columnSpans.sipyungSpan * (collapsedColumns.sipyung ? COLLAPSED_COLUMN_WIDTHS.sipyungCell : COLUMN_WIDTHS.sipyungCell);
     const base = (collapsedColumns.order ? COLLAPSED_COLUMN_WIDTHS.order : COLUMN_WIDTHS.order)
@@ -2568,8 +2578,8 @@ export default function AgreementBoardWindow({
       + COLUMN_WIDTHS.performanceSummary
       + (isLh100To300 ? COLUMN_WIDTHS.performanceCoefficient : 0)
       + (technicianEnabled
-        ? (collapsedColumns.technicianSummary ? COLLAPSED_COLUMN_WIDTHS.technicianSummary : COLUMN_WIDTHS.technicianSummary)
-          + (collapsedColumns.technicianAbility ? COLLAPSED_COLUMN_WIDTHS.technicianAbilitySummary : COLUMN_WIDTHS.technicianAbilitySummary)
+        ? (collapsedColumns.technicianSummary ? COLLAPSED_COLUMN_WIDTHS.technicianSummary : technicianSummaryColWidth)
+          + (collapsedColumns.technicianAbility ? COLLAPSED_COLUMN_WIDTHS.technicianAbilitySummary : technicianAbilityColWidth)
         : 0)
       + ((isMois30To50 || isEx50To100 || isKrail50To100)
         ? (collapsedColumns.subcontract ? COLLAPSED_COLUMN_WIDTHS.subcontract : subcontractColWidth)
@@ -2585,10 +2595,14 @@ export default function AgreementBoardWindow({
   }, [
     columnSpans,
     showCredibilitySlots,
+    credibilityEnabled,
     constructionExperienceColWidth,
     subcontractColWidth,
     materialColWidth,
     netCostBonusColWidth,
+    technicianCellColWidth,
+    technicianSummaryColWidth,
+    technicianAbilityColWidth,
     isLHOwner,
     showManagementBonus,
     showBidScore,
@@ -6908,18 +6922,21 @@ export default function AgreementBoardWindow({
                     <col
                       key={`col-technician-${index}`}
                       className="col-technician"
-                      style={{ width: resolveColWidth('technicianCell', 'technician') }}
+                      style={{ width: `${technicianCellColWidth}px` }}
                     />
                   ))
                 )
               )}
               {technicianEnabled && (
-                <col className="col-technician-summary" style={{ width: resolveColWidth('technicianSummary') }} />
+                <col
+                  className="col-technician-summary"
+                  style={{ width: collapsedColumns.technicianSummary ? resolveColWidth('technicianSummary') : `${technicianSummaryColWidth}px` }}
+                />
               )}
               {technicianEnabled && (
                 <col
                   className="col-technician-ability-summary"
-                  style={{ width: resolveColWidth('technicianAbilitySummary', 'technicianAbility') }}
+                  style={{ width: collapsedColumns.technicianAbility ? resolveColWidth('technicianAbilitySummary', 'technicianAbility') : `${technicianAbilityColWidth}px` }}
                 />
               )}
               {isLHOwner && <col className="col-quality-points" style={{ width: `${COLUMN_WIDTHS.qualityPoints}px` }} />}
