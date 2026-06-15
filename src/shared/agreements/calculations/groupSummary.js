@@ -296,8 +296,8 @@ export async function computeGroupSummaries({
     }
 
     if (shareReady && !metric.technicianMissing && metric.technicianScore != null) {
-      technicianScore = roundForKrailUnder50(metric.technicianScore);
-      technicianAbilityScore = resolveKrailTechnicianAbilityScore(technicianScore);
+      technicianScore = metric.technicianScore;
+      technicianAbilityScore = resolveKrailTechnicianAbilityScore(metric.technicianScore);
     }
 
     const perfCapCurrent = getPerformanceCap();

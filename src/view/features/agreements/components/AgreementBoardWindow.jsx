@@ -3756,6 +3756,7 @@ export default function AgreementBoardWindow({
       groupApprovals,
       participantMap,
       lhLeaderBizNoFormat: isLHOwner,
+      suppressTopAmountLines: isLh100To300,
       isSplitAssignedSlot,
       splitLabel: resolvedSplitLabel,
     });
@@ -3780,6 +3781,7 @@ export default function AgreementBoardWindow({
     }
   }, [
     isLHOwner,
+    isLh100To300,
     dutyRegions,
     fileType,
     groupAssignments,
@@ -4585,6 +4587,8 @@ export default function AgreementBoardWindow({
       ? (estimatedValue != null && estimatedValue > 0 ? estimatedValue : null)
       : isPpsUnder50
         ? (baseValue != null && baseValue > 0 ? baseValue : null)
+      : (isKrailUnder50 || isKrail50To100)
+        ? (baseValue != null && baseValue > 0 ? baseValue : null)
       : isLh100To300
         ? (baseValue != null && baseValue > 0 ? baseValue : null)
         : isLh50To100
@@ -4718,6 +4722,8 @@ export default function AgreementBoardWindow({
       ? (estimatedValue != null && estimatedValue > 0 ? estimatedValue : null)
       : isPpsUnder50
         ? (baseValue != null && baseValue > 0 ? baseValue : null)
+        : (isKrailUnder50 || isKrail50To100)
+          ? (baseValue != null && baseValue > 0 ? baseValue : null)
         : isLh50To100
           ? (baseValue != null && baseValue > 0 ? baseValue : null)
         : ((estimatedValue != null && estimatedValue > 0)
@@ -6133,7 +6139,7 @@ export default function AgreementBoardWindow({
       : '-';
     const performanceSummaryRaw = toNumber(summaryInfo?.performanceScoreRaw);
     const performanceSummaryCapped = toNumber(summaryInfo?.performanceScore);
-    const performanceSummaryValue = performanceSummaryRaw ?? performanceSummaryCapped;
+    const performanceSummaryValue = performanceSummaryCapped ?? performanceSummaryRaw;
     const performanceSummary = performanceSummaryValue != null
       ? formatScore(performanceSummaryValue, resolveSummaryDigits('performance'))
       : '-';
@@ -6155,9 +6161,12 @@ export default function AgreementBoardWindow({
     const technicianScoreGood = technicianScoreThreshold != null
       && summaryInfo?.technicianScore != null
       && summaryInfo.technicianScore >= technicianScoreThreshold;
+    const technicianDisplayValue = isKrailOwner
+      ? truncateScore(summaryInfo?.technicianScore, 2)
+      : summaryInfo?.technicianScore;
     const technicianSummary = technicianEnabled
-      ? (summaryInfo?.technicianScore != null
-        ? formatScore(summaryInfo.technicianScore, resolveSummaryDigits('technician'))
+      ? (technicianDisplayValue != null
+        ? formatScore(technicianDisplayValue, resolveSummaryDigits('technician'))
         : (technicianEditable ? '-' : '평가제외'))
       : null;
     const technicianAbilitySummary = technicianEnabled

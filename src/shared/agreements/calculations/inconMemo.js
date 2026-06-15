@@ -157,6 +157,7 @@ export const buildInconMemoText = ({
   groupApprovals = [],
   participantMap,
   lhLeaderBizNoFormat = false,
+  suppressTopAmountLines = false,
   isSplitAssignedSlot = () => false,
   splitLabel = '',
 }) => {
@@ -196,6 +197,7 @@ export const buildInconMemoText = ({
     if (!section) return;
 
     if (section === 'top') {
+      if (suppressTopAmountLines) return;
       topLines.push(`${getSoloDisplayName(membersForClassify[0].name)} 금액`);
       return;
     }
@@ -215,7 +217,7 @@ export const buildInconMemoText = ({
   const isTongsin = String(fileType || '').trim().toLowerCase() === 'tongsin';
   const hasDaejeonDuty = Array.isArray(dutyRegions)
     && dutyRegions.some((region) => String(region || '').replace(/\s+/g, '').includes('대전'));
-  if (isTongsin && hasDaejeonDuty && !topLines.includes('아이디스 금액')) {
+  if (!suppressTopAmountLines && isTongsin && hasDaejeonDuty && !topLines.includes('아이디스 금액')) {
     topLines.push('아이디스 금액');
   }
 
