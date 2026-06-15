@@ -79,7 +79,8 @@ export async function evaluateAgreementPerformanceScore(perfAmount, {
       const multiplier = Number.isFinite(estimated) && estimated >= 3000000000 ? 3 : 2;
       const ratio = perfAmount / (base * multiplier);
       const roundedRatio = Number.isFinite(ratio) ? Number(ratio.toFixed(2)) : null;
-      const directScore = roundedRatio != null ? clampScore(roundedRatio * 15, 15) : null;
+      const rawScore = roundedRatio != null ? roundTo(roundedRatio * 15, 3) : null;
+      const directScore = rawScore != null ? clampScore(rawScore, 15) : null;
       console.warn('[KRAIL_UNDER50_SOBANG][performanceScore] direct override', {
         perfAmount,
         base,
@@ -87,9 +88,21 @@ export async function evaluateAgreementPerformanceScore(perfAmount, {
         multiplier,
         ratio,
         roundedRatio,
+        rawScore,
         directScore,
       });
-      if (directScore != null) return directScore;
+      if (directScore != null) {
+        if (returnDetails) {
+          return {
+            score: directScore,
+            rawScore,
+            maxScore: 15,
+            ratioRaw: ratio,
+            ratioRounded: roundedRatio,
+          };
+        }
+        return directScore;
+      }
     }
   }
 

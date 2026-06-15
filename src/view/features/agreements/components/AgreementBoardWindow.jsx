@@ -6139,7 +6139,7 @@ export default function AgreementBoardWindow({
       : '-';
     const performanceSummaryRaw = toNumber(summaryInfo?.performanceScoreRaw);
     const performanceSummaryCapped = toNumber(summaryInfo?.performanceScore);
-    const performanceSummaryValue = performanceSummaryCapped ?? performanceSummaryRaw;
+    const performanceSummaryValue = performanceSummaryRaw ?? performanceSummaryCapped;
     const performanceSummary = performanceSummaryValue != null
       ? formatScore(performanceSummaryValue, resolveSummaryDigits('performance'))
       : '-';
