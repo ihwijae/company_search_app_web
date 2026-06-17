@@ -687,7 +687,7 @@ async function exportAgreementExcel({
     }
   });
 
-  if (!isLh100To300 && slotCount > 0 && Array.isArray(candidates) && candidates.length > 0) {
+  if (slotCount > 0 && Array.isArray(candidates) && candidates.length > 0) {
     const candidateRowStep = rowStep > 0 ? rowStep : 1;
     const candidateStartRow = groups.length > 0
       ? (config.startRow + ((groups.length - 1) * rowStep) + (3 * candidateRowStep))
