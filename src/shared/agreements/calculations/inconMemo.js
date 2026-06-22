@@ -140,10 +140,14 @@ const buildSplitMemberLine = (member, splitLabel = '') => {
   return `${label}  ${name} ${shareText}%`;
 };
 
-const classifyGroup = (members) => {
+const hasTopAmountLeader = (members) => {
   const normalizedNames = members.map((member) => normalizeCompanyKey(member.name));
   const leaderKey = normalizedNames[0] || '';
-  if (leaderKey && TOP_AMOUNT_TARGETS.has(leaderKey)) return 'top';
+  return Boolean(leaderKey && TOP_AMOUNT_TARGETS.has(leaderKey));
+};
+
+const classifyGroupSection = (members) => {
+  const normalizedNames = members.map((member) => normalizeCompanyKey(member.name));
   if (normalizedNames.some((name) => LOWER_SECTION_TARGETS.has(name))) return 'lower';
   if (normalizedNames.some((name) => UPPER_SECTION_TARGETS.has(name))) return 'upper';
   return null;
@@ -193,14 +197,13 @@ export const buildInconMemoText = ({
     const baseMembers = members.filter((member) => !member.isSplitMember);
     const splitMember = members.find((member) => member.isSplitMember) || null;
     const membersForClassify = baseMembers.length > 0 ? baseMembers : members;
-    const section = classifyGroup(membersForClassify);
-    if (!section) return;
 
-    if (section === 'top') {
-      if (suppressTopAmountLines) return;
+    if (hasTopAmountLeader(membersForClassify) && !suppressTopAmountLines) {
       topLines.push(`${getSoloDisplayName(membersForClassify[0].name)} 금액`);
-      return;
     }
+
+    const section = classifyGroupSection(membersForClassify);
+    if (!section) return;
 
     const block = buildGroupBlock(baseMembers, lhLeaderBizNoFormat);
     const splitLine = buildSplitMemberLine(splitMember, splitLabel);
