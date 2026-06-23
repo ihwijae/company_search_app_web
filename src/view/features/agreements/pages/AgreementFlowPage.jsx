@@ -13,21 +13,8 @@ import { useAgreementBoard } from '../context/AgreementBoardContext.jsx';
 import { BASE_ROUTES, AGREEMENT_GROUPS, AGREEMENT_MENU_ITEMS, findMenuByKey } from '../../../../shared/navigation.js';
 import { loadPersisted, savePersisted } from '../../../../shared/persistence.js';
 import { normalizeRegionName, normalizeRegionList } from '../../../../shared/regionNormalizer.js';
+import { isWebAgreementRangeImplemented } from '../../../../shared/agreements/templateConfigs.web.js';
 import searchClient from '../../../../shared/searchClient.js';
-
-const IMPLEMENTED_FLOW_MENU_KEYS = new Set([
-  'lh-under50',
-  'lh-50to100',
-  'lh-100to300',
-  'pps-under50',
-  'krail-under50',
-  'krail-50to100',
-  'ex-under50',
-  'ex-50to100',
-  'mois-under30',
-  'mois-30to50',
-  'mois-50to100',
-]);
 
 const createDefaultForm = () => {
   const today = new Date();
@@ -134,7 +121,6 @@ export default function AgreementFlowPage({
   const isLH = normalizedOwner === 'LH';
   const isMOIS = normalizedOwner === 'MOIS';
   const isMoisShareRange = isMOIS && activeMenuKey === 'mois-30to50';
-  const isUnimplementedFlowRange = !IMPLEMENTED_FLOW_MENU_KEYS.has(activeMenuKey);
   const entryMode = form.entryQualificationMode === 'sum'
     ? 'sum'
     : (form.entryQualificationMode === 'none' ? 'none' : 'ratio');
@@ -170,6 +156,10 @@ export default function AgreementFlowPage({
   };
 
   const currentFileType = React.useMemo(() => toFileType(form.industry), [form.industry]);
+  const isUnimplementedFlowRange = React.useMemo(
+    () => !isWebAgreementRangeImplemented(resolvedOwnerId, activeMenuKey, currentFileType),
+    [activeMenuKey, currentFileType, resolvedOwnerId],
+  );
 
   const { boardState, openBoard, updateBoard } = useAgreementBoard();
 

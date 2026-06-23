@@ -33,7 +33,11 @@ import {
   exportAgreementExcel as exportAgreementWorkbook,
   sanitizeFileName as sanitizeExportFileName,
 } from '../../../../shared/agreements/exportAgreementWorkbook.js';
-import { resolveWebAgreementTemplateConfig } from '../../../../shared/agreements/templateConfigs.web.js';
+import {
+  isWebAgreementRangeImplemented,
+  resolveWebAgreementTemplateConfig,
+  resolveWebAgreementTemplateKey,
+} from '../../../../shared/agreements/templateConfigs.web.js';
 import {
   calculatePossibleShareRatio,
   formatPossibleShareText,
@@ -327,44 +331,6 @@ const deriveManagementMax = (managementRules) => {
   if (methodMaxes.length) return Math.max(...methodMaxes);
   return null;
 };
-
-const resolveTemplateKey = (ownerId, rangeId, fileType) => {
-  const ownerKey = String(ownerId || '').toUpperCase();
-  const rawRangeKey = String(rangeId || '').toLowerCase();
-  const rangeKey = ownerKey === 'LH'
-    ? (rawRangeKey === LH_UNDER_50_SHARE_KEY
-      ? LH_UNDER_50_KEY
-      : (rawRangeKey === LH_50_TO_100_SHARE_KEY ? LH_50_TO_100_KEY : rawRangeKey))
-    : rawRangeKey;
-  const normalizedType = String(fileType || '').toLowerCase();
-  if (ownerKey === 'MOIS' && rangeKey === 'mois-under30') return 'mois-under30';
-  if (ownerKey === 'MOIS' && rangeKey === MOIS_30_TO_50_KEY) return 'mois-30to50';
-  if (ownerKey === 'MOIS' && rangeKey === MOIS_50_TO_100_KEY) return 'mois-50to100';
-  if (ownerKey === 'PPS' && rangeKey === PPS_UNDER_50_KEY) return 'pps-under50';
-  if (ownerKey === 'LH' && rangeKey === LH_UNDER_50_KEY) return 'lh-under50';
-  if (ownerKey === 'LH' && rangeKey === LH_100_TO_300_KEY) return 'lh-100to300';
-  if (ownerKey === 'LH' && rangeKey === LH_50_TO_100_KEY) {
-    if (normalizedType === 'sobang') return 'lh-50to100-sobang';
-    return 'lh-50to100-et';
-  }
-  if (ownerKey === 'KRAIL' && rangeKey === KRAIL_UNDER_50_KEY) {
-    if (normalizedType === 'sobang') return 'krail-under50-sobang';
-    if (normalizedType === 'eung' || normalizedType === 'tongsin') return 'krail-under50';
-    return null;
-  }
-  if (ownerKey === 'KRAIL' && rangeKey === KRAIL_50_TO_100_KEY) {
-    if (normalizedType === 'sobang') return 'krail-50to100-sobang';
-    if (normalizedType === 'eung' || normalizedType === 'tongsin') return 'krail-50to100-et';
-    return null;
-  }
-  if (ownerKey === 'EX' && rangeKey === EX_UNDER_50_KEY) return 'ex-under50';
-  if (ownerKey === 'EX' && rangeKey === EX_50_TO_100_KEY) return 'ex-50to100';
-  return null;
-};
-
-const isAgreementRangeImplemented = (ownerId, rangeId, fileType) => (
-  resolveTemplateKey(ownerId, rangeId, fileType) != null
-);
 
 const isLhSplitRange = (rangeKey) => (
   String(rangeKey || '').toLowerCase() === LH_UNDER_50_SHARE_KEY
@@ -1353,7 +1319,7 @@ export default function AgreementBoardWindow({
   ), [rangeId, rangeOptions]);
   const selectedRangeKey = selectedRangeOption?.key || '';
   const rangeImplemented = React.useMemo(
-    () => isAgreementRangeImplemented(ownerKeyUpper, selectedRangeKey, fileType),
+    () => isWebAgreementRangeImplemented(ownerKeyUpper, selectedRangeKey, fileType),
     [fileType, ownerKeyUpper, selectedRangeKey],
   );
   const effectiveSelectedRangeKey = isLHOwner ? normalizeLhRangeKey(selectedRangeKey) : selectedRangeKey;
@@ -4214,7 +4180,7 @@ export default function AgreementBoardWindow({
     return buildDutySummary(dutyRegions, rateNumber, safeParticipantLimit);
   }, [regionDutyRate, dutyRegions, safeGroupSize]);
   const currentTemplateKey = React.useMemo(
-    () => resolveTemplateKey(ownerId, rangeId, fileType),
+    () => resolveWebAgreementTemplateKey(ownerId, rangeId, fileType),
     [ownerId, rangeId, fileType],
   );
   const rangeBadgeLabel = selectedRangeOption?.label || '기본 구간';
@@ -4227,7 +4193,7 @@ export default function AgreementBoardWindow({
       showHeaderAlert('현재 선택한 발주처/금액대는 아직 구현되지 않았습니다.');
       return false;
     }
-    const templateKey = resolveTemplateKey(ownerId, rangeId, fileType);
+    const templateKey = resolveWebAgreementTemplateKey(ownerId, rangeId, fileType);
     if (!templateKey) {
       showHeaderAlert('현재 선택한 발주처/구간은 엑셀 템플릿이 아직 준비되지 않았습니다.');
       return false;

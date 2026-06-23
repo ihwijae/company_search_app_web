@@ -1,5 +1,18 @@
 const buildTemplateUrl = (fileName) => new URL(`../../../템플릿/${fileName}`, import.meta.url).href;
 
+const LH_UNDER_50_KEY = 'lh-under50';
+const LH_50_TO_100_KEY = 'lh-50to100';
+const LH_100_TO_300_KEY = 'lh-100to300';
+const LH_UNDER_50_SHARE_KEY = 'lh-under50-share';
+const LH_50_TO_100_SHARE_KEY = 'lh-50to100-share';
+const PPS_UNDER_50_KEY = 'pps-under50';
+const MOIS_30_TO_50_KEY = 'mois-30to50';
+const MOIS_50_TO_100_KEY = 'mois-50to100';
+const KRAIL_UNDER_50_KEY = 'krail-under50';
+const KRAIL_50_TO_100_KEY = 'krail-50to100';
+const EX_UNDER_50_KEY = 'ex-under50';
+const EX_50_TO_100_KEY = 'ex-50to100';
+
 export const AGREEMENT_TEMPLATE_CONFIGS_WEB = {
   'mois-under30': {
     label: '행안부 30억 미만',
@@ -377,3 +390,41 @@ export const resolveWebAgreementTemplateConfig = (templateKey) => {
   if (!templateKey) return null;
   return AGREEMENT_TEMPLATE_CONFIGS_WEB[templateKey] || null;
 };
+
+export const resolveWebAgreementTemplateKey = (ownerId, rangeId, fileType) => {
+  const ownerKey = String(ownerId || '').toUpperCase();
+  const rawRangeKey = String(rangeId || '').toLowerCase();
+  const rangeKey = ownerKey === 'LH'
+    ? (rawRangeKey === LH_UNDER_50_SHARE_KEY
+      ? LH_UNDER_50_KEY
+      : (rawRangeKey === LH_50_TO_100_SHARE_KEY ? LH_50_TO_100_KEY : rawRangeKey))
+    : rawRangeKey;
+  const normalizedType = String(fileType || '').toLowerCase();
+  if (ownerKey === 'MOIS' && rangeKey === 'mois-under30') return 'mois-under30';
+  if (ownerKey === 'MOIS' && rangeKey === MOIS_30_TO_50_KEY) return 'mois-30to50';
+  if (ownerKey === 'MOIS' && rangeKey === MOIS_50_TO_100_KEY) return 'mois-50to100';
+  if (ownerKey === 'PPS' && rangeKey === PPS_UNDER_50_KEY) return 'pps-under50';
+  if (ownerKey === 'LH' && rangeKey === LH_UNDER_50_KEY) return 'lh-under50';
+  if (ownerKey === 'LH' && rangeKey === LH_100_TO_300_KEY) return 'lh-100to300';
+  if (ownerKey === 'LH' && rangeKey === LH_50_TO_100_KEY) {
+    if (normalizedType === 'sobang') return 'lh-50to100-sobang';
+    return 'lh-50to100-et';
+  }
+  if (ownerKey === 'KRAIL' && rangeKey === KRAIL_UNDER_50_KEY) {
+    if (normalizedType === 'sobang') return 'krail-under50-sobang';
+    if (normalizedType === 'eung' || normalizedType === 'tongsin') return 'krail-under50';
+    return null;
+  }
+  if (ownerKey === 'KRAIL' && rangeKey === KRAIL_50_TO_100_KEY) {
+    if (normalizedType === 'sobang') return 'krail-50to100-sobang';
+    if (normalizedType === 'eung' || normalizedType === 'tongsin') return 'krail-50to100-et';
+    return null;
+  }
+  if (ownerKey === 'EX' && rangeKey === EX_UNDER_50_KEY) return 'ex-under50';
+  if (ownerKey === 'EX' && rangeKey === EX_50_TO_100_KEY) return 'ex-50to100';
+  return null;
+};
+
+export const isWebAgreementRangeImplemented = (ownerId, rangeId, fileType) => (
+  resolveWebAgreementTemplateConfig(resolveWebAgreementTemplateKey(ownerId, rangeId, fileType)) != null
+);
