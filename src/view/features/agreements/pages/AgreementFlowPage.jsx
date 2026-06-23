@@ -13,7 +13,7 @@ import { useAgreementBoard } from '../context/AgreementBoardContext.jsx';
 import { BASE_ROUTES, AGREEMENT_GROUPS, AGREEMENT_MENU_ITEMS, findMenuByKey } from '../../../../shared/navigation.js';
 import { loadPersisted, savePersisted } from '../../../../shared/persistence.js';
 import { normalizeRegionName, normalizeRegionList } from '../../../../shared/regionNormalizer.js';
-import { isWebAgreementRangeImplemented } from '../../../../shared/agreements/templateConfigs.web.js';
+import { isWebAgreementRangeCalculationImplemented } from '../../../../shared/agreements/templateConfigs.web.js';
 import searchClient from '../../../../shared/searchClient.js';
 
 const createDefaultForm = () => {
@@ -157,7 +157,7 @@ export default function AgreementFlowPage({
 
   const currentFileType = React.useMemo(() => toFileType(form.industry), [form.industry]);
   const isUnimplementedFlowRange = React.useMemo(
-    () => !isWebAgreementRangeImplemented(resolvedOwnerId, activeMenuKey, currentFileType),
+    () => !isWebAgreementRangeCalculationImplemented(resolvedOwnerId, activeMenuKey, currentFileType),
     [activeMenuKey, currentFileType, resolvedOwnerId],
   );
 
@@ -303,6 +303,11 @@ export default function AgreementFlowPage({
     if (resolvedOwnerId === 'PPS' && key === 'pps-under50') {
       return base > 0
         ? { perfectPerformanceAmount: base, perfectPerformanceBasis: '기초금액 × 1배' }
+        : { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
+    }
+    if (resolvedOwnerId === 'PPS' && key === 'pps-50to100') {
+      return base > 0
+        ? { perfectPerformanceAmount: base * 2, perfectPerformanceBasis: '기초금액 × 2배' }
         : { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
     }
 

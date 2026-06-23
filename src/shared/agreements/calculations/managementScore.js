@@ -52,6 +52,70 @@ function pickCandidateValue(candidate, ...keys) {
   return null;
 }
 
+function parseRatioValue(value, toNumber) {
+  const parsed = toNumber(value);
+  return parsed == null ? null : parsed;
+}
+
+function parseBusinessYears(value, toNumber) {
+  const direct = toNumber(value);
+  if (direct != null && direct >= 0 && direct <= 200) return direct;
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  if (/10년\s*이상|5년\s*이상/u.test(text)) return 5;
+  if (/3년\s*이상/u.test(text)) return 3;
+  const yearMatch = text.match(/([0-9]+(?:\.[0-9]+)?)\s*년/u);
+  if (yearMatch) {
+    const years = Number(yearMatch[1]);
+    if (Number.isFinite(years)) return years;
+  }
+  const dateMatch = text.match(/([0-9]{2,4})[^0-9]{0,3}([0-9]{1,2})[^0-9]{0,3}([0-9]{1,2})/u);
+  if (dateMatch) {
+    let year = Number(dateMatch[1]);
+    const month = Number(dateMatch[2]);
+    const day = Number(dateMatch[3]);
+    if (year < 100) year += year >= 70 ? 1900 : 2000;
+    const start = new Date(year, month - 1, day);
+    if (!Number.isNaN(start.getTime())) {
+      const diffYears = (Date.now() - start.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+      return diffYears > 0 ? diffYears : 0;
+    }
+  }
+  return null;
+}
+
+function calculatePps50To100FinancialScore(candidate, { toNumber, clampScore }) {
+  const debtRatio = parseRatioValue(
+    pickCandidateValue(candidate, 'debtRatio', 'debt_ratio', '부채비율'),
+    toNumber,
+  );
+  const currentRatio = parseRatioValue(
+    pickCandidateValue(candidate, 'currentRatio', 'current_ratio', '유동비율'),
+    toNumber,
+  );
+  const businessYears = parseBusinessYears(
+    pickCandidateValue(candidate, 'bizYears', 'biz_years', '영업기간', '업력', '영업기간공사업등록일'),
+    toNumber,
+  );
+  if (debtRatio == null || currentRatio == null || businessYears == null) return null;
+
+  const debtScore = debtRatio < 50 ? 22
+    : debtRatio < 75 ? 19.7
+      : debtRatio < 100 ? 17.5
+        : debtRatio < 125 ? 15.2
+          : 13;
+  const currentScore = currentRatio >= 150 ? 21
+    : currentRatio >= 120 ? 18.7
+      : currentRatio >= 100 ? 16.5
+        : currentRatio >= 70 ? 14.2
+          : 12;
+  const yearsScore = businessYears >= 5 ? 2
+    : businessYears >= 3 ? 1.8
+      : 1.5;
+
+  return clampScore(((debtScore + currentScore + yearsScore) * 15) / 45, 15);
+}
+
 export function extractCreditGrade(candidate) {
   if (!candidate || typeof candidate !== 'object') return '';
   const sources = [
@@ -222,6 +286,7 @@ export function getCandidateManagementScore(candidate, {
   managementScoreMax,
   managementScoreVersion,
   preferCurrentEvaluation = false,
+  usePps50To100FinancialEvaluation = false,
 } = {}) {
   if (!candidate || typeof candidate !== 'object') return null;
 
@@ -244,6 +309,24 @@ export function getCandidateManagementScore(candidate, {
   }
 
   if (preferCurrentEvaluation) return null;
+
+  if (usePps50To100FinancialEvaluation) {
+    const financial = calculatePps50To100FinancialScore(candidate, { toNumber, clampScore });
+    let credit = clampScore(
+      toNumber(pickCandidateValue(candidate, 'creditScore', '_creditScore', '신용점수', '신용평가점수')),
+      managementScoreMax,
+    );
+    if (credit != null && isCreditScoreExpired(candidate)) {
+      credit = null;
+    }
+    const candidates = [financial, credit].filter((value) => value != null && Number.isFinite(value));
+    if (candidates.length > 0) {
+      const best = clampScore(Math.max(...candidates), managementScoreMax);
+      candidate._agreementManagementScore = best;
+      candidate._agreementManagementScoreVersion = managementScoreVersion;
+      return best;
+    }
+  }
 
   const explicitPerfect = [
     candidate.managementIsPerfect,

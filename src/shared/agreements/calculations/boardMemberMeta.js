@@ -31,6 +31,7 @@ export function buildBoardMemberMeta({
   formatScore,
   groupCredibility,
   krailCredibilityScale,
+  isPps50To100 = false,
   groupTechnicianScores,
   conflictNotesByGroup,
   getCompanyName,
@@ -115,8 +116,23 @@ export function buildBoardMemberMeta({
     && candidate._agreementManagementManual !== null
     && candidate._agreementManagementManual !== '';
   const credibilityStored = groupCredibility[groupIndex]?.[slotIndex];
-  const credibilityValue = credibilityStored != null ? String(credibilityStored) : '';
-  const credibilityNumeric = parseNumeric(credibilityValue);
+  const credibilityParts = isPps50To100 && credibilityStored && typeof credibilityStored === 'object'
+    ? {
+      general: credibilityStored.general ?? '',
+      construction: credibilityStored.construction ?? '',
+    }
+    : null;
+  const credibilityValue = credibilityParts
+    ? `${credibilityParts.general || 0}/${credibilityParts.construction || 0}`
+    : (credibilityStored != null ? String(credibilityStored) : '');
+  const credibilityNumeric = credibilityParts
+    ? (() => {
+      const general = parseNumeric(credibilityParts.general);
+      const construction = parseNumeric(credibilityParts.construction);
+      return (general != null ? Math.min(Math.max(general * 0.3, 0), 1) : 0)
+        + (construction != null ? Math.min(Math.max(construction, 0), 1) : 0);
+    })()
+    : parseNumeric(credibilityValue);
   const credibilityProductRaw = (credibilityNumeric != null && shareForCalc != null)
     ? credibilityNumeric * (shareForCalc / 100)
     : null;
@@ -158,6 +174,7 @@ export function buildBoardMemberMeta({
     qualityScore,
     qualityInput: qualityInputRaw,
     credibilityValue,
+    credibilityParts,
     credibilityProduct: credibilityProduct != null ? `${credibilityProduct.toFixed(2)}점` : '',
     technicianValue,
     technicianNumeric,

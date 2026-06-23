@@ -34,7 +34,7 @@ import {
   sanitizeFileName as sanitizeExportFileName,
 } from '../../../../shared/agreements/exportAgreementWorkbook.js';
 import {
-  isWebAgreementRangeImplemented,
+  isWebAgreementRangeCalculationImplemented,
   resolveWebAgreementTemplateConfig,
   resolveWebAgreementTemplateKey,
 } from '../../../../shared/agreements/templateConfigs.web.js';
@@ -138,6 +138,7 @@ const LH_100_TO_300_KEY = 'lh-100to300';
 const LH_UNDER_50_SHARE_KEY = 'lh-under50-share';
 const LH_50_TO_100_SHARE_KEY = 'lh-50to100-share';
 const PPS_UNDER_50_KEY = 'pps-under50';
+const PPS_50_TO_100_KEY = 'pps-50to100';
 const MOIS_UNDER_30_KEY = 'mois-under30';
 const MOIS_30_TO_50_KEY = 'mois-30to50';
 const MOIS_50_TO_100_KEY = 'mois-50to100';
@@ -1319,7 +1320,7 @@ export default function AgreementBoardWindow({
   ), [rangeId, rangeOptions]);
   const selectedRangeKey = selectedRangeOption?.key || '';
   const rangeImplemented = React.useMemo(
-    () => isWebAgreementRangeImplemented(ownerKeyUpper, selectedRangeKey, fileType),
+    () => isWebAgreementRangeCalculationImplemented(ownerKeyUpper, selectedRangeKey, fileType),
     [fileType, ownerKeyUpper, selectedRangeKey],
   );
   const effectiveSelectedRangeKey = isLHOwner ? normalizeLhRangeKey(selectedRangeKey) : selectedRangeKey;
@@ -1379,6 +1380,7 @@ export default function AgreementBoardWindow({
   const isMois50To100 = isMoisOwner && selectedRangeKey === MOIS_50_TO_100_KEY;
   const isMoisUnderOr30To50 = isMoisOwner && (selectedRangeKey === MOIS_UNDER_30_KEY || selectedRangeKey === MOIS_30_TO_50_KEY);
   const isPpsUnder50 = ownerKeyUpper === 'PPS' && selectedRangeKey === PPS_UNDER_50_KEY;
+  const isPps50To100 = ownerKeyUpper === 'PPS' && selectedRangeKey === PPS_50_TO_100_KEY;
   const isKrailUnder50 = ownerKeyUpper === 'KRAIL' && selectedRangeKey === KRAIL_UNDER_50_KEY;
   const isKrail50To100 = ownerKeyUpper === 'KRAIL' && selectedRangeKey === KRAIL_50_TO_100_KEY;
   const isLh50To100 = isLHOwner && effectiveSelectedRangeKey === LH_50_TO_100_KEY;
@@ -1394,6 +1396,14 @@ export default function AgreementBoardWindow({
   const technicianEnabled = isKrailOwner;
   const technicianEditable = technicianEnabled && String(fileType || '').toLowerCase() !== 'sobang';
   const technicianAbilityMax = technicianEnabled ? KRAIL_TECHNICIAN_ABILITY_MAX : null;
+  const getCandidateManagementScoreForCurrentRange = React.useCallback((candidate) => resolveCandidateManagementScore(candidate, {
+    toNumber,
+    clampScore,
+    managementScoreMax: MANAGEMENT_SCORE_MAX,
+    managementScoreVersion: MANAGEMENT_SCORE_VERSION,
+    preferCurrentEvaluation: !isPps50To100,
+    usePps50To100FinancialEvaluation: isPps50To100,
+  }), [isPps50To100]);
   React.useEffect(() => {
     if (!isKrailOwner) return;
     setCollapsedColumns((prev) => {
@@ -1900,6 +1910,11 @@ export default function AgreementBoardWindow({
     if (ownerKeyUpper === 'PPS' && rangeKey === PPS_UNDER_50_KEY) {
       return base > 0
         ? { perfectPerformanceAmount: base, perfectPerformanceBasis: '기초금액 × 1배' }
+        : { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
+    }
+    if (ownerKeyUpper === 'PPS' && rangeKey === PPS_50_TO_100_KEY) {
+      return base > 0
+        ? { perfectPerformanceAmount: base * 2, perfectPerformanceBasis: '기초금액 × 2배' }
         : { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
     }
 
@@ -2860,12 +2875,32 @@ export default function AgreementBoardWindow({
     return 0;
   }, [groupShares]);
 
+  const parsePps50To100Credibility = React.useCallback((stored) => {
+    if (!stored || typeof stored !== 'object') {
+      return { general: '', construction: '' };
+    }
+    return {
+      general: stored.general ?? '',
+      construction: stored.construction ?? '',
+    };
+  }, []);
+
+  const calculatePps50To100CredibilityScore = React.useCallback((stored) => {
+    const values = parsePps50To100Credibility(stored);
+    const general = toNumber(values.general);
+    const construction = toNumber(values.construction);
+    const generalScore = general != null ? Math.min(Math.max(general * 0.3, 0), 1) : 0;
+    const constructionScore = construction != null ? Math.min(Math.max(construction, 0), 1) : 0;
+    return generalScore + constructionScore;
+  }, [parsePps50To100Credibility]);
+
   const getCredibilityValue = React.useCallback((groupIndex, slotIndex) => {
     const stored = groupCredibility[groupIndex]?.[slotIndex];
+    if (isPps50To100) return calculatePps50To100CredibilityScore(stored);
     if (stored === undefined || stored === null || stored === '') return 0;
     const parsed = Number(stored);
     return Number.isFinite(parsed) ? parsed : 0;
-  }, [groupCredibility]);
+  }, [calculatePps50To100CredibilityScore, groupCredibility, isPps50To100]);
 
   const getTechnicianValue = React.useCallback((groupIndex, slotIndex) => {
     const stored = groupTechnicianScores[groupIndex]?.[slotIndex];
@@ -3282,7 +3317,7 @@ export default function AgreementBoardWindow({
   const isSingleBidEligible = React.useCallback((candidate) => {
     if (!candidate) return false;
     const maxScore = Number.isFinite(managementMax) ? managementMax : MANAGEMENT_SCORE_MAX;
-    const managementScore = getCandidateManagementScore(candidate);
+    const managementScore = getCandidateManagementScoreForCurrentRange(candidate);
     const result = evaluateSingleBidEligibility({
       company: candidate,
       entryAmount: parseAmountValue(entryAmount) || 0,
@@ -3306,7 +3341,7 @@ export default function AgreementBoardWindow({
     dutyRegionSet,
     isDutyRegionCompany,
     getRegionLabel,
-    getCandidateManagementScore,
+    getCandidateManagementScoreForCurrentRange,
     getCandidateSipyungAmount,
     getCandidatePerformanceAmountForCurrentRange,
   ]);
@@ -4008,7 +4043,7 @@ export default function AgreementBoardWindow({
       getCandidateManagerName,
       getRegionLabel,
       getCandidateCreditGrade,
-      getCandidateManagementScore,
+      getCandidateManagementScore: getCandidateManagementScoreForCurrentRange,
       getCandidateSipyungAmount,
       getCandidatePerformanceAmountForCurrentRange,
       isDutyRegionCompany,
@@ -4273,7 +4308,7 @@ export default function AgreementBoardWindow({
         candidateDrawerEntries,
         parseNumeric,
         getSharePercent,
-        getCandidateManagementScore,
+        getCandidateManagementScore: getCandidateManagementScoreForCurrentRange,
         getCandidatePerformanceAmountForCurrentRange,
         getTechnicianValue,
         getCandidateSipyungAmount,
@@ -4373,7 +4408,7 @@ export default function AgreementBoardWindow({
     netCostPenaltyNotice,
     candidateDrawerEntries,
     getSharePercent,
-    getCandidateManagementScore,
+    getCandidateManagementScoreForCurrentRange,
     getCandidatePerformanceAmountForCurrentRange,
     getTechnicianValue,
     getCandidateSipyungAmount,
@@ -4568,7 +4603,7 @@ export default function AgreementBoardWindow({
     const estimatedValue = parseAmountValue(estimatedAmount);
     const perfBase = isMois50To100
       ? (estimatedValue != null && estimatedValue > 0 ? estimatedValue : null)
-      : isPpsUnder50
+      : (isPpsUnder50 || isPps50To100)
         ? (baseValue != null && baseValue > 0 ? baseValue : null)
       : (isKrailUnder50 || isKrail50To100)
         ? (baseValue != null && baseValue > 0 ? baseValue : null)
@@ -4597,7 +4632,7 @@ export default function AgreementBoardWindow({
       participantMap,
       shouldIncludeSlot: (_groupIndex, slotIndex) => !isSplitAssignedSlot(slotIndex),
       getSharePercent,
-      getCandidateManagementScore,
+      getCandidateManagementScore: getCandidateManagementScoreForCurrentRange,
       getCandidatePerformanceAmountForCurrentRange,
       technicianEditable,
       getTechnicianValue,
@@ -4623,7 +4658,8 @@ export default function AgreementBoardWindow({
         perfBase,
         roundRatioBaseAmount: (isLh50To100 || isLhUnder50) ? perfectPerformanceAmount : null,
         estimatedValue,
-        perfCoefficient: isLh100To300 ? LH_SIMPLE_PERFORMANCE_COEFFICIENT : null,
+        perfCoefficient: isPps50To100 ? 2 : (isLh100To300 ? LH_SIMPLE_PERFORMANCE_COEFFICIENT : null),
+        perfScoreMultiplier: isPps50To100 ? 15 : null,
         roundRatioDigits: (isLh50To100 || isLhUnder50) ? 2 : null,
         formulasEvaluate: formulasClient.evaluate,
         updatePerformanceCap,
@@ -4691,7 +4727,7 @@ export default function AgreementBoardWindow({
     return () => {
       canceled = true;
     };
-  }, [open, participantSignature, groupAssignments, groupShares, groupCredibility, groupTechnicianScores, participantMap, ownerId, ownerKeyUpper, selectedRangeOption?.key, selectedRangeOption?.label, estimatedAmount, baseAmount, entryAmount, entryModeResolved, getSharePercent, getEffectiveCredibilityValue, getTechnicianValue, credibilityEnabled, ownerCredibilityMax, candidateMetricsVersion, derivedMaxScores, effectiveGroupManagementBonus, effectiveNetCostBonusScore, managementScale, managementBonusMultiplier, managementMax, isMois30To50, isMois50To100, isMoisUnderOr30To50, isKrailUnder50, isKrail50To100, isPpsUnder50, rangeImplemented, isLh50To100, isLh100To300, isDutyRegionCompany, roundForLhTotals, roundForLhPerformanceTotals, roundForMoisManagement, roundForKrailUnder50, roundUpForPpsUnder50, roundForExManagement, resolveKrailTechnicianAbilityScore, resolveSummaryDigits, technicianEditable, technicianEnabled, technicianAbilityMax, getCandidatePerformanceAmountForCurrentRange]);
+  }, [open, participantSignature, groupAssignments, groupShares, groupCredibility, groupTechnicianScores, participantMap, ownerId, ownerKeyUpper, selectedRangeOption?.key, selectedRangeOption?.label, estimatedAmount, baseAmount, entryAmount, entryModeResolved, getSharePercent, getEffectiveCredibilityValue, getTechnicianValue, credibilityEnabled, ownerCredibilityMax, candidateMetricsVersion, derivedMaxScores, effectiveGroupManagementBonus, effectiveNetCostBonusScore, managementScale, managementBonusMultiplier, managementMax, isMois30To50, isMois50To100, isMoisUnderOr30To50, isKrailUnder50, isKrail50To100, isPpsUnder50, isPps50To100, rangeImplemented, isLh50To100, isLh100To300, isDutyRegionCompany, roundForLhTotals, roundForLhPerformanceTotals, roundForMoisManagement, roundForKrailUnder50, roundUpForPpsUnder50, roundForExManagement, resolveKrailTechnicianAbilityScore, resolveSummaryDigits, technicianEditable, technicianEnabled, technicianAbilityMax, getCandidateManagementScoreForCurrentRange, getCandidatePerformanceAmountForCurrentRange]);
 
   React.useEffect(() => {
     attemptPendingPlacement();
@@ -4787,7 +4823,7 @@ export default function AgreementBoardWindow({
       const updated = await runAgreementCandidateScoreEvaluation({
         entries,
         isCanceled: () => canceled,
-        getCandidateManagementScore,
+        getCandidateManagementScore: getCandidateManagementScoreForCurrentRange,
         getCandidatePerformanceAmountForCurrentRange,
         performanceBaseReady,
         perfBase,
@@ -4801,7 +4837,7 @@ export default function AgreementBoardWindow({
         resolveCandidateBizYears,
         noticeDate,
         estimatedValue,
-        perfCoefficient: isLh100To300 ? LH_SIMPLE_PERFORMANCE_COEFFICIENT : null,
+        perfCoefficient: isPps50To100 ? 2 : (isLh100To300 ? LH_SIMPLE_PERFORMANCE_COEFFICIENT : null),
         extractCreditGrade,
         isCreditScoreExpired,
         formulasEvaluate: formulasClient.evaluate,
@@ -4811,7 +4847,7 @@ export default function AgreementBoardWindow({
         updatePerformanceCap,
         performanceCapVersion: PERFORMANCE_CAP_VERSION,
         managementScoreVersion: MANAGEMENT_SCORE_VERSION,
-        forceManagementEvaluation: true,
+        forceManagementEvaluation: !isPps50To100,
         forcePerformanceEvaluation: false,
       });
 
@@ -5203,7 +5239,7 @@ export default function AgreementBoardWindow({
     });
   };
 
-  const handleCredibilityInput = (groupIndex, slotIndex, rawValue) => {
+  const handleCredibilityInput = (groupIndex, slotIndex, rawValue, part = null) => {
     const original = rawValue ?? '';
     const sanitized = original.replace(/[^0-9.]/g, '');
     if ((sanitized.match(/\./g) || []).length > 1) return;
@@ -5211,7 +5247,12 @@ export default function AgreementBoardWindow({
       const next = prev.map((row) => row.slice());
       while (next.length <= groupIndex) next.push([]);
       while (next[groupIndex].length <= slotIndex) next[groupIndex].push('');
-      next[groupIndex][slotIndex] = sanitized;
+      if (isPps50To100 && (part === 'general' || part === 'construction')) {
+        const current = parsePps50To100Credibility(next[groupIndex][slotIndex]);
+        next[groupIndex][slotIndex] = { ...current, [part]: sanitized };
+      } else {
+        next[groupIndex][slotIndex] = sanitized;
+      }
       return next;
     });
   };
@@ -5491,7 +5532,7 @@ export default function AgreementBoardWindow({
       isSingleBidEligible,
       isWomenOwnedCompany,
       getCandidateManagerName,
-      getCandidateManagementScore,
+      getCandidateManagementScore: getCandidateManagementScoreForCurrentRange,
       isMois30To50,
       managementMax,
       managementScoreMax: MANAGEMENT_SCORE_MAX,
@@ -5500,6 +5541,7 @@ export default function AgreementBoardWindow({
       formatScore,
       groupCredibility,
       krailCredibilityScale,
+      isPps50To100,
       groupTechnicianScores,
       conflictNotesByGroup,
       getCompanyName,
@@ -5649,6 +5691,47 @@ export default function AgreementBoardWindow({
                   : ''}
               </div>
             </>
+          ) : isPps50To100 ? (
+            isAmountCellEditing(meta, 'credibility') ? (
+              <div className="credibility-split-inputs">
+                <label>
+                  <span>일반</span>
+                  <input
+                    type="text"
+                    className="excel-amount-input excel-credibility-input"
+                    value={meta.credibilityParts?.general || ''}
+                    onChange={(event) => handleCredibilityInput(meta.groupIndex, meta.slotIndex, event.target.value, 'general')}
+                    onBlur={() => finishAmountCellEdit(meta, 'credibility')}
+                    onKeyDown={(event) => handleInlineEditKeyDown(event, meta, 'credibility')}
+                    placeholder="0"
+                    autoFocus
+                  />
+                </label>
+                <label>
+                  <span>건설</span>
+                  <input
+                    type="text"
+                    className="excel-amount-input excel-credibility-input"
+                    value={meta.credibilityParts?.construction || ''}
+                    onChange={(event) => handleCredibilityInput(meta.groupIndex, meta.slotIndex, event.target.value, 'construction')}
+                    onBlur={() => finishAmountCellEdit(meta, 'credibility')}
+                    onKeyDown={(event) => handleInlineEditKeyDown(event, meta, 'credibility')}
+                    placeholder="0"
+                  />
+                </label>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="excel-inline-edit-display"
+                {...getInlineEditTriggerProps(meta, 'credibility')}
+              >
+                <span className="credibility-split-display">
+                  <span>일반 {meta.credibilityParts?.general || '0'}</span>
+                  <span>건설 {meta.credibilityParts?.construction || '0'}</span>
+                </span>
+              </button>
+            )
           ) : (
             isAmountCellEditing(meta, 'credibility') ? (
               <input

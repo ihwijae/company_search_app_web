@@ -32,6 +32,7 @@ export async function evaluateAgreementPerformanceScore(perfAmount, {
   roundRatioBaseAmount,
   estimatedValue,
   perfCoefficient,
+  perfScoreMultiplier,
   roundRatioDigits,
   formulasEvaluate,
   updatePerformanceCap,
@@ -52,8 +53,11 @@ export async function evaluateAgreementPerformanceScore(perfAmount, {
     if (Number.isFinite(amount) && Number.isFinite(denominator) && denominator > 0) {
       const ratioRaw = amount / denominator;
       const ratioRounded = truncateTo(ratioRaw, 4);
-      const rawScore = ratioRounded != null ? roundTo(ratioRounded * 11, 3) : null;
-      const maxScore = resolvePerformanceCap(11, PERFORMANCE_DEFAULT_MAX);
+      const scoreMultiplier = Number.isFinite(Number(perfScoreMultiplier)) && Number(perfScoreMultiplier) > 0
+        ? Number(perfScoreMultiplier)
+        : 11;
+      const rawScore = ratioRounded != null ? roundTo(ratioRounded * scoreMultiplier, 3) : null;
+      const maxScore = resolvePerformanceCap(scoreMultiplier, PERFORMANCE_DEFAULT_MAX);
       const score = rawScore != null ? clampScore(rawScore, maxScore) : null;
       if (score != null) {
         if (returnDetails) {

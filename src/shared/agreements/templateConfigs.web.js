@@ -6,6 +6,7 @@ const LH_100_TO_300_KEY = 'lh-100to300';
 const LH_UNDER_50_SHARE_KEY = 'lh-under50-share';
 const LH_50_TO_100_SHARE_KEY = 'lh-50to100-share';
 const PPS_UNDER_50_KEY = 'pps-under50';
+const PPS_50_TO_100_KEY = 'pps-50to100';
 const MOIS_30_TO_50_KEY = 'mois-30to50';
 const MOIS_50_TO_100_KEY = 'mois-50to100';
 const KRAIL_UNDER_50_KEY = 'krail-under50';
@@ -428,3 +429,10 @@ export const resolveWebAgreementTemplateKey = (ownerId, rangeId, fileType) => {
 export const isWebAgreementRangeImplemented = (ownerId, rangeId, fileType) => (
   resolveWebAgreementTemplateConfig(resolveWebAgreementTemplateKey(ownerId, rangeId, fileType)) != null
 );
+
+export const isWebAgreementRangeCalculationImplemented = (ownerId, rangeId, fileType) => {
+  const ownerKey = String(ownerId || '').toUpperCase();
+  const rangeKey = String(rangeId || '').toLowerCase();
+  if (ownerKey === 'PPS' && rangeKey === PPS_50_TO_100_KEY) return true;
+  return isWebAgreementRangeImplemented(ownerId, rangeId, fileType);
+};

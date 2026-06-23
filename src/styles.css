@@ -130,6 +130,25 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Prete
   font-size: 13px;
   font-weight: 700;
 }
+.credibility-split-inputs,
+.credibility-split-display {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+}
+.credibility-split-inputs label {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: #475569;
+}
+.credibility-split-display {
+  font-size: 10px;
+  line-height: 1.2;
+  color: #1e293b;
+}
 .stage::before,
 .stage::after { content: none; }
 .content { display: grid; grid-template-columns: 320px 1.2fr 1.5fr; gap: 12px; padding: 12px; height: 100%; }
