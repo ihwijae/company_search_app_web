@@ -362,6 +362,10 @@ const resolveTemplateKey = (ownerId, rangeId, fileType) => {
   return null;
 };
 
+const isAgreementRangeImplemented = (ownerId, rangeId, fileType) => (
+  resolveTemplateKey(ownerId, rangeId, fileType) != null
+);
+
 const isLhSplitRange = (rangeKey) => (
   String(rangeKey || '').toLowerCase() === LH_UNDER_50_SHARE_KEY
   || String(rangeKey || '').toLowerCase() === LH_50_TO_100_SHARE_KEY
@@ -1348,6 +1352,10 @@ export default function AgreementBoardWindow({
     rangeOptions.find((item) => item.key === rangeId) || rangeOptions[0] || null
   ), [rangeId, rangeOptions]);
   const selectedRangeKey = selectedRangeOption?.key || '';
+  const rangeImplemented = React.useMemo(
+    () => isAgreementRangeImplemented(ownerKeyUpper, selectedRangeKey, fileType),
+    [fileType, ownerKeyUpper, selectedRangeKey],
+  );
   const effectiveSelectedRangeKey = isLHOwner ? normalizeLhRangeKey(selectedRangeKey) : selectedRangeKey;
   const isLhSplitMode = isLHOwner && isLhSplitRange(selectedRangeKey);
   const isLhUnder50 = isLHOwner && effectiveSelectedRangeKey === LH_UNDER_50_KEY;
@@ -1923,7 +1931,7 @@ export default function AgreementBoardWindow({
     const estimated = parseAmountValue(estimatedAmount) || 0;
     const base = parseAmountValue(baseAmount) || 0;
 
-    if (ownerKeyUpper === 'PPS') {
+    if (ownerKeyUpper === 'PPS' && rangeKey === PPS_UNDER_50_KEY) {
       return base > 0
         ? { perfectPerformanceAmount: base, perfectPerformanceBasis: '기초금액 × 1배' }
         : { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
@@ -4215,6 +4223,10 @@ export default function AgreementBoardWindow({
 
   const handleExportExcel = React.useCallback(async (options = {}) => {
     if (exporting) return;
+    if (!rangeImplemented) {
+      showHeaderAlert('현재 선택한 발주처/금액대는 아직 구현되지 않았습니다.');
+      return false;
+    }
     const templateKey = resolveTemplateKey(ownerId, rangeId, fileType);
     if (!templateKey) {
       showHeaderAlert('현재 선택한 발주처/구간은 엑셀 템플릿이 아직 준비되지 않았습니다.');
@@ -4387,6 +4399,7 @@ export default function AgreementBoardWindow({
     summary,
     safeGroupSize,
     isLHOwner,
+    rangeImplemented,
     technicianEnabled,
     selectedRangeOption?.key,
     entryModeResolved,
@@ -4581,6 +4594,10 @@ export default function AgreementBoardWindow({
       setGroupSummaries((prev) => (Array.isArray(prev) && prev.length === 0 ? prev : []));
       return;
     }
+    if (!rangeImplemented) {
+      setGroupSummaries((prev) => (Array.isArray(prev) && prev.length === 0 ? prev : []));
+      return;
+    }
     const baseValue = parseAmountValue(baseAmount);
     const estimatedValue = parseAmountValue(estimatedAmount);
     const perfBase = isMois50To100
@@ -4708,7 +4725,7 @@ export default function AgreementBoardWindow({
     return () => {
       canceled = true;
     };
-  }, [open, participantSignature, groupAssignments, groupShares, groupCredibility, groupTechnicianScores, participantMap, ownerId, ownerKeyUpper, selectedRangeOption?.key, selectedRangeOption?.label, estimatedAmount, baseAmount, entryAmount, entryModeResolved, getSharePercent, getEffectiveCredibilityValue, getTechnicianValue, credibilityEnabled, ownerCredibilityMax, candidateMetricsVersion, derivedMaxScores, effectiveGroupManagementBonus, effectiveNetCostBonusScore, managementScale, managementBonusMultiplier, managementMax, isMois30To50, isMois50To100, isMoisUnderOr30To50, isKrailUnder50, isKrail50To100, isPpsUnder50, isLh50To100, isLh100To300, isDutyRegionCompany, roundForLhTotals, roundForLhPerformanceTotals, roundForMoisManagement, roundForKrailUnder50, roundUpForPpsUnder50, roundForExManagement, resolveKrailTechnicianAbilityScore, resolveSummaryDigits, technicianEditable, technicianEnabled, technicianAbilityMax, getCandidatePerformanceAmountForCurrentRange]);
+  }, [open, participantSignature, groupAssignments, groupShares, groupCredibility, groupTechnicianScores, participantMap, ownerId, ownerKeyUpper, selectedRangeOption?.key, selectedRangeOption?.label, estimatedAmount, baseAmount, entryAmount, entryModeResolved, getSharePercent, getEffectiveCredibilityValue, getTechnicianValue, credibilityEnabled, ownerCredibilityMax, candidateMetricsVersion, derivedMaxScores, effectiveGroupManagementBonus, effectiveNetCostBonusScore, managementScale, managementBonusMultiplier, managementMax, isMois30To50, isMois50To100, isMoisUnderOr30To50, isKrailUnder50, isKrail50To100, isPpsUnder50, rangeImplemented, isLh50To100, isLh100To300, isDutyRegionCompany, roundForLhTotals, roundForLhPerformanceTotals, roundForMoisManagement, roundForKrailUnder50, roundUpForPpsUnder50, roundForExManagement, resolveKrailTechnicianAbilityScore, resolveSummaryDigits, technicianEditable, technicianEnabled, technicianAbilityMax, getCandidatePerformanceAmountForCurrentRange]);
 
   React.useEffect(() => {
     attemptPendingPlacement();
@@ -6850,6 +6867,12 @@ export default function AgreementBoardWindow({
               </div>
             </div>
           </div>
+
+        {!rangeImplemented && (
+          <div className="excel-board-unimplemented-banner">
+            현재 선택한 발주처/금액대는 아직 구현되지 않았습니다. 업체 배치와 저장은 가능하지만 점수 계산과 엑셀 내보내기는 지원하지 않습니다.
+          </div>
+        )}
 
         <div className="excel-table-wrapper" ref={boardMainRef}>
           <div className="excel-table-inner">

@@ -15,6 +15,20 @@ import { loadPersisted, savePersisted } from '../../../../shared/persistence.js'
 import { normalizeRegionName, normalizeRegionList } from '../../../../shared/regionNormalizer.js';
 import searchClient from '../../../../shared/searchClient.js';
 
+const IMPLEMENTED_FLOW_MENU_KEYS = new Set([
+  'lh-under50',
+  'lh-50to100',
+  'lh-100to300',
+  'pps-under50',
+  'krail-under50',
+  'krail-50to100',
+  'ex-under50',
+  'ex-50to100',
+  'mois-under30',
+  'mois-30to50',
+  'mois-50to100',
+]);
+
 const createDefaultForm = () => {
   const today = new Date();
   const formattedToday = [
@@ -116,9 +130,11 @@ export default function AgreementFlowPage({
 
   const normalizedOwner = String(resolvedOwnerId || 'LH').toUpperCase();
   const isPPS = normalizedOwner === 'PPS';
+  const isPPSUnder50 = isPPS && activeMenuKey === 'pps-under50';
   const isLH = normalizedOwner === 'LH';
   const isMOIS = normalizedOwner === 'MOIS';
   const isMoisShareRange = isMOIS && activeMenuKey === 'mois-30to50';
+  const isUnimplementedFlowRange = !IMPLEMENTED_FLOW_MENU_KEYS.has(activeMenuKey);
   const entryMode = form.entryQualificationMode === 'sum'
     ? 'sum'
     : (form.entryQualificationMode === 'none' ? 'none' : 'ratio');
@@ -175,14 +191,14 @@ export default function AgreementFlowPage({
   }, [storageKey, dutyRegions]);
 
   React.useEffect(() => {
-    if (!(isPPS || isMoisShareRange)) return;
+    if (!(isPPSUnder50 || isMoisShareRange)) return;
     setForm((prev) => {
       const next = { ...prev };
       let changed = false;
-      const defaultAdjustment = isPPS ? '101.6' : '88.745';
-      const defaultBid = isPPS ? '88.745' : '101.8';
-      const legacyAdjustmentValues = isPPS ? ['101.4'] : [];
-      const legacyBidValues = isPPS ? ['86.745'] : [];
+      const defaultAdjustment = isPPSUnder50 ? '101.6' : '88.745';
+      const defaultBid = isPPSUnder50 ? '88.745' : '101.8';
+      const legacyAdjustmentValues = isPPSUnder50 ? ['101.4'] : [];
+      const legacyBidValues = isPPSUnder50 ? ['86.745'] : [];
 
       const currentAdjustment = String(prev.adjustmentRate || '').trim();
       if (!currentAdjustment || legacyAdjustmentValues.includes(currentAdjustment)) {
@@ -198,7 +214,7 @@ export default function AgreementFlowPage({
 
       return changed ? next : prev;
     });
-  }, [isPPS, isMoisShareRange, entryMode]);
+  }, [isPPSUnder50, isMoisShareRange, entryMode]);
 
   React.useEffect(() => {
     const groupSizeValue = Number(form.teamSizeMax) > 0 ? Number(form.teamSizeMax) : 5;
@@ -294,7 +310,7 @@ export default function AgreementFlowPage({
     const estimated = parseAmount(form.estimatedPrice);
     const base = parseAmount(form.baseAmount);
 
-    if (resolvedOwnerId === 'PPS') {
+    if (resolvedOwnerId === 'PPS' && key === 'pps-under50') {
       return base > 0
         ? { perfectPerformanceAmount: base, perfectPerformanceBasis: '기초금액 × 1배' }
         : { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
@@ -351,7 +367,7 @@ export default function AgreementFlowPage({
     : '';
 
   React.useEffect(() => {
-    if (!isPPS) return;
+    if (!isPPSUnder50) return;
     const estimated = parseAmount(form.estimatedPrice);
     const autoValue = estimated > 0 ? Math.round(estimated * 1.1) : 0;
     const autoFormatted = formatAmountString(autoValue);
@@ -362,7 +378,7 @@ export default function AgreementFlowPage({
     if (current === (autoFormatted || '')) return;
     if (!autoFormatted && current === '') return;
     setForm((prev) => ({ ...prev, baseAmount: autoFormatted }));
-  }, [isPPS, form.estimatedPrice, form.baseAmount, baseTouched]);
+  }, [isPPSUnder50, form.estimatedPrice, form.baseAmount, baseTouched]);
 
   React.useEffect(() => {
     if (!showTenderFields) return;
@@ -680,6 +696,11 @@ export default function AgreementFlowPage({
             )}
             <div className="panel" style={{ gridColumn: '1 / -1' }}>
               <h1 className="main-title" style={{ marginTop: 0 }}>{`${resolvedOwnerLabel} ${resolvedRangeLabel} - 설정`}</h1>
+              {isUnimplementedFlowRange && (
+                <div className="excel-board-unimplemented-banner">
+                  현재 선택한 발주처/금액대는 아직 구현되지 않았습니다. 보드는 열 수 있지만 점수 계산과 엑셀 내보내기는 지원하지 않습니다.
+                </div>
+              )}
 
               <div className="section">
                 <h3 className="section-title">공고 정보</h3>
