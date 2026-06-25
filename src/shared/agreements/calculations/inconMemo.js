@@ -110,7 +110,7 @@ const isSoloGroup = (members) => {
   return Number.isFinite(share) && share === 100;
 };
 
-const buildGroupBlock = (members, lhLeaderBizNoFormat = false) => {
+const buildGroupBlock = (members, leaderBizNoOnlyFormat = false) => {
   if (!Array.isArray(members) || members.length === 0) return '';
   if (isSoloGroup(members)) {
     return `${getSoloDisplayName(members[0].name)} 단독`;
@@ -120,10 +120,10 @@ const buildGroupBlock = (members, lhLeaderBizNoFormat = false) => {
     const name = String(member.name || '').trim();
     const shareText = getShareText(member.share);
     if (index === 0) {
-      const leaderBiz = lhLeaderBizNoFormat ? formatBizNo(leaderBizNo) : '';
+      const leaderBiz = leaderBizNoOnlyFormat ? formatBizNo(leaderBizNo) : '';
       return leaderBiz ? `${name} ${shareText}% [${leaderBiz}]` : `${name} ${shareText}%`;
     }
-    if (lhLeaderBizNoFormat) {
+    if (leaderBizNoOnlyFormat) {
       return `${name} ${shareText}%`;
     }
     const bizNo = formatBizNo(member.bizNo);
@@ -161,6 +161,7 @@ export const buildInconMemoText = ({
   groupApprovals = [],
   participantMap,
   lhLeaderBizNoFormat = false,
+  leaderBizNoOnlyFormat = false,
   suppressTopAmountLines = false,
   isSplitAssignedSlot = () => false,
   splitLabel = '',
@@ -205,7 +206,7 @@ export const buildInconMemoText = ({
     const section = classifyGroupSection(membersForClassify);
     if (!section) return;
 
-    const block = buildGroupBlock(baseMembers, lhLeaderBizNoFormat);
+    const block = buildGroupBlock(baseMembers, leaderBizNoOnlyFormat || lhLeaderBizNoFormat);
     const splitLine = buildSplitMemberLine(splitMember, splitLabel);
     const mergedBlock = [block, splitLine].filter(Boolean).join('\n\n');
     if (!mergedBlock) return;

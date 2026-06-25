@@ -3766,7 +3766,7 @@ export default function AgreementBoardWindow({
       groupShares,
       groupApprovals,
       participantMap,
-      lhLeaderBizNoFormat: isLHOwner,
+      leaderBizNoOnlyFormat: isLHOwner || ownerKeyUpper === 'KGAS',
       suppressTopAmountLines: isLh100To300,
       isSplitAssignedSlot,
       splitLabel: resolvedSplitLabel,
