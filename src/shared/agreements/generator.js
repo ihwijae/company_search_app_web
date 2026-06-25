@@ -97,6 +97,7 @@ function leaderNeedsBizNo(owner) {
 function memberNeedsBizNo(owner) {
   if (isMOIS(owner)) return true; // MOIS: member biz no
   if (isLH(owner)) return false;  // LH: no member biz no
+  if (isKGAS(owner)) return false; // KGAS: leader biz no only
   return true; // others: member biz no
 }
 
