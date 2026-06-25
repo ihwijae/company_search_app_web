@@ -4,6 +4,7 @@ import industryAverages from '../industryAverages.json';
 import { evaluateScores } from '../evaluator.web.js';
 import { evaluateSingleBidEligibility } from './rules/singleBidEligibility.js';
 import { extractCreditGrade, isCreditScoreExpired } from './calculations/managementScore.js';
+import { resolveCriteriaOwnerId } from './ownerCriteria.js';
 import { extractManagerNames } from '../../utils/companyIndicators.js';
 
 const PAGE_SIZE = 10000;
@@ -203,6 +204,7 @@ export async function fetchAgreementCandidates(params = {}) {
   const shouldExcludeSingle = excludeSingleBidEligible && combinedExcludeSingleBid;
 
   const normalizedOwnerId = String(ownerId || '').toLowerCase();
+  const criteriaOwnerId = String(resolveCriteriaOwnerId(ownerId) || ownerId || '').toLowerCase();
   const normalizedMenuKey = String(menuKey || '').toLowerCase();
   const useMois3yPerformance = normalizedOwnerId === 'mois' && normalizedMenuKey === 'mois-50to100';
   const industryAvg = industryAverages[fileType] || industryAverages[String(fileType || '').toLowerCase()] || null;
@@ -244,7 +246,7 @@ export async function fetchAgreementCandidates(params = {}) {
     const creditGradeForEvaluation = creditExpired ? '' : creditGrade;
 
     const evaluation = evaluateScores({
-      agencyId: normalizedOwnerId,
+      agencyId: criteriaOwnerId,
       amount: tierAmount,
       inputs: {
         debtRatio,

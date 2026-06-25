@@ -14,6 +14,7 @@ import { BASE_ROUTES, AGREEMENT_GROUPS, AGREEMENT_MENU_ITEMS, findMenuByKey } fr
 import { loadPersisted, savePersisted } from '../../../../shared/persistence.js';
 import { normalizeRegionName, normalizeRegionList } from '../../../../shared/regionNormalizer.js';
 import { isWebAgreementRangeCalculationImplemented } from '../../../../shared/agreements/templateConfigs.web.js';
+import { usesPpsCriteria } from '../../../../shared/agreements/ownerCriteria.js';
 import searchClient from '../../../../shared/searchClient.js';
 
 const createDefaultForm = () => {
@@ -116,8 +117,9 @@ export default function AgreementFlowPage({
   const [form, setForm] = React.useState(() => createDefaultForm());
 
   const normalizedOwner = String(resolvedOwnerId || 'LH').toUpperCase();
-  const isPPS = normalizedOwner === 'PPS';
-  const isPPSUnder50 = isPPS && activeMenuKey === 'pps-under50';
+  const isPPS = usesPpsCriteria(normalizedOwner);
+  const isPPSUnder50 = isPPS && (activeMenuKey === 'pps-under50' || activeMenuKey === 'kgas-under50');
+  const isPPS50To100 = isPPS && (activeMenuKey === 'pps-50to100' || activeMenuKey === 'kgas-50to100');
   const isLH = normalizedOwner === 'LH';
   const isMOIS = normalizedOwner === 'MOIS';
   const isMoisShareRange = isMOIS && activeMenuKey === 'mois-30to50';
@@ -300,12 +302,12 @@ export default function AgreementFlowPage({
     const estimated = parseAmount(form.estimatedPrice);
     const base = parseAmount(form.baseAmount);
 
-    if (resolvedOwnerId === 'PPS' && key === 'pps-under50') {
+    if (isPPSUnder50) {
       return base > 0
         ? { perfectPerformanceAmount: base, perfectPerformanceBasis: '기초금액 × 1배' }
         : { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
     }
-    if (resolvedOwnerId === 'PPS' && key === 'pps-50to100') {
+    if (isPPS50To100) {
       return base > 0
         ? { perfectPerformanceAmount: base * 2, perfectPerformanceBasis: '기초금액 × 2배' }
         : { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
@@ -352,7 +354,7 @@ export default function AgreementFlowPage({
     }
 
     return { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
-  }, [activeMenuKey, resolvedOwnerId, form.estimatedPrice, form.baseAmount, form.industry]);
+  }, [activeMenuKey, resolvedOwnerId, form.estimatedPrice, form.baseAmount, form.industry, isPPSUnder50, isPPS50To100]);
 
   const formattedPerfectPerformanceAmount = perfectPerformanceAmount > 0
     ? perfectPerformanceAmount.toLocaleString()

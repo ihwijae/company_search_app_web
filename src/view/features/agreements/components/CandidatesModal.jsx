@@ -13,6 +13,7 @@ import {
   getCandidateManagementScore,
   isCreditScoreExpired,
 } from '../../../../shared/agreements/calculations/managementScore.js';
+import { usesPpsCriteria } from '../../../../shared/agreements/ownerCriteria.js';
 import agreementCandidatesClient from '../../../../shared/agreementCandidatesClient.js';
 
 const REGION_WINDOW_STORAGE_KEY = '__regionSearchWindow';
@@ -352,7 +353,7 @@ export default function CandidatesModal({
   }, [attachBeforeUnload, portalContainer]);
 
   const normalizedOwnerId = String(ownerId || '').toUpperCase();
-  const isPpsOwner = normalizedOwnerId === 'PPS';
+  const isPpsOwner = usesPpsCriteria(normalizedOwnerId);
   const isLhOwner = normalizedOwnerId === 'LH';
   const isMoisOwner = normalizedOwnerId === 'MOIS';
   const isMoisShareRange = isMoisOwner && menuKey === 'mois-30to50';

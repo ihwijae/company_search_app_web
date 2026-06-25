@@ -132,7 +132,7 @@ export default function AgreementLoadModal({
     const value = String(label || '').toUpperCase();
     if (value.includes('LH')) return 'agreement-badge agreement-badge--owner-lh';
     if (value.includes('MOIS') || value.includes('행안부')) return 'agreement-badge agreement-badge--owner-mois';
-    if (value.includes('PPS') || value.includes('조달청')) return 'agreement-badge agreement-badge--owner-pps';
+    if (value.includes('PPS') || value.includes('조달청') || value.includes('KGAS') || value.includes('한국가스공사')) return 'agreement-badge agreement-badge--owner-pps';
     return 'agreement-badge';
   };
 

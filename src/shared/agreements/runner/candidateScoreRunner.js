@@ -1,3 +1,5 @@
+import { resolveCriteriaOwnerId } from '../ownerCriteria.js';
+
 export async function runAgreementCandidateScoreEvaluation({
   entries = [],
   isCanceled = () => false,
@@ -93,7 +95,7 @@ export async function runAgreementCandidateScoreEvaluation({
     let resolvedPerformanceScore = currentPerformanceScore;
 
     const payload = {
-      agencyId: ownerKey,
+      agencyId: String(resolveCriteriaOwnerId(ownerKey) || ownerKey || '').toLowerCase(),
       fileType,
       amount: Number.isFinite(evaluationAmount) && evaluationAmount > 0
         ? evaluationAmount

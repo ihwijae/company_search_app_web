@@ -14,6 +14,8 @@ import LHUnder50Page from './view/features/agreements/pages/LHUnder50Page.jsx';
 import LH50To100Page from './view/features/agreements/pages/LH50To100Page.jsx';
 import PPSUnder50Page from './view/features/agreements/pages/PPSUnder50Page.jsx';
 import PPS50To100Page from './view/features/agreements/pages/PPS50To100Page.jsx';
+import KGASUnder50Page from './view/features/agreements/pages/KGASUnder50Page.jsx';
+import KGAS50To100Page from './view/features/agreements/pages/KGAS50To100Page.jsx';
 import MOISUnder30Page from './view/features/agreements/pages/MOISUnder30Page.jsx';
 import MOIS30To50Page from './view/features/agreements/pages/MOIS30To50Page.jsx';
 import MOIS50To100Page from './view/features/agreements/pages/MOIS50To100Page.jsx';
@@ -126,6 +128,12 @@ export default function App() {
       break;
     case '/pps/50to100':
       Screen = PPS50To100Page;
+      break;
+    case '/kgas/under50':
+      Screen = KGASUnder50Page;
+      break;
+    case '/kgas/50to100':
+      Screen = KGAS50To100Page;
       break;
     case '/mois/under30':
       Screen = MOISUnder30Page;

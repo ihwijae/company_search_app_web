@@ -13,6 +13,9 @@ const OWNER_ID_MAP = new Map([
   ['pps', 'pps'],
   ['조달청', 'pps'],
   ['public procurement service', 'pps'],
+  ['kgas', 'pps'],
+  ['한국가스공사', 'pps'],
+  ['가스공사', 'pps'],
   ['krail', 'krail'],
   ['국가철도공단', 'krail'],
 ]);

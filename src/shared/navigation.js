@@ -57,6 +57,17 @@ export const AGREEMENT_GROUPS = [
     ],
   },
   {
+    id: 'kgas',
+    ownerId: 'KGAS',
+    label: '한국가스공사',
+    name: '한국가스공사',
+    hashPrefix: '#/kgas/',
+    items: [
+      { key: 'kgas-under50', hash: '#/kgas/under50', label: '50억 미만', rangeLabel: '50억 미만' },
+      { key: 'kgas-50to100', hash: '#/kgas/50to100', label: '50억~100억', rangeLabel: '50억~100억' },
+    ],
+  },
+  {
     id: 'mois',
     ownerId: 'MOIS',
     label: '행안부',

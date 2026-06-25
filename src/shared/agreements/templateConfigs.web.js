@@ -7,6 +7,8 @@ const LH_UNDER_50_SHARE_KEY = 'lh-under50-share';
 const LH_50_TO_100_SHARE_KEY = 'lh-50to100-share';
 const PPS_UNDER_50_KEY = 'pps-under50';
 const PPS_50_TO_100_KEY = 'pps-50to100';
+const KGAS_UNDER_50_KEY = 'kgas-under50';
+const KGAS_50_TO_100_KEY = 'kgas-50to100';
 const MOIS_30_TO_50_KEY = 'mois-30to50';
 const MOIS_50_TO_100_KEY = 'mois-50to100';
 const KRAIL_UNDER_50_KEY = 'krail-under50';
@@ -387,6 +389,11 @@ export const AGREEMENT_TEMPLATE_CONFIGS_WEB = {
   },
 };
 
+AGREEMENT_TEMPLATE_CONFIGS_WEB['kgas-under50'] = {
+  ...AGREEMENT_TEMPLATE_CONFIGS_WEB['pps-under50'],
+  label: '한국가스공사 50억 미만',
+};
+
 export const resolveWebAgreementTemplateConfig = (templateKey) => {
   if (!templateKey) return null;
   return AGREEMENT_TEMPLATE_CONFIGS_WEB[templateKey] || null;
@@ -405,6 +412,7 @@ export const resolveWebAgreementTemplateKey = (ownerId, rangeId, fileType) => {
   if (ownerKey === 'MOIS' && rangeKey === MOIS_30_TO_50_KEY) return 'mois-30to50';
   if (ownerKey === 'MOIS' && rangeKey === MOIS_50_TO_100_KEY) return 'mois-50to100';
   if (ownerKey === 'PPS' && rangeKey === PPS_UNDER_50_KEY) return 'pps-under50';
+  if (ownerKey === 'KGAS' && rangeKey === KGAS_UNDER_50_KEY) return 'kgas-under50';
   if (ownerKey === 'LH' && rangeKey === LH_UNDER_50_KEY) return 'lh-under50';
   if (ownerKey === 'LH' && rangeKey === LH_100_TO_300_KEY) return 'lh-100to300';
   if (ownerKey === 'LH' && rangeKey === LH_50_TO_100_KEY) {
@@ -434,5 +442,6 @@ export const isWebAgreementRangeCalculationImplemented = (ownerId, rangeId, file
   const ownerKey = String(ownerId || '').toUpperCase();
   const rangeKey = String(rangeId || '').toLowerCase();
   if (ownerKey === 'PPS' && rangeKey === PPS_50_TO_100_KEY) return true;
+  if (ownerKey === 'KGAS' && rangeKey === KGAS_50_TO_100_KEY) return true;
   return isWebAgreementRangeImplemented(ownerId, rangeId, fileType);
 };

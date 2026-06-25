@@ -1,8 +1,10 @@
 // Agreements text generator and validation (shared, UI-agnostic)
+import { needsLeaderBizNo } from './ownerCriteria.js';
 
 const OWNER = {
   MOIS: '행정안전부 조달청',
   LH: '한국토지주택공사',
+  KGAS: '한국가스공사',
 };
 
 function normalizeShare(v) {
@@ -72,6 +74,12 @@ function isPPS(owner) {
   return /조달청|PPS/.test(s);
 }
 
+function isKGAS(owner) {
+  const s = String(owner || '').trim();
+  if (!s) return false;
+  return /한국가스공사|가스공사/i.test(s) || /^KGAS$/i.test(s);
+}
+
 function isKRail(owner) {
   const s = String(owner || '').trim();
   if (!s) return false;
@@ -83,7 +91,7 @@ function needsHeader(owner) {
 }
 
 function leaderNeedsBizNo(owner) {
-  return isLH(owner); // LH only
+  return needsLeaderBizNo(owner);
 }
 
 function memberNeedsBizNo(owner) {
@@ -97,7 +105,7 @@ export function generateOne(item) {
   const owner = String(item.owner || '').trim();
   const ownerDisplayName = owner === 'LH'
     ? '한국토지주택공사'
-    : (isKRail(owner) ? '국가철도공단' : (isExpressway(owner) ? '한국도로공사' : owner));
+    : (isKGAS(owner) ? '한국가스공사' : (isKRail(owner) ? '국가철도공단' : (isExpressway(owner) ? '한국도로공사' : owner)));
   const mainLine = [String(item.noticeNo || '').trim(), String(item.title || '').trim()]
     .filter(Boolean)
     .join(' ')

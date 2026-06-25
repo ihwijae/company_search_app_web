@@ -38,6 +38,7 @@ import {
   resolveWebAgreementTemplateConfig,
   resolveWebAgreementTemplateKey,
 } from '../../../../shared/agreements/templateConfigs.web.js';
+import { resolveCriteriaOwnerId, usesPpsCriteria } from '../../../../shared/agreements/ownerCriteria.js';
 import {
   calculatePossibleShareRatio,
   formatPossibleShareText,
@@ -230,7 +231,7 @@ const BOARD_ACTION_BUTTON_STYLE = { fontSize: '13px' };
 const resolveOwnerPerformanceMax = (ownerId) => {
   const upper = String(ownerId || '').toUpperCase();
   if (upper === 'MOIS') return PERFORMANCE_MOIS_DEFAULT_MAX;
-  if (upper === 'PPS') return PERFORMANCE_MOIS_DEFAULT_MAX;
+  if (usesPpsCriteria(upper)) return PERFORMANCE_MOIS_DEFAULT_MAX;
   return PERFORMANCE_DEFAULT_MAX;
 };
 
@@ -1275,6 +1276,7 @@ export default function AgreementBoardWindow({
   }));
   const ownerKeyUpper = React.useMemo(() => String(ownerId || '').toUpperCase(), [ownerId]);
   const isLHOwner = ownerKeyUpper === 'LH';
+  const isPpsCriteriaOwner = usesPpsCriteria(ownerKeyUpper);
   const isKrailOwner = ownerKeyUpper === 'KRAIL';
   const isMoisOwner = ownerKeyUpper === 'MOIS';
   const isExOwner = ownerKeyUpper === 'EX';
@@ -1379,8 +1381,8 @@ export default function AgreementBoardWindow({
   const isMois30To50 = isMoisOwner && selectedRangeKey === MOIS_30_TO_50_KEY;
   const isMois50To100 = isMoisOwner && selectedRangeKey === MOIS_50_TO_100_KEY;
   const isMoisUnderOr30To50 = isMoisOwner && (selectedRangeKey === MOIS_UNDER_30_KEY || selectedRangeKey === MOIS_30_TO_50_KEY);
-  const isPpsUnder50 = ownerKeyUpper === 'PPS' && selectedRangeKey === PPS_UNDER_50_KEY;
-  const isPps50To100 = ownerKeyUpper === 'PPS' && selectedRangeKey === PPS_50_TO_100_KEY;
+  const isPpsUnder50 = isPpsCriteriaOwner && (selectedRangeKey === PPS_UNDER_50_KEY || selectedRangeKey === 'kgas-under50');
+  const isPps50To100 = isPpsCriteriaOwner && (selectedRangeKey === PPS_50_TO_100_KEY || selectedRangeKey === 'kgas-50to100');
   const isKrailUnder50 = ownerKeyUpper === 'KRAIL' && selectedRangeKey === KRAIL_UNDER_50_KEY;
   const isKrail50To100 = ownerKeyUpper === 'KRAIL' && selectedRangeKey === KRAIL_50_TO_100_KEY;
   const isLh50To100 = isLHOwner && effectiveSelectedRangeKey === LH_50_TO_100_KEY;
@@ -1807,11 +1809,11 @@ export default function AgreementBoardWindow({
 
   const credibilityConfig = React.useMemo(() => {
     if (ownerKeyUpper === 'LH') return { enabled: true, max: isLh100To300 ? LH_SIMPLE_REGIONAL_CONTRIBUTION_MAX : null };
-    if (ownerKeyUpper === 'PPS') return { enabled: true, max: null };
+    if (isPpsCriteriaOwner) return { enabled: true, max: null };
     if (ownerKeyUpper === 'KRAIL') return { enabled: true, max: null };
     if (ownerKeyUpper === 'EX') return { enabled: true, max: null };
     return { enabled: false, max: null };
-  }, [isLh100To300, ownerKeyUpper]);
+  }, [isLh100To300, ownerKeyUpper, isPpsCriteriaOwner]);
   const credibilityEnabled = credibilityConfig.enabled;
   const ownerCredibilityMax = credibilityConfig.max;
   const showCredibilityBeforeStatus = credibilityEnabled && !placeCredibilityAfterQuality;
@@ -1907,12 +1909,12 @@ export default function AgreementBoardWindow({
     const estimated = parseAmountValue(estimatedAmount) || 0;
     const base = parseAmountValue(baseAmount) || 0;
 
-    if (ownerKeyUpper === 'PPS' && rangeKey === PPS_UNDER_50_KEY) {
+    if (isPpsUnder50) {
       return base > 0
         ? { perfectPerformanceAmount: base, perfectPerformanceBasis: '기초금액 × 1배' }
         : { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
     }
-    if (ownerKeyUpper === 'PPS' && rangeKey === PPS_50_TO_100_KEY) {
+    if (isPps50To100) {
       return base > 0
         ? { perfectPerformanceAmount: base * 2, perfectPerformanceBasis: '기초금액 × 2배' }
         : { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
@@ -1985,7 +1987,7 @@ export default function AgreementBoardWindow({
     }
 
     return { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
-  }, [ownerKeyUpper, selectedRangeOption?.key, estimatedAmount, baseAmount, fileType, lhSimplePerformanceCoefficient]);
+  }, [ownerKeyUpper, selectedRangeOption?.key, estimatedAmount, baseAmount, fileType, lhSimplePerformanceCoefficient, isPpsUnder50, isPps50To100]);
 
   const perfectPerformanceDisplay = React.useMemo(() => {
     if (!perfectPerformanceAmount || perfectPerformanceAmount <= 0) return '';
@@ -2608,7 +2610,7 @@ export default function AgreementBoardWindow({
 
   const derivedMaxScores = React.useMemo(() => {
     if (!formulasDoc) return { managementMax: null, performanceMax: null };
-    const agencyId = String(ownerId || '').toLowerCase();
+    const agencyId = String(resolveCriteriaOwnerId(ownerId) || '').toLowerCase();
     const agencies = Array.isArray(formulasDoc.agencies) ? formulasDoc.agencies : [];
     const agency = agencies.find((item) => String(item?.id || '').toLowerCase() === agencyId) || null;
     if (!agency) return { managementMax: null, performanceMax: null };
@@ -2755,7 +2757,7 @@ export default function AgreementBoardWindow({
   }, [ownerKeyUpper]);
 
   const bidAutoConfig = React.useMemo(() => {
-    if (ownerKeyUpper === 'PPS' && selectedRangeOption?.key === PPS_UNDER_50_KEY) {
+    if (isPpsUnder50) {
       return { bidRate: '88.745', adjustmentRate: '101.6', baseMultiplier: 1.1 };
     }
     if (ownerKeyUpper === 'MOIS' && selectedRangeOption?.key === MOIS_30_TO_50_KEY) {
@@ -2765,7 +2767,7 @@ export default function AgreementBoardWindow({
       return { bidRate: '87.495', adjustmentRate: '101.6', baseMultiplier: 1.1 };
     }
     return null;
-  }, [ownerKeyUpper, selectedRangeOption?.key]);
+  }, [ownerKeyUpper, selectedRangeOption?.key, isPpsUnder50]);
 
   React.useEffect(() => {
     if (!bidAutoConfig) return;
@@ -4260,7 +4262,7 @@ export default function AgreementBoardWindow({
       const possibleShareBase = ownerKeyUpper === 'LH'
         ? ratioBaseValue
         : (bidAmountValue != null ? bidAmountValue : null);
-      const includePossibleShare = (ownerKeyUpper === 'PPS' && rangeId === PPS_UNDER_50_KEY)
+      const includePossibleShare = isPpsUnder50
         || (ownerKeyUpper === 'LH' && (isLhUnder50 || isLh50To100 || isLh100To300))
         || (ownerKeyUpper === 'MOIS' && (rangeId === MOIS_30_TO_50_KEY || rangeId === MOIS_50_TO_100_KEY));
       const dutyRateNumber = parseNumeric(regionDutyRate);
@@ -4618,7 +4620,7 @@ export default function AgreementBoardWindow({
             : (baseValue != null && baseValue > 0 ? baseValue : null)));
     const rangeAmountHint = parseRangeAmountHint(ownerKeyUpper, selectedRangeOption?.label);
     const evaluationAmount = rangeAmountHint > 0 ? rangeAmountHint : 0;
-    const ownerKey = String(ownerId || 'lh').toLowerCase();
+    const ownerKey = String(resolveCriteriaOwnerId(ownerId) || 'LH').toLowerCase();
     const performanceBaseReady = perfBase != null && perfBase > 0;
 
     const entryLimitValue = parseAmountValue(entryAmount);
@@ -4750,7 +4752,7 @@ export default function AgreementBoardWindow({
           : (baseValue != null && baseValue > 0 ? baseValue : null));
     const rangeAmountHint = parseRangeAmountHint(ownerKeyUpper, selectedRangeOption?.label);
     const evaluationAmount = rangeAmountHint > 0 ? rangeAmountHint : 0;
-    const ownerKey = String(ownerId || 'lh').toLowerCase();
+    const ownerKey = String(resolveCriteriaOwnerId(ownerId) || 'LH').toLowerCase();
     const performanceBaseReady = perfBase != null && perfBase > 0;
 
     const entries = Array.from(participantMap.values()).map((entry) => entry?.candidate).filter(Boolean);
@@ -6196,8 +6198,8 @@ export default function AgreementBoardWindow({
             : baseTotalMax)
           : baseTotalMax)
         : null);
-    if (totalScore != null && (isLh100To300 ? 40 : (isLHOwner ? LH_FULL_SCORE : (ownerKeyUpper === 'PPS' ? PPS_FULL_SCORE : totalMax))) != null) {
-      const threshold = isLh100To300 ? 40 : (isLHOwner ? LH_FULL_SCORE : (ownerKeyUpper === 'PPS' ? PPS_FULL_SCORE : totalMax));
+    if (totalScore != null && (isLh100To300 ? 40 : (isLHOwner ? LH_FULL_SCORE : (isPpsCriteriaOwner ? PPS_FULL_SCORE : totalMax))) != null) {
+      const threshold = isLh100To300 ? 40 : (isLHOwner ? LH_FULL_SCORE : (isPpsCriteriaOwner ? PPS_FULL_SCORE : totalMax));
       scoreState = totalScore + SCORE_COMPARISON_EPSILON >= threshold ? 'full' : 'partial';
     }
     const managementSummary = summaryInfo?.managementScore != null
@@ -6621,7 +6623,7 @@ export default function AgreementBoardWindow({
                 </div>
                 <div className="excel-field-block size-lg">
                   <span className="field-label">기초금액</span>
-                  {(ownerKeyUpper === 'PPS' || isMois30To50 || isMois50To100) && (
+                  {(isPpsCriteriaOwner || isMois30To50 || isMois50To100) && (
                     <span className="field-label sub">(추정가격 × 1.1배)</span>
                   )}
                   <AmountInput value={baseAmount || ''} onChange={handleBaseAmountChange} placeholder="원" />

@@ -167,6 +167,7 @@ function AgreementsPageInner() {
   const initialOwner = (() => {
     if (initialHash.includes('/lh/')) return '한국토지주택공사';
     if (initialHash.includes('/pps/')) return '조달청';
+    if (initialHash.includes('/kgas/')) return '한국가스공사';
     return OWNERS[0];
   })();
 
@@ -230,6 +231,9 @@ function AgreementsPageInner() {
       } else if (h.includes('/pps/')) {
         setActive('pps');
         setOwner('조달청');
+      } else if (h.includes('/kgas/')) {
+        setActive('kgas');
+        setOwner('한국가스공사');
       } else if (h.includes('/mois/')) {
         setActive('mois');
       } else {

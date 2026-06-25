@@ -23,6 +23,11 @@ function defaultRules() {
         name: '행정안전부',
         kinds: makeDefaultKinds(),
       },
+      {
+        id: 'KGAS',
+        name: '한국가스공사',
+        kinds: makeDefaultKinds(),
+      },
     ],
     regions: [],
   };
@@ -104,4 +109,3 @@ function validateRules(rules) {
 }
 
 module.exports = { defaultRules, validateRules };
-
