@@ -24,7 +24,7 @@ const MENU_ROUTES = {
 };
 
 const TEAM_LEAD_BUCKET_ID = 'team-lead';
-const TEAM_LEAD_EXCLUDE_MANAGERS = ['윤명숙', '이동훈', '김희준', '김대열', '김기성', '박성균'];
+const TEAM_LEAD_EXCLUDE_MANAGERS = ['윤명숙', '이동훈', '김희준', '김대열', '김기성', '박성균', '정송인'];
 const TEAM_LEAD_EXCLUDE_COMPANIES = ['아람이엔테크', '우진일렉트', '에코엠이엔씨', '지음쏠라테크'];
 const BIZ_FIELDS = ['사업자번호', 'bizNo', '사업자 번호'];
 const NAME_FIELDS = ['업체명', '회사명', 'name', '검색된 회사'];
