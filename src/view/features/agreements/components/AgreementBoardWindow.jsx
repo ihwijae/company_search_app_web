@@ -38,7 +38,7 @@ import {
   resolveWebAgreementTemplateConfig,
   resolveWebAgreementTemplateKey,
 } from '../../../../shared/agreements/templateConfigs.web.js';
-import { resolveCriteriaOwnerId, usesPpsCriteria } from '../../../../shared/agreements/ownerCriteria.js';
+import { needsLeaderBizNo, resolveCriteriaOwnerId, usesPpsCriteria } from '../../../../shared/agreements/ownerCriteria.js';
 import {
   calculatePossibleShareRatio,
   formatPossibleShareText,
@@ -3766,7 +3766,7 @@ export default function AgreementBoardWindow({
       groupShares,
       groupApprovals,
       participantMap,
-      leaderBizNoOnlyFormat: isLHOwner || ownerKeyUpper === 'KGAS',
+      leaderBizNoOnlyFormat: needsLeaderBizNo(ownerId),
       suppressTopAmountLines: isLh100To300,
       isSplitAssignedSlot,
       splitLabel: resolvedSplitLabel,
