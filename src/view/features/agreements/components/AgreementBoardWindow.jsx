@@ -1388,8 +1388,8 @@ export default function AgreementBoardWindow({
   const isLh50To100 = isLHOwner && effectiveSelectedRangeKey === LH_50_TO_100_KEY;
   const isExUnder50 = isExOwner && selectedRangeKey === EX_UNDER_50_KEY;
   const isEx50To100 = isExOwner && selectedRangeKey === EX_50_TO_100_KEY;
-  const showsBidAmountField = !isLH;
-  const showAValueField = (isLH && !isLh100To300) || showsBidAmountField;
+  const showsBidAmountField = !isLHOwner;
+  const showAValueField = (isLHOwner && !isLh100To300) || showsBidAmountField;
   const hasAValueInput = String(aValue || '').trim() !== '';
   const showAValueWarning = showsBidAmountField && !hasAValueInput;
   const showManagementBonus = !isLh100To300 && !isEx50To100;
