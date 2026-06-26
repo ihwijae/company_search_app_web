@@ -912,6 +912,17 @@ const parseAmountValue = (value) => {
 
 const normalizeAmountToken = (value) => String(value ?? '').replace(/[,\s]/g, '');
 
+const computeBidAmountByFormula = ({ baseAmount, bidRate, adjustmentRate, aValue, useAValue }) => {
+  const base = parseAmountValue(baseAmount);
+  const bidRateValue = parsePercentValue(bidRate);
+  const adjustmentValue = parsePercentValue(adjustmentRate);
+  if (!base || base <= 0 || !Number.isFinite(bidRateValue) || !Number.isFinite(adjustmentValue)) return 0;
+  if (!useAValue) return Math.round(base * bidRateValue * adjustmentValue);
+  const aValueNumber = parseAmountValue(aValue) || 0;
+  const expectedPrice = base * adjustmentValue;
+  return Math.round(((expectedPrice - aValueNumber) * bidRateValue) + aValueNumber);
+};
+
 const clampScore = (value, max = MANAGEMENT_SCORE_MAX) => {
   if (value === null || value === undefined) return null;
   const number = Number(value);
@@ -1647,8 +1658,25 @@ export default function AgreementBoardWindow({
   }, [onUpdateBoard]);
 
   const handleAValueChange = React.useCallback((value) => {
+    const currentBidAmount = editableBidAmount || bidAmount || '';
+    const legacyAuto = formatPlainAmount(computeBidAmountByFormula({
+      baseAmount,
+      bidRate,
+      adjustmentRate,
+      aValue: '',
+      useAValue: false,
+    }));
+    const lastAuto = bidAutoRef.current || '';
+    const normalizedCurrent = normalizeAmountToken(currentBidAmount);
+    const shouldRecalculate = !normalizedCurrent
+      || normalizedCurrent === normalizeAmountToken(lastAuto)
+      || normalizedCurrent === normalizeAmountToken(legacyAuto);
+    if (shouldRecalculate) {
+      setBidTouched(false);
+      bidAutoRef.current = currentBidAmount;
+    }
     if (typeof onUpdateBoard === 'function') onUpdateBoard({ aValue: value });
-  }, [onUpdateBoard]);
+  }, [adjustmentRate, baseAmount, bidAmount, bidRate, editableBidAmount, onUpdateBoard]);
 
   const sanitizedMemoHtml = React.useMemo(() => sanitizeHtml(memoHtml || ''), [memoHtml]);
   const memoHasContent = React.useMemo(() => {
@@ -2819,20 +2847,13 @@ export default function AgreementBoardWindow({
 
   React.useEffect(() => {
     if (!bidAutoConfig) return;
-    const base = parseAmountValue(baseAmount);
-    const bidRateValue = parsePercentValue(bidRate);
-    const adjustmentValue = parsePercentValue(adjustmentRate);
-    const aValueNum = hasAValueInput ? (parseAmountValue(aValue) || 0) : 0;
-    const expectedPrice = base && base > 0 && Number.isFinite(adjustmentValue)
-      ? (base * adjustmentValue)
-      : 0;
-    const autoValue = base && base > 0 && Number.isFinite(bidRateValue) && Number.isFinite(adjustmentValue)
-      ? (
-        hasAValueInput
-          ? Math.round(((expectedPrice - aValueNum) * bidRateValue) + aValueNum)
-          : Math.round(base * bidRateValue * adjustmentValue)
-      )
-      : 0;
+    const autoValue = computeBidAmountByFormula({
+      baseAmount,
+      bidRate,
+      adjustmentRate,
+      aValue,
+      useAValue: hasAValueInput,
+    });
     const autoFormatted = formatPlainAmount(autoValue);
     const current = editableBidAmount || '';
     const lastAuto = bidAutoRef.current;
@@ -2847,7 +2868,11 @@ export default function AgreementBoardWindow({
 
   const handleBidAmountChange = (value) => {
     setEditableBidAmount(value);
-    setBidTouched(true);
+    const hasManualBidAmount = String(value || '').trim() !== '';
+    setBidTouched(hasManualBidAmount);
+    if (!hasManualBidAmount) {
+      bidAutoRef.current = '';
+    }
     if (onUpdateBoard) {
       onUpdateBoard && onUpdateBoard({ bidAmount: value });
     }

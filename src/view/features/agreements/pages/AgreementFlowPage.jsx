@@ -300,6 +300,41 @@ export default function AgreementFlowPage({
     return Number.isFinite(numeric) ? numeric / 100 : NaN;
   };
 
+  const computeBidAmount = React.useCallback((aValue, useAValue) => {
+    const base = parseAmount(form.baseAmount);
+    const bidRateValue = parsePercent(form.bidRate);
+    const adjustmentValue = parsePercent(form.adjustmentRate);
+    if (!(base > 0) || !Number.isFinite(bidRateValue) || !Number.isFinite(adjustmentValue)) return 0;
+    if (!useAValue) return Math.round(base * bidRateValue * adjustmentValue);
+    const aValueNumber = parseAmount(aValue);
+    const expectedPrice = base * adjustmentValue;
+    return Math.round(((expectedPrice - aValueNumber) * bidRateValue) + aValueNumber);
+  }, [form.adjustmentRate, form.baseAmount, form.bidRate]);
+
+  const handleAValueChange = React.useCallback((value) => {
+    const currentBidAmount = form.bidAmount || '';
+    const legacyAuto = formatAmountString(computeBidAmount('', false));
+    const lastAuto = bidAutoRef.current || '';
+    const normalizedCurrent = String(currentBidAmount || '').replace(/[,\s]/g, '');
+    const shouldRecalculate = !normalizedCurrent
+      || normalizedCurrent === String(lastAuto || '').replace(/[,\s]/g, '')
+      || normalizedCurrent === String(legacyAuto || '').replace(/[,\s]/g, '');
+    if (shouldRecalculate) {
+      setBidTouched(false);
+      bidAutoRef.current = currentBidAmount;
+    }
+    setForm((prev) => ({ ...prev, aValue: value }));
+  }, [computeBidAmount, form.bidAmount]);
+
+  const handleBidAmountChange = React.useCallback((value) => {
+    const hasManualBidAmount = String(value || '').trim() !== '';
+    setBidTouched(hasManualBidAmount);
+    if (!hasManualBidAmount) {
+      bidAutoRef.current = '';
+    }
+    setForm((prev) => ({ ...prev, bidAmount: value }));
+  }, []);
+
   const { perfectPerformanceAmount, perfectPerformanceBasis } = React.useMemo(() => {
     const key = activeMenuKey || '';
     const estimated = parseAmount(form.estimatedPrice);
@@ -382,18 +417,8 @@ export default function AgreementFlowPage({
 
   React.useEffect(() => {
     if (!showTenderFields) return;
-    const base = parseAmount(form.baseAmount);
-    const bidRateValue = parsePercent(form.bidRate);
-    const adjustmentValue = parsePercent(form.adjustmentRate);
-    const autoValue = base > 0 && Number.isFinite(bidRateValue) && Number.isFinite(adjustmentValue)
-      ? (() => {
-        const hasAValueInput = String(form.aValue || '').trim() !== '';
-        if (!hasAValueInput) return Math.round(base * bidRateValue * adjustmentValue);
-        const aValueNumber = parseAmount(form.aValue);
-        const expectedPrice = base * adjustmentValue;
-        return Math.round(((expectedPrice - aValueNumber) * bidRateValue) + aValueNumber);
-      })()
-      : 0;
+    const hasAValueInput = String(form.aValue || '').trim() !== '';
+    const autoValue = computeBidAmount(form.aValue, hasAValueInput);
     const autoFormatted = formatAmountString(autoValue);
     const current = form.bidAmount || '';
     const lastAuto = bidAutoRef.current;
@@ -402,7 +427,7 @@ export default function AgreementFlowPage({
     if (current === (autoFormatted || '')) return;
     if (!autoFormatted && current === '') return;
     setForm((prev) => ({ ...prev, bidAmount: autoFormatted }));
-  }, [showTenderFields, form.baseAmount, form.bidRate, form.adjustmentRate, form.aValue, form.bidAmount, bidTouched]);
+  }, [showTenderFields, form.aValue, form.bidAmount, bidTouched, computeBidAmount]);
 
   React.useEffect(() => {
     if (boardState?.open) return;
@@ -826,7 +851,7 @@ export default function AgreementFlowPage({
                     <Field label="A값">
                       <AmountInput
                         value={form.aValue}
-                        onChange={(value) => setForm((prev) => ({ ...prev, aValue: value }))}
+                        onChange={handleAValueChange}
                         placeholder="원"
                       />
                     </Field>
@@ -843,7 +868,7 @@ export default function AgreementFlowPage({
                     <Field label="투찰금액" style={{ gridColumn: '1 / -1' }}>
                       <AmountInput
                         value={form.bidAmount}
-                        onChange={(value) => { setBidTouched(true); setForm((prev) => ({ ...prev, bidAmount: value })); }}
+                        onChange={handleBidAmountChange}
                         placeholder="원"
                       />
                       {!String(form.aValue || '').trim() && (
