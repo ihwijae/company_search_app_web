@@ -1388,6 +1388,10 @@ export default function AgreementBoardWindow({
   const isLh50To100 = isLHOwner && effectiveSelectedRangeKey === LH_50_TO_100_KEY;
   const isExUnder50 = isExOwner && selectedRangeKey === EX_UNDER_50_KEY;
   const isEx50To100 = isExOwner && selectedRangeKey === EX_50_TO_100_KEY;
+  const showsBidAmountField = !isLH;
+  const showAValueField = (isLH && !isLh100To300) || showsBidAmountField;
+  const hasAValueInput = String(aValue || '').trim() !== '';
+  const showAValueWarning = showsBidAmountField && !hasAValueInput;
   const showManagementBonus = !isLh100To300 && !isEx50To100;
   const showNetCostBonus = !isLh100To300;
   const showBidScore = !isLh100To300;
@@ -1895,12 +1899,16 @@ export default function AgreementBoardWindow({
       const bidRateValue = parsePercentValue(bidRate);
       const adjustmentValue = parsePercentValue(adjustmentRate);
       if (baseValue && baseValue > 0 && Number.isFinite(bidRateValue) && Number.isFinite(adjustmentValue)) {
-        const computed = Math.round(baseValue * bidRateValue * adjustmentValue);
+        const aValueNumber = hasAValueInput ? (parseAmountValue(aValue) || 0) : 0;
+        const expectedPrice = baseValue * adjustmentValue;
+        const computed = hasAValueInput
+          ? Math.round(((expectedPrice - aValueNumber) * bidRateValue) + aValueNumber)
+          : Math.round(baseValue * bidRateValue * adjustmentValue);
         if (computed > 0) return computed;
       }
     }
     return null;
-  }, [ownerKeyUpper, selectedRangeKey, ratioBaseAmount, editableBidAmount, bidAmount, baseAmount, bidRate, adjustmentRate]);
+  }, [ownerKeyUpper, selectedRangeKey, ratioBaseAmount, editableBidAmount, bidAmount, baseAmount, bidRate, adjustmentRate, aValue, hasAValueInput]);
 
   const { perfectPerformanceAmount, perfectPerformanceBasis } = React.useMemo(() => {
     const rangeKey = ownerKeyUpper === 'LH'
@@ -2814,13 +2822,13 @@ export default function AgreementBoardWindow({
     const base = parseAmountValue(baseAmount);
     const bidRateValue = parsePercentValue(bidRate);
     const adjustmentValue = parsePercentValue(adjustmentRate);
-    const aValueNum = parseAmountValue(aValue) || 0;
+    const aValueNum = hasAValueInput ? (parseAmountValue(aValue) || 0) : 0;
     const expectedPrice = base && base > 0 && Number.isFinite(adjustmentValue)
       ? (base * adjustmentValue)
       : 0;
     const autoValue = base && base > 0 && Number.isFinite(bidRateValue) && Number.isFinite(adjustmentValue)
       ? (
-        (ownerKeyUpper === 'MOIS' && selectedRangeOption?.key === MOIS_50_TO_100_KEY)
+        hasAValueInput
           ? Math.round(((expectedPrice - aValueNum) * bidRateValue) + aValueNum)
           : Math.round(base * bidRateValue * adjustmentValue)
       )
@@ -2835,7 +2843,7 @@ export default function AgreementBoardWindow({
     if (!autoFormatted && current === '') return;
     setEditableBidAmount(autoFormatted);
     if (typeof onUpdateBoard === 'function') onUpdateBoard({ bidAmount: autoFormatted });
-  }, [bidAutoConfig, baseAmount, bidRate, adjustmentRate, editableBidAmount, bidTouched, onUpdateBoard, aValue, ownerKeyUpper, selectedRangeOption?.key]);
+  }, [bidAutoConfig, baseAmount, bidRate, adjustmentRate, editableBidAmount, bidTouched, onUpdateBoard, aValue, hasAValueInput]);
 
   const handleBidAmountChange = (value) => {
     setEditableBidAmount(value);
@@ -6628,12 +6636,14 @@ export default function AgreementBoardWindow({
                   )}
                   <AmountInput value={baseAmount || ''} onChange={handleBaseAmountChange} placeholder="원" />
                 </div>
-                {((isLH && !isLh100To300) || isMois50To100) && (
+                {showAValueField && (
                   <>
-                    <div className="excel-field-block size-lg">
-                      <span className="field-label">순공사원가</span>
-                      <AmountInput value={netCostAmount || ''} onChange={handleNetCostAmountChange} placeholder="원" />
-                    </div>
+                    {isLH && !isLh100To300 && (
+                      <div className="excel-field-block size-lg">
+                        <span className="field-label">순공사원가</span>
+                        <AmountInput value={netCostAmount || ''} onChange={handleNetCostAmountChange} placeholder="원" />
+                      </div>
+                    )}
                     <div className="excel-field-block size-lg">
                       <span className="field-label">A값</span>
                       <AmountInput value={aValue || ''} onChange={handleAValueChange} placeholder="원" />
@@ -6688,7 +6698,7 @@ export default function AgreementBoardWindow({
                   ) : (
                     <AmountInput value={editableBidAmount} onChange={handleBidAmountChange} placeholder="원" />
                   )}
-                  {isMois50To100 && (
+                  {showAValueWarning && (
                     <div className="readonly-note a-value-warning-note">A값 반드시 확인하세요!</div>
                   )}
                 </div>

@@ -34,6 +34,7 @@ const createDefaultForm = () => {
     adjustmentRate: '',
     bidRate: '',
     bidAmount: '',
+    aValue: '',
     ratioBaseAmount: '',
     noticeDate: formattedToday,
     bidDeadline: '',
@@ -123,10 +124,12 @@ export default function AgreementFlowPage({
   const isLH = normalizedOwner === 'LH';
   const isMOIS = normalizedOwner === 'MOIS';
   const isMoisShareRange = isMOIS && activeMenuKey === 'mois-30to50';
+  const isMois50To100 = isMOIS && activeMenuKey === 'mois-50to100';
+  const isMoisBidRange = isMoisShareRange || isMois50To100;
   const entryMode = form.entryQualificationMode === 'sum'
     ? 'sum'
     : (form.entryQualificationMode === 'none' ? 'none' : 'ratio');
-  const showTenderFields = (isPPS || isMoisShareRange);
+  const showTenderFields = (isPPS || isMoisBidRange);
   const [baseTouched, setBaseTouched] = React.useState(false);
   const [bidTouched, setBidTouched] = React.useState(false);
   const baseAutoRef = React.useRef('');
@@ -183,12 +186,12 @@ export default function AgreementFlowPage({
   }, [storageKey, dutyRegions]);
 
   React.useEffect(() => {
-    if (!(isPPSUnder50 || isMoisShareRange)) return;
+    if (!(isPPSUnder50 || isMoisBidRange)) return;
     setForm((prev) => {
       const next = { ...prev };
       let changed = false;
-      const defaultAdjustment = isPPSUnder50 ? '101.6' : '88.745';
-      const defaultBid = isPPSUnder50 ? '88.745' : '101.8';
+      const defaultAdjustment = '101.6';
+      const defaultBid = isMois50To100 ? '87.495' : '88.745';
       const legacyAdjustmentValues = isPPSUnder50 ? ['101.4'] : [];
       const legacyBidValues = isPPSUnder50 ? ['86.745'] : [];
 
@@ -206,7 +209,7 @@ export default function AgreementFlowPage({
 
       return changed ? next : prev;
     });
-  }, [isPPSUnder50, isMoisShareRange, entryMode]);
+  }, [isPPSUnder50, isMoisBidRange, isMois50To100, entryMode]);
 
   React.useEffect(() => {
     const groupSizeValue = Number(form.teamSizeMax) > 0 ? Number(form.teamSizeMax) : 5;
@@ -364,7 +367,7 @@ export default function AgreementFlowPage({
     : '';
 
   React.useEffect(() => {
-    if (!isPPSUnder50) return;
+    if (!(isPPSUnder50 || isMoisBidRange)) return;
     const estimated = parseAmount(form.estimatedPrice);
     const autoValue = estimated > 0 ? Math.round(estimated * 1.1) : 0;
     const autoFormatted = formatAmountString(autoValue);
@@ -375,7 +378,7 @@ export default function AgreementFlowPage({
     if (current === (autoFormatted || '')) return;
     if (!autoFormatted && current === '') return;
     setForm((prev) => ({ ...prev, baseAmount: autoFormatted }));
-  }, [isPPSUnder50, form.estimatedPrice, form.baseAmount, baseTouched]);
+  }, [isPPSUnder50, isMoisBidRange, form.estimatedPrice, form.baseAmount, baseTouched]);
 
   React.useEffect(() => {
     if (!showTenderFields) return;
@@ -383,7 +386,13 @@ export default function AgreementFlowPage({
     const bidRateValue = parsePercent(form.bidRate);
     const adjustmentValue = parsePercent(form.adjustmentRate);
     const autoValue = base > 0 && Number.isFinite(bidRateValue) && Number.isFinite(adjustmentValue)
-      ? Math.round(base * bidRateValue * adjustmentValue)
+      ? (() => {
+        const hasAValueInput = String(form.aValue || '').trim() !== '';
+        if (!hasAValueInput) return Math.round(base * bidRateValue * adjustmentValue);
+        const aValueNumber = parseAmount(form.aValue);
+        const expectedPrice = base * adjustmentValue;
+        return Math.round(((expectedPrice - aValueNumber) * bidRateValue) + aValueNumber);
+      })()
       : 0;
     const autoFormatted = formatAmountString(autoValue);
     const current = form.bidAmount || '';
@@ -393,7 +402,7 @@ export default function AgreementFlowPage({
     if (current === (autoFormatted || '')) return;
     if (!autoFormatted && current === '') return;
     setForm((prev) => ({ ...prev, bidAmount: autoFormatted }));
-  }, [showTenderFields, form.baseAmount, form.bidRate, form.adjustmentRate, form.bidAmount, bidTouched]);
+  }, [showTenderFields, form.baseAmount, form.bidRate, form.adjustmentRate, form.aValue, form.bidAmount, bidTouched]);
 
   React.useEffect(() => {
     if (boardState?.open) return;
@@ -407,6 +416,7 @@ export default function AgreementFlowPage({
       && boardState?.bidDeadline === (form.bidDeadline || '')
       && boardState?.regionDutyRate === (form.regionDutyRate || '')
       && boardState?.bidAmount === (form.bidAmount || '')
+      && boardState?.aValue === (form.aValue || '')
       && boardState?.ratioBaseAmount === (form.ratioBaseAmount || '')
       && boardState?.bidRate === (form.bidRate || '')
       && boardState?.adjustmentRate === (form.adjustmentRate || '')
@@ -423,6 +433,7 @@ export default function AgreementFlowPage({
       bidDeadline: form.bidDeadline || '',
       regionDutyRate: form.regionDutyRate || '',
       bidAmount: form.bidAmount || '',
+      aValue: form.aValue || '',
       ratioBaseAmount: form.ratioBaseAmount || '',
       bidRate: form.bidRate || '',
       adjustmentRate: form.adjustmentRate || '',
@@ -440,6 +451,7 @@ export default function AgreementFlowPage({
     boardState?.bidDeadline,
     boardState?.regionDutyRate,
     boardState?.bidAmount,
+    boardState?.aValue,
     boardState?.ratioBaseAmount,
     boardState?.bidRate,
     boardState?.adjustmentRate,
@@ -454,6 +466,7 @@ export default function AgreementFlowPage({
     form.bidDeadline,
     form.regionDutyRate,
     form.bidAmount,
+    form.aValue,
     form.ratioBaseAmount,
     form.bidRate,
     form.adjustmentRate,
@@ -472,6 +485,7 @@ export default function AgreementFlowPage({
       : (boardState.entryMode === 'none' ? 'none' : 'ratio');
     const bidRateFromBoard = boardState.bidRate || '';
     const adjustmentFromBoard = boardState.adjustmentRate || '';
+    const aValueFromBoard = boardState.aValue || '';
 
     const updates = {};
     if (bidFromBoard !== (form.bidAmount || '')) {
@@ -493,10 +507,13 @@ export default function AgreementFlowPage({
     if (adjustmentFromBoard !== (form.adjustmentRate || '')) {
       updates.adjustmentRate = adjustmentFromBoard;
     }
+    if (aValueFromBoard !== (form.aValue || '')) {
+      updates.aValue = aValueFromBoard;
+    }
     if (Object.keys(updates).length > 0) {
       setForm((prev) => ({ ...prev, ...updates }));
     }
-  }, [boardState?.open, boardState?.bidAmount, boardState?.ratioBaseAmount, boardState?.entryAmount, boardState?.entryMode, boardState?.bidRate, boardState?.adjustmentRate, form.bidAmount, form.ratioBaseAmount, form.entryQualificationAmount, form.bidRate, form.adjustmentRate, entryMode]);
+  }, [boardState?.open, boardState?.bidAmount, boardState?.ratioBaseAmount, boardState?.entryAmount, boardState?.entryMode, boardState?.bidRate, boardState?.adjustmentRate, boardState?.aValue, form.bidAmount, form.ratioBaseAmount, form.entryQualificationAmount, form.bidRate, form.adjustmentRate, form.aValue, entryMode]);
 
   const evalSingleBid = (company) => {
     if (!company) return;
@@ -586,6 +603,7 @@ export default function AgreementFlowPage({
     baseAmount: form.baseAmount,
     estimatedAmount: form.estimatedPrice,
     bidAmount: form.bidAmount,
+    aValue: form.aValue,
     bidRate: form.bidRate,
     adjustmentRate: form.adjustmentRate,
     perfectPerformanceAmount,
@@ -594,7 +612,7 @@ export default function AgreementFlowPage({
     ratioBaseAmount: isPPS ? (form.bidAmount || '') : (form.ratioBaseAmount || form.bidAmount || ''),
     defaultExcludeSingle: true,
     readOnly: true,
-  }), [resolvedOwnerId, activeMenuKey, currentFileType, form.noticeNo, form.title, form.noticeDate, form.industry, form.entryQualificationAmount, entryMode, form.baseAmount, form.estimatedPrice, form.bidAmount, form.bidRate, form.adjustmentRate, perfectPerformanceAmount, perfectPerformanceBasis, dutyRegions, isPPS, form.ratioBaseAmount]);
+  }), [resolvedOwnerId, activeMenuKey, currentFileType, form.noticeNo, form.title, form.noticeDate, form.industry, form.entryQualificationAmount, entryMode, form.baseAmount, form.estimatedPrice, form.bidAmount, form.aValue, form.bidRate, form.adjustmentRate, perfectPerformanceAmount, perfectPerformanceBasis, dutyRegions, isPPS, form.ratioBaseAmount]);
 
   const handleOpenRegionSearch = useCallback(() => {
     const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -637,6 +655,7 @@ export default function AgreementFlowPage({
       baseAmount: form.baseAmount || '',
       estimatedAmount: form.estimatedPrice || '',
       bidAmount: form.bidAmount || '',
+      aValue: form.aValue || '',
       ratioBaseAmount: isPPS ? (form.bidAmount || '') : (form.ratioBaseAmount || form.bidAmount || ''),
       bidRate: form.bidRate || '',
       adjustmentRate: form.adjustmentRate || '',
@@ -646,7 +665,7 @@ export default function AgreementFlowPage({
       entryMode,
       inlineMode: false,
     });
-  }, [openBoard, dutyRegions, form.teamSizeMax, resolvedOwnerId, currentFileType, activeMenuKey, form.noticeNo, form.title, form.industry, form.baseAmount, form.estimatedPrice, form.bidAmount, isPPS, form.ratioBaseAmount, form.bidRate, form.adjustmentRate, form.bidDeadline, form.regionDutyRate, form.entryQualificationAmount, entryMode]);
+  }, [openBoard, dutyRegions, form.teamSizeMax, resolvedOwnerId, currentFileType, activeMenuKey, form.noticeNo, form.title, form.industry, form.baseAmount, form.estimatedPrice, form.bidAmount, form.aValue, isPPS, form.ratioBaseAmount, form.bidRate, form.adjustmentRate, form.bidDeadline, form.regionDutyRate, form.entryQualificationAmount, entryMode]);
 
   return (
     <div className="app-shell">
@@ -780,26 +799,35 @@ export default function AgreementFlowPage({
                     </Field>
                   )}
                   {showTenderFields && (
-                    <Field label="투찰율(%)">
-                      <input
-                        className="filter-input"
-                        type="number"
-                        step="0.001"
-                        value={form.adjustmentRate}
-                        onChange={(e) => setForm((prev) => ({ ...prev, adjustmentRate: e.target.value }))}
-                        placeholder={isPPS ? '예: 88.745' : '예: 101.4'}
-                      />
-                    </Field>
-                  )}
-                  {showTenderFields && (
                     <Field label="사정율(%)">
                       <input
                         className="filter-input"
                         type="number"
                         step="0.1"
+                        value={form.adjustmentRate}
+                        onChange={(e) => setForm((prev) => ({ ...prev, adjustmentRate: e.target.value }))}
+                        placeholder="예: 101.6"
+                      />
+                    </Field>
+                  )}
+                  {showTenderFields && (
+                    <Field label="투찰율(%)">
+                      <input
+                        className="filter-input"
+                        type="number"
+                        step="0.001"
                         value={form.bidRate}
                         onChange={(e) => setForm((prev) => ({ ...prev, bidRate: e.target.value }))}
-                        placeholder={isPPS ? '예: 101.6' : '예: 86.745'}
+                        placeholder={isMois50To100 ? '예: 87.495' : '예: 88.745'}
+                      />
+                    </Field>
+                  )}
+                  {showTenderFields && (
+                    <Field label="A값">
+                      <AmountInput
+                        value={form.aValue}
+                        onChange={(value) => setForm((prev) => ({ ...prev, aValue: value }))}
+                        placeholder="원"
                       />
                     </Field>
                   )}
@@ -818,6 +846,11 @@ export default function AgreementFlowPage({
                         onChange={(value) => { setBidTouched(true); setForm((prev) => ({ ...prev, bidAmount: value })); }}
                         placeholder="원"
                       />
+                      {!String(form.aValue || '').trim() && (
+                        <small style={{ display: 'block', marginTop: 6, color: '#b91c1c', fontWeight: 700 }}>
+                          A값 반드시 확인하세요!
+                        </small>
+                      )}
                     </Field>
                   )}
                 </div>
