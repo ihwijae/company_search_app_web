@@ -43,6 +43,7 @@ const initialState = {
   baseAmount: '',
   estimatedAmount: '',
   bidAmount: '',
+  bidAmountMode: 'auto',
   ratioBaseAmount: '',
   bidRate: '',
   adjustmentRate: '',

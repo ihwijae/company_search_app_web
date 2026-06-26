@@ -133,6 +133,7 @@ export default function AgreementBoardPage() {
             baseAmount={boardState.baseAmount || ''}
             estimatedAmount={boardState.estimatedAmount || ''}
             bidAmount={boardState.bidAmount || ''}
+            bidAmountMode={boardState.bidAmountMode || 'auto'}
             ratioBaseAmount={boardState.ratioBaseAmount || ''}
             bidRate={boardState.bidRate || ''}
             adjustmentRate={boardState.adjustmentRate || ''}

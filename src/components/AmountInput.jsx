@@ -3,7 +3,7 @@ import React from 'react';
 // 숫자에 천 단위 콤마를 표시하는 공용 입력 컴포넌트
 // - value는 문자열/숫자 허용
 // - onChange에는 콤마 포함 문자열을 그대로 전달(호출부에서 parse 시 콤마 제거)
-export default function AmountInput({ value, onChange, className = '', style = {}, placeholder = '' }) {
+export default function AmountInput({ value, onChange, className = '', style = {}, placeholder = '', ...inputProps }) {
   const format = (s) => {
     const raw = String(s ?? '').replace(/[^0-9]/g, '');
     if (!raw) return '';
@@ -33,7 +33,7 @@ export default function AmountInput({ value, onChange, className = '', style = {
       value={inner}
       onChange={handle}
       onInput={handle}
+      {...inputProps}
     />
   );
 }
-

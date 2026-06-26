@@ -1158,6 +1158,7 @@ export default function AgreementBoardWindow({
   baseAmount = '',
   estimatedAmount = '',
   bidAmount = '',
+  bidAmountMode = 'auto',
   ratioBaseAmount = '',
   bidRate = '',
   adjustmentRate = '',
@@ -1657,27 +1658,6 @@ export default function AgreementBoardWindow({
     if (typeof onUpdateBoard === 'function') onUpdateBoard({ netCostAmount: value });
   }, [onUpdateBoard]);
 
-  const handleAValueChange = React.useCallback((value) => {
-    const currentBidAmount = editableBidAmount || bidAmount || '';
-    const legacyAuto = formatPlainAmount(computeBidAmountByFormula({
-      baseAmount,
-      bidRate,
-      adjustmentRate,
-      aValue: '',
-      useAValue: false,
-    }));
-    const lastAuto = bidAutoRef.current || '';
-    const normalizedCurrent = normalizeAmountToken(currentBidAmount);
-    const shouldRecalculate = !normalizedCurrent
-      || normalizedCurrent === normalizeAmountToken(lastAuto)
-      || normalizedCurrent === normalizeAmountToken(legacyAuto);
-    if (shouldRecalculate) {
-      setBidTouched(false);
-      bidAutoRef.current = currentBidAmount;
-    }
-    if (typeof onUpdateBoard === 'function') onUpdateBoard({ aValue: value });
-  }, [adjustmentRate, baseAmount, bidAmount, bidRate, editableBidAmount, onUpdateBoard]);
-
   const sanitizedMemoHtml = React.useMemo(() => sanitizeHtml(memoHtml || ''), [memoHtml]);
   const memoHasContent = React.useMemo(() => {
     const text = sanitizedMemoHtml.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
@@ -1896,6 +1876,32 @@ export default function AgreementBoardWindow({
   const rootRef = React.useRef(null);
   const boardMainRef = React.useRef(null);
   const skipAssignmentSyncRef = React.useRef(false);
+  const isBidAmountAutoMode = bidAmountMode !== 'manual';
+
+  const handleAValueChange = React.useCallback((value) => {
+    if (typeof onUpdateBoard === 'function') onUpdateBoard({ aValue: value });
+  }, [onUpdateBoard]);
+
+  const handleBidAmountModeChange = React.useCallback((event) => {
+    const nextMode = event.target.checked ? 'auto' : 'manual';
+    const updates = { bidAmountMode: nextMode };
+    if (nextMode === 'auto') {
+      const nextAutoValue = formatPlainAmount(computeBidAmountByFormula({
+        baseAmount,
+        bidRate,
+        adjustmentRate,
+        aValue,
+        useAValue: String(aValue || '').trim() !== '',
+      }));
+      setBidTouched(false);
+      bidAutoRef.current = nextAutoValue;
+      setEditableBidAmount(nextAutoValue);
+      updates.bidAmount = nextAutoValue;
+    } else {
+      setBidTouched(Boolean(String(editableBidAmount || '').trim()));
+    }
+    if (typeof onUpdateBoard === 'function') onUpdateBoard(updates);
+  }, [aValue, adjustmentRate, baseAmount, bidRate, editableBidAmount, onUpdateBoard]);
 
   const markSkipAssignmentSync = React.useCallback(() => {
     skipAssignmentSyncRef.current = true;
@@ -2847,6 +2853,7 @@ export default function AgreementBoardWindow({
 
   React.useEffect(() => {
     if (!bidAutoConfig) return;
+    if (!isBidAmountAutoMode) return;
     const autoValue = computeBidAmountByFormula({
       baseAmount,
       bidRate,
@@ -2856,25 +2863,18 @@ export default function AgreementBoardWindow({
     });
     const autoFormatted = formatPlainAmount(autoValue);
     const current = editableBidAmount || '';
-    const lastAuto = bidAutoRef.current;
     bidAutoRef.current = autoFormatted;
-    if (bidTouched && current !== lastAuto) return;
-    if (current && current !== lastAuto && current !== autoFormatted) return;
     if (current === (autoFormatted || '')) return;
     if (!autoFormatted && current === '') return;
     setEditableBidAmount(autoFormatted);
     if (typeof onUpdateBoard === 'function') onUpdateBoard({ bidAmount: autoFormatted });
-  }, [bidAutoConfig, baseAmount, bidRate, adjustmentRate, editableBidAmount, bidTouched, onUpdateBoard, aValue, hasAValueInput]);
+  }, [bidAutoConfig, baseAmount, bidRate, adjustmentRate, editableBidAmount, isBidAmountAutoMode, onUpdateBoard, aValue, hasAValueInput]);
 
   const handleBidAmountChange = (value) => {
     setEditableBidAmount(value);
-    const hasManualBidAmount = String(value || '').trim() !== '';
-    setBidTouched(hasManualBidAmount);
-    if (!hasManualBidAmount) {
-      bidAutoRef.current = '';
-    }
+    setBidTouched(true);
     if (onUpdateBoard) {
-      onUpdateBoard && onUpdateBoard({ bidAmount: value });
+      onUpdateBoard && onUpdateBoard({ bidAmount: value, bidAmountMode: 'manual' });
     }
   };
 
@@ -6717,11 +6717,29 @@ export default function AgreementBoardWindow({
                   <input className="input" type="date" value={noticeDate || ''} onChange={handleNoticeDateChange} />
                 </div>
                 <div className="excel-field-block size-md">
-                  <span className="field-label">{isLH ? '시공비율기준금액' : '투찰금액'}</span>
+                  <div className="bid-amount-label-row">
+                    <span className="field-label">{isLH ? '시공비율기준금액' : '투찰금액'}</span>
+                    {!isLH && (
+                      <label className="bid-auto-toggle" title="투찰금액 자동계산">
+                        <input
+                          type="checkbox"
+                          checked={isBidAmountAutoMode}
+                          onChange={handleBidAmountModeChange}
+                        />
+                        <span className="bid-auto-toggle-icon" aria-hidden="true">↻</span>
+                      </label>
+                    )}
+                  </div>
                   {isLH ? (
                     <AmountInput value={ratioBaseAmount || ''} onChange={handleRatioBaseAmountChange} placeholder="원" />
                   ) : (
-                    <AmountInput value={editableBidAmount} onChange={handleBidAmountChange} placeholder="원" />
+                    <AmountInput
+                      value={editableBidAmount}
+                      onChange={handleBidAmountChange}
+                      placeholder="원"
+                      disabled={isBidAmountAutoMode}
+                      className={isBidAmountAutoMode ? 'bid-amount-auto-input' : ''}
+                    />
                   )}
                   {showAValueWarning && (
                     <div className="readonly-note a-value-warning-note">A값 반드시 확인하세요!</div>
