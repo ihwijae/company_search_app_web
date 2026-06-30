@@ -81,7 +81,7 @@ function parseRatioValue(value, toNumber) {
   return parsed == null ? null : parsed;
 }
 
-function parseBusinessYears(value, toNumber) {
+function parseBusinessYears(value, toNumber, evaluationDate = null) {
   const direct = toNumber(value);
   if (direct != null && direct >= 0 && direct <= 200) return direct;
   const text = String(value ?? '').trim();
@@ -101,14 +101,15 @@ function parseBusinessYears(value, toNumber) {
     if (year < 100) year += year >= 70 ? 1900 : 2000;
     const start = new Date(year, month - 1, day);
     if (!Number.isNaN(start.getTime())) {
-      const diffYears = (Date.now() - start.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+      const baseDate = parseEvaluationDate(evaluationDate) || new Date();
+      const diffYears = (baseDate.getTime() - start.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
       return diffYears > 0 ? diffYears : 0;
     }
   }
   return null;
 }
 
-function calculatePps50To100FinancialScore(candidate, { toNumber, clampScore }) {
+function calculatePps50To100FinancialScore(candidate, { toNumber, clampScore, evaluationDate = null }) {
   const debtRatio = parseRatioValue(
     pickCandidateValue(candidate, 'debtRatio', 'debt_ratio', '부채비율'),
     toNumber,
@@ -120,6 +121,7 @@ function calculatePps50To100FinancialScore(candidate, { toNumber, clampScore }) 
   const businessYears = parseBusinessYears(
     pickCandidateValue(candidate, 'bizYears', 'biz_years', '영업기간', '업력', '영업기간공사업등록일'),
     toNumber,
+    evaluationDate,
   );
   if (debtRatio == null || currentRatio == null || businessYears == null) return null;
 
@@ -354,7 +356,7 @@ export function getCandidateManagementScore(candidate, {
   if (preferCurrentEvaluation) return null;
 
   if (usePps50To100FinancialEvaluation) {
-    const financial = calculatePps50To100FinancialScore(candidate, { toNumber, clampScore });
+    const financial = calculatePps50To100FinancialScore(candidate, { toNumber, clampScore, evaluationDate });
     let credit = clampScore(
       toNumber(pickCandidateValue(candidate, 'creditScore', '_creditScore', '신용점수', '신용평가점수')),
       managementScoreMax,
