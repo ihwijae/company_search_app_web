@@ -1266,6 +1266,9 @@ export default function AgreementBoardWindow({
   const [minRatingNetCostBonus, setMinRatingNetCostBonus] = React.useState('');
   const [minRatingCredibilityScore, setMinRatingCredibilityScore] = React.useState('');
   const [minRatingCredibilityShare, setMinRatingCredibilityShare] = React.useState('');
+  const [ppsCredibilityModalTarget, setPpsCredibilityModalTarget] = React.useState(null);
+  const [ppsCredibilityDraft, setPpsCredibilityDraft] = React.useState({ general: '', construction: '' });
+  const ppsCredibilityGeneralRef = React.useRef(null);
   const [bidDatePart, setBidDatePart] = React.useState('');
   const [bidTimePeriod, setBidTimePeriod] = React.useState('AM');
   const [bidHourInput, setBidHourInput] = React.useState('');
@@ -2802,6 +2805,9 @@ export default function AgreementBoardWindow({
     if (isPpsUnder50) {
       return { bidRate: '88.745', adjustmentRate: '101.6', baseMultiplier: 1.1 };
     }
+    if (isPps50To100) {
+      return { bidRate: '88.745', adjustmentRate: '101.6', baseMultiplier: 1.1 };
+    }
     if (ownerKeyUpper === 'MOIS' && selectedRangeOption?.key === MOIS_30_TO_50_KEY) {
       return { bidRate: '88.745', adjustmentRate: '101.6', baseMultiplier: 1.1 };
     }
@@ -2809,7 +2815,7 @@ export default function AgreementBoardWindow({
       return { bidRate: '87.495', adjustmentRate: '101.6', baseMultiplier: 1.1 };
     }
     return null;
-  }, [ownerKeyUpper, selectedRangeOption?.key, isPpsUnder50]);
+  }, [ownerKeyUpper, selectedRangeOption?.key, isPpsUnder50, isPps50To100]);
 
   React.useEffect(() => {
     if (!bidAutoConfig) return;
@@ -5292,6 +5298,55 @@ export default function AgreementBoardWindow({
     });
   };
 
+  const sanitizeScoreInput = React.useCallback((rawValue) => {
+    const sanitized = String(rawValue ?? '').replace(/[^0-9.]/g, '');
+    if ((sanitized.match(/\./g) || []).length > 1) return null;
+    return sanitized;
+  }, []);
+
+  const openPpsCredibilityModal = React.useCallback((meta) => {
+    if (!meta || meta.empty) return;
+    const stored = groupCredibility[meta.groupIndex]?.[meta.slotIndex];
+    const values = parsePps50To100Credibility(stored);
+    setPpsCredibilityDraft({
+      general: values.general != null ? String(values.general) : '',
+      construction: values.construction != null ? String(values.construction) : '',
+    });
+    setPpsCredibilityModalTarget({
+      groupIndex: meta.groupIndex,
+      slotIndex: meta.slotIndex,
+      companyName: meta.companyName || '',
+      shareValue: meta.shareValue || '',
+    });
+  }, [groupCredibility, parsePps50To100Credibility]);
+
+  const closePpsCredibilityModal = React.useCallback(() => {
+    setPpsCredibilityModalTarget(null);
+    setPpsCredibilityDraft({ general: '', construction: '' });
+  }, []);
+
+  const handlePpsCredibilityDraftChange = React.useCallback((part, rawValue) => {
+    const sanitized = sanitizeScoreInput(rawValue);
+    if (sanitized == null) return;
+    setPpsCredibilityDraft((prev) => ({ ...prev, [part]: sanitized }));
+  }, [sanitizeScoreInput]);
+
+  const savePpsCredibilityModal = React.useCallback(() => {
+    if (!ppsCredibilityModalTarget) return;
+    const { groupIndex, slotIndex } = ppsCredibilityModalTarget;
+    setGroupCredibility((prev) => {
+      const next = prev.map((row) => row.slice());
+      while (next.length <= groupIndex) next.push([]);
+      while (next[groupIndex].length <= slotIndex) next[groupIndex].push('');
+      next[groupIndex][slotIndex] = {
+        general: ppsCredibilityDraft.general || '',
+        construction: ppsCredibilityDraft.construction || '',
+      };
+      return next;
+    });
+    closePpsCredibilityModal();
+  }, [closePpsCredibilityModal, ppsCredibilityDraft, ppsCredibilityModalTarget]);
+
   const handleAmountInput = React.useCallback((groupIndex, slotIndex, rawValue, kind) => {
     const candidate = resolveCandidateBySlot(groupIndex, slotIndex);
     if (!candidate) return;
@@ -5727,46 +5782,17 @@ export default function AgreementBoardWindow({
               </div>
             </>
           ) : isPps50To100 ? (
-            isAmountCellEditing(meta, 'credibility') ? (
-              <div className="credibility-split-inputs">
-                <label>
-                  <span>일반</span>
-                  <input
-                    type="text"
-                    className="excel-amount-input excel-credibility-input"
-                    value={meta.credibilityParts?.general || ''}
-                    onChange={(event) => handleCredibilityInput(meta.groupIndex, meta.slotIndex, event.target.value, 'general')}
-                    onBlur={() => finishAmountCellEdit(meta, 'credibility')}
-                    onKeyDown={(event) => handleInlineEditKeyDown(event, meta, 'credibility')}
-                    placeholder="0"
-                    autoFocus
-                  />
-                </label>
-                <label>
-                  <span>건설</span>
-                  <input
-                    type="text"
-                    className="excel-amount-input excel-credibility-input"
-                    value={meta.credibilityParts?.construction || ''}
-                    onChange={(event) => handleCredibilityInput(meta.groupIndex, meta.slotIndex, event.target.value, 'construction')}
-                    onBlur={() => finishAmountCellEdit(meta, 'credibility')}
-                    onKeyDown={(event) => handleInlineEditKeyDown(event, meta, 'credibility')}
-                    placeholder="0"
-                  />
-                </label>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="excel-inline-edit-display"
-                {...getInlineEditTriggerProps(meta, 'credibility')}
-              >
-                <span className="credibility-split-display">
-                  <span>일반 {meta.credibilityParts?.general || '0'}</span>
-                  <span>건설 {meta.credibilityParts?.construction || '0'}</span>
-                </span>
-              </button>
-            )
+            <button
+              type="button"
+              className="excel-inline-edit-display credibility-split-button"
+              onClick={() => openPpsCredibilityModal(meta)}
+              title="신인도 점수 입력"
+            >
+              <span className="credibility-split-display">
+                <span>일반 {meta.credibilityParts?.general || '0'}</span>
+                <span>건설 {meta.credibilityParts?.construction || '0'}</span>
+              </span>
+            </button>
           ) : (
             isAmountCellEditing(meta, 'credibility') ? (
               <input
@@ -6597,6 +6623,15 @@ export default function AgreementBoardWindow({
     headerDutySummary || '',
     estimatedAmount ? `추정 ${formatAmount(estimatedAmount)}` : '',
   ].filter(Boolean).join(' · ');
+  const ppsCredibilityGeneralScore = React.useMemo(() => {
+    const value = toNumber(ppsCredibilityDraft.general);
+    return value != null ? Math.min(Math.max(value * 0.3, 0), 1) : 0;
+  }, [ppsCredibilityDraft.general]);
+  const ppsCredibilityConstructionScore = React.useMemo(() => {
+    const value = toNumber(ppsCredibilityDraft.construction);
+    return value != null ? Math.min(Math.max(value, 0), 1) : 0;
+  }, [ppsCredibilityDraft.construction]);
+  const ppsCredibilityTotalScore = ppsCredibilityGeneralScore + ppsCredibilityConstructionScore;
 
   const boardMarkup = (
     <>
@@ -7440,6 +7475,61 @@ export default function AgreementBoardWindow({
             data-placeholder="메모를 입력하세요."
           />
           <div className="memo-editor-hint">저장하면 협정 저장 데이터에 포함됩니다.</div>
+        </div>
+      </Modal>
+      <Modal
+        open={Boolean(ppsCredibilityModalTarget)}
+        title="조달청 신인도 입력"
+        onClose={closePpsCredibilityModal}
+        onCancel={closePpsCredibilityModal}
+        onSave={savePpsCredibilityModal}
+        closeOnSave={false}
+        confirmLabel="적용"
+        cancelLabel="취소"
+        size="sm"
+        boxClassName="agreement-credibility-modal"
+        initialFocusRef={ppsCredibilityGeneralRef}
+      >
+        <div className="export-sheet-modal credibility-modal-body">
+          <div className="credibility-modal-target">
+            <strong>{ppsCredibilityModalTarget?.companyName || '업체'}</strong>
+            <span>{ppsCredibilityModalTarget?.shareValue ? `지분 ${ppsCredibilityModalTarget.shareValue}%` : '지분 미입력'}</span>
+          </div>
+          <div className="export-sheet-field">
+            <span className="export-sheet-label">일반신인도</span>
+            <input
+              ref={ppsCredibilityGeneralRef}
+              type="text"
+              value={ppsCredibilityDraft.general}
+              onChange={(event) => handlePpsCredibilityDraftChange('general', event.target.value)}
+              placeholder="점수 입력"
+            />
+            <p className="export-sheet-hint">입력점수 × 0.3 적용, 최대 1점</p>
+          </div>
+          <div className="export-sheet-field">
+            <span className="export-sheet-label">건설신인도</span>
+            <input
+              type="text"
+              value={ppsCredibilityDraft.construction}
+              onChange={(event) => handlePpsCredibilityDraftChange('construction', event.target.value)}
+              placeholder="점수 입력"
+            />
+            <p className="export-sheet-hint">입력점수 그대로 적용, 최대 1점</p>
+          </div>
+          <div className="credibility-modal-result">
+            <div>
+              <span>일반 반영</span>
+              <strong>{formatScore(ppsCredibilityGeneralScore, 2)}</strong>
+            </div>
+            <div>
+              <span>건설 반영</span>
+              <strong>{formatScore(ppsCredibilityConstructionScore, 2)}</strong>
+            </div>
+            <div>
+              <span>합계</span>
+              <strong>{formatScore(ppsCredibilityTotalScore, 2)}</strong>
+            </div>
+          </div>
         </div>
       </Modal>
       <Modal
