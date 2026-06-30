@@ -5788,10 +5788,7 @@ export default function AgreementBoardWindow({
               onClick={() => openPpsCredibilityModal(meta)}
               title="신인도 점수 입력"
             >
-              <span className="credibility-split-display">
-                <span>일반 {meta.credibilityParts?.general || '0'}</span>
-                <span>건설 {meta.credibilityParts?.construction || '0'}</span>
-              </span>
+              {formatScore(calculatePps50To100CredibilityScore(groupCredibility[meta.groupIndex]?.[meta.slotIndex]), 2)}
             </button>
           ) : (
             isAmountCellEditing(meta, 'credibility') ? (
