@@ -129,7 +129,7 @@ export function buildBoardMemberMeta({
     ? (() => {
       const general = parseNumeric(credibilityParts.general);
       const construction = parseNumeric(credibilityParts.construction);
-      return (general != null ? Math.min(Math.max(general * 0.3, 0), 1) : 0)
+      return (general != null ? Math.min(Math.max(general / 3, 0), 1) : 0)
         + (construction != null ? Math.min(Math.max(construction, 0), 1) : 0);
     })()
     : parseNumeric(credibilityValue);

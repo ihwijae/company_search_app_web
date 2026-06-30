@@ -3,6 +3,30 @@ const CREDIT_DATE_PATTERN_GLOBAL = new RegExp(CREDIT_DATE_PATTERN.source, 'g');
 const CREDIT_EXPIRED_REGEX = /(expired|만료|기한\s*경과|유효\s*기간\s*만료|기간\s*만료|만기)/i;
 const CREDIT_OVERAGE_REGEX = /(over[-\s]?age|기간\s*초과|인정\s*기간\s*초과)/i;
 const CREDIT_STATUS_STALE_REGEX = /(경과)/i;
+const PPS_CREDIT_GRADE_SCORES = {
+  AAA: 15,
+  'AA+': 15,
+  AA0: 15,
+  'AA-': 15,
+  'A+': 15,
+  A0: 15,
+  'A-': 15,
+  'BBB+': 15,
+  BBB0: 15,
+  'BBB-': 15,
+  'BB+': 15,
+  BB0: 15,
+  'BB-': 14.614,
+  'B+': 14.271,
+  B0: 14.271,
+  'B-': 14.271,
+  'CCC+': 12.857,
+  CCC0: 12.857,
+  'CCC-': 12.857,
+  CC: 12.857,
+  C: 12.857,
+  D: 12.857,
+};
 
 function parseExpiryDateToken(token) {
   if (!token) return null;
@@ -136,6 +160,24 @@ export function extractCreditGrade(candidate) {
     return match ? match[1] : str.split(/[\s(]/)[0];
   }
   return '';
+}
+
+function normalizeCreditGradeToken(value) {
+  const raw = String(value || '').trim().toUpperCase();
+  if (!raw) return '';
+  const match = raw.match(/^([A-Z]{1,3})([0O]|[+-])?/);
+  if (!match) return raw.replace(/\s+/g, '');
+  const letters = match[1] || '';
+  const suffix = match[2] ? match[2].replace('O', '0') : '';
+  return `${letters}${suffix}`;
+}
+
+function resolvePpsCreditGradeScore(candidate, { clampScore, managementScoreMax }) {
+  const grade = normalizeCreditGradeToken(extractCreditGrade(candidate));
+  if (!grade) return null;
+  const score = PPS_CREDIT_GRADE_SCORES[grade];
+  if (!Number.isFinite(score)) return null;
+  return clampScore(score, managementScoreMax);
 }
 
 function parseEvaluationDate(value) {
@@ -287,6 +329,7 @@ export function getCandidateManagementScore(candidate, {
   managementScoreVersion,
   preferCurrentEvaluation = false,
   usePps50To100FinancialEvaluation = false,
+  evaluationDate = null,
 } = {}) {
   if (!candidate || typeof candidate !== 'object') return null;
 
@@ -316,7 +359,10 @@ export function getCandidateManagementScore(candidate, {
       toNumber(pickCandidateValue(candidate, 'creditScore', '_creditScore', '신용점수', '신용평가점수')),
       managementScoreMax,
     );
-    if (credit != null && isCreditScoreExpired(candidate)) {
+    if (credit == null) {
+      credit = resolvePpsCreditGradeScore(candidate, { clampScore, managementScoreMax });
+    }
+    if (credit != null && isCreditScoreExpired(candidate, { evaluationDate })) {
       credit = null;
     }
     const candidates = [financial, credit].filter((value) => value != null && Number.isFinite(value));
@@ -391,7 +437,7 @@ export function getCandidateManagementScore(candidate, {
   if (credit == null && pickCandidateValue(candidate, 'creditGrade') != null && composite != null) {
     credit = null;
   }
-  if (credit != null && isCreditScoreExpired(candidate)) {
+  if (credit != null && isCreditScoreExpired(candidate, { evaluationDate })) {
     credit = null;
   }
 

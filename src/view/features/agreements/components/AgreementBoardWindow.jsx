@@ -1424,7 +1424,8 @@ export default function AgreementBoardWindow({
     managementScoreVersion: MANAGEMENT_SCORE_VERSION,
     preferCurrentEvaluation: !isPps50To100,
     usePps50To100FinancialEvaluation: isPps50To100,
-  }), [isPps50To100]);
+    evaluationDate: noticeDate,
+  }), [isPps50To100, noticeDate]);
   React.useEffect(() => {
     if (!isKrailOwner) return;
     setCollapsedColumns((prev) => {
@@ -2930,7 +2931,7 @@ export default function AgreementBoardWindow({
     const values = parsePps50To100Credibility(stored);
     const general = toNumber(values.general);
     const construction = toNumber(values.construction);
-    const generalScore = general != null ? Math.min(Math.max(general * 0.3, 0), 1) : 0;
+    const generalScore = general != null ? Math.min(Math.max(general / 3, 0), 1) : 0;
     const constructionScore = construction != null ? Math.min(Math.max(construction, 0), 1) : 0;
     return generalScore + constructionScore;
   }, [parsePps50To100Credibility]);
@@ -6622,7 +6623,7 @@ export default function AgreementBoardWindow({
   ].filter(Boolean).join(' · ');
   const ppsCredibilityGeneralScore = React.useMemo(() => {
     const value = toNumber(ppsCredibilityDraft.general);
-    return value != null ? Math.min(Math.max(value * 0.3, 0), 1) : 0;
+    return value != null ? Math.min(Math.max(value / 3, 0), 1) : 0;
   }, [ppsCredibilityDraft.general]);
   const ppsCredibilityConstructionScore = React.useMemo(() => {
     const value = toNumber(ppsCredibilityDraft.construction);
@@ -7474,61 +7475,67 @@ export default function AgreementBoardWindow({
           <div className="memo-editor-hint">저장하면 협정 저장 데이터에 포함됩니다.</div>
         </div>
       </Modal>
-      <Modal
-        open={Boolean(ppsCredibilityModalTarget)}
-        title="조달청 신인도 입력"
-        onClose={closePpsCredibilityModal}
-        onCancel={closePpsCredibilityModal}
-        onSave={savePpsCredibilityModal}
-        closeOnSave={false}
-        confirmLabel="적용"
-        cancelLabel="취소"
-        size="sm"
-        boxClassName="agreement-credibility-modal"
-        initialFocusRef={ppsCredibilityGeneralRef}
-      >
-        <div className="export-sheet-modal credibility-modal-body">
-          <div className="credibility-modal-target">
-            <strong>{ppsCredibilityModalTarget?.companyName || '업체'}</strong>
-            <span>{ppsCredibilityModalTarget?.shareValue ? `지분 ${ppsCredibilityModalTarget.shareValue}%` : '지분 미입력'}</span>
-          </div>
-          <div className="export-sheet-field">
-            <span className="export-sheet-label">일반신인도</span>
-            <input
-              ref={ppsCredibilityGeneralRef}
-              type="text"
-              value={ppsCredibilityDraft.general}
-              onChange={(event) => handlePpsCredibilityDraftChange('general', event.target.value)}
-              placeholder="점수 입력"
-            />
-            <p className="export-sheet-hint">입력점수 × 0.3 적용, 최대 1점</p>
-          </div>
-          <div className="export-sheet-field">
-            <span className="export-sheet-label">건설신인도</span>
-            <input
-              type="text"
-              value={ppsCredibilityDraft.construction}
-              onChange={(event) => handlePpsCredibilityDraftChange('construction', event.target.value)}
-              placeholder="점수 입력"
-            />
-            <p className="export-sheet-hint">입력점수 그대로 적용, 최대 1점</p>
-          </div>
-          <div className="credibility-modal-result">
-            <div>
-              <span>일반 반영</span>
-              <strong>{formatScore(ppsCredibilityGeneralScore, 2)}</strong>
+      {ppsCredibilityModalTarget && (
+        <div className="region-modal-backdrop credibility-window-backdrop" onClick={closePpsCredibilityModal}>
+          <div className="region-modal credibility-window" onClick={(event) => event.stopPropagation()}>
+            <div className="region-modal-header">
+              <div>
+                <h3>조달청 신인도 입력</h3>
+                <p>일반신인도와 건설신인도를 분리해서 입력합니다.</p>
+              </div>
+              <button type="button" className="region-modal-close" onClick={closePpsCredibilityModal}>×</button>
             </div>
-            <div>
-              <span>건설 반영</span>
-              <strong>{formatScore(ppsCredibilityConstructionScore, 2)}</strong>
+            <div className="credibility-modal-target">
+              <strong>{ppsCredibilityModalTarget.companyName || '업체'}</strong>
+              <span>{ppsCredibilityModalTarget.shareValue ? `지분 ${ppsCredibilityModalTarget.shareValue}%` : '지분 미입력'}</span>
             </div>
-            <div>
-              <span>합계</span>
-              <strong>{formatScore(ppsCredibilityTotalScore, 2)}</strong>
+            <div className="credibility-window-grid">
+              <label className="credibility-window-field">
+                <span>일반신인도</span>
+                <input
+                  ref={ppsCredibilityGeneralRef}
+                  className="input"
+                  type="text"
+                  value={ppsCredibilityDraft.general}
+                  onChange={(event) => handlePpsCredibilityDraftChange('general', event.target.value)}
+                  placeholder="점수 입력"
+                  autoFocus
+                />
+                <small>입력점수 × 1/3 적용, 최대 1점</small>
+              </label>
+              <label className="credibility-window-field">
+                <span>건설신인도</span>
+                <input
+                  className="input"
+                  type="text"
+                  value={ppsCredibilityDraft.construction}
+                  onChange={(event) => handlePpsCredibilityDraftChange('construction', event.target.value)}
+                  placeholder="점수 입력"
+                />
+                <small>입력점수 그대로 적용, 최대 1점</small>
+              </label>
+            </div>
+            <div className="credibility-modal-result">
+              <div>
+                <span>일반 반영</span>
+                <strong>{formatScore(ppsCredibilityGeneralScore, 2)}</strong>
+              </div>
+              <div>
+                <span>건설 반영</span>
+                <strong>{formatScore(ppsCredibilityConstructionScore, 2)}</strong>
+              </div>
+              <div>
+                <span>합계</span>
+                <strong>{formatScore(ppsCredibilityTotalScore, 2)}</strong>
+              </div>
+            </div>
+            <div className="region-modal-actions">
+              <button type="button" className="excel-btn" onClick={closePpsCredibilityModal}>취소</button>
+              <button type="button" className="excel-btn primary" onClick={savePpsCredibilityModal}>적용</button>
             </div>
           </div>
         </div>
-      </Modal>
+      )}
       <Modal
         open={exportModalOpen}
         onClose={() => setExportModalOpen(false)}
