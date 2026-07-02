@@ -104,6 +104,31 @@ export const AGREEMENT_TEMPLATE_CONFIGS_WEB = {
     summaryColumns: { credibility: 'AD' },
     regionFill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' }, bgColor: { indexed: 64 } },
   },
+  'pps-50to100': {
+    label: '조달청 50억~100억',
+    templateUrl: buildTemplateUrl('조달청50억~100억.xlsx'),
+    sheetName: '양식',
+    startRow: 5,
+    maxRows: 68,
+    slotColumns: {
+      name: ['C', 'D', 'E', 'F', 'G'],
+      share: ['I', 'J', 'K', 'L', 'M'],
+      management: ['P', 'Q', 'R', 'S', 'T'],
+      performance: ['W', 'X', 'Y', 'Z', 'AA'],
+      ability: ['AP', 'AQ', 'AR', 'AS', 'AT'],
+    },
+    headerCells: {
+      estimatedAmount: 'D1',
+      baseAmount: 'D2',
+      bidAmount: 'F2',
+      noticeTitle: 'M1',
+      bidDeadline: 'P2',
+      dutySummary: 'AH1',
+    },
+    approvalColumn: 'B',
+    summaryColumns: { credibility: 'AE', netCostBonus: 'AF' },
+    regionFill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' }, bgColor: { indexed: 64 } },
+  },
   'lh-under50': {
     label: 'LH 50억 미만',
     templateUrl: buildTemplateUrl('LH50억미만_템플릿.xlsx'),
@@ -412,6 +437,7 @@ export const resolveWebAgreementTemplateKey = (ownerId, rangeId, fileType) => {
   if (ownerKey === 'MOIS' && rangeKey === MOIS_30_TO_50_KEY) return 'mois-30to50';
   if (ownerKey === 'MOIS' && rangeKey === MOIS_50_TO_100_KEY) return 'mois-50to100';
   if (ownerKey === 'PPS' && rangeKey === PPS_UNDER_50_KEY) return 'pps-under50';
+  if (ownerKey === 'PPS' && rangeKey === PPS_50_TO_100_KEY) return 'pps-50to100';
   if (ownerKey === 'KGAS' && rangeKey === KGAS_UNDER_50_KEY) return 'kgas-under50';
   if (ownerKey === 'LH' && rangeKey === LH_UNDER_50_KEY) return 'lh-under50';
   if (ownerKey === 'LH' && rangeKey === LH_100_TO_300_KEY) return 'lh-100to300';
