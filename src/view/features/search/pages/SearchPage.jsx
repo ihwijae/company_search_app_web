@@ -86,6 +86,7 @@ const createDefaultFilters = () => ({
   includeRegions: [],
   excludeRegions: [],
   manager: '',
+  managerExclude: '',
   min_sipyung: '',
   max_sipyung: '',
   min_3y: '',
@@ -1138,6 +1139,7 @@ function App() {
       includeRegions: [],
       excludeRegions: [],
       manager: '',
+      managerExclude: '',
       min_sipyung: '',
       max_sipyung: '',
       min_3y: '',
@@ -1456,6 +1458,7 @@ function App() {
                       placeholder="제외할 지역을 선택하세요"
                     />
                     <div className="filter-item"><label>담당자</label><input type="text" name="manager" value={filters.manager} onChange={handleFilterChange} className="filter-input" /></div>
+                    <div className="filter-item"><label>담당자 제외</label><input type="text" name="managerExclude" value={filters.managerExclude} onChange={handleFilterChange} className="filter-input" /></div>
                     <div className="filter-item"><label>신용평가</label>
                   <select
                     name="min_credit_grade"

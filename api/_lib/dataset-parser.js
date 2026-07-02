@@ -265,6 +265,22 @@ function searchCompaniesInDataset(companies, criteria = {}, options = {}) {
     const searchManager = String(criteria.manager).toLowerCase();
     results = results.filter((company) => String(company['비고'] || '').toLowerCase().includes(searchManager));
   }
+  if (criteria.managerExclude) {
+    const searchManagerExclude = String(criteria.managerExclude).toLowerCase();
+    results = results.filter((company) => {
+      const managerText = [
+        company['담당자명'],
+        company['담당자'],
+        company.managerName,
+        company.manager,
+        company['비고'],
+      ]
+        .filter(Boolean)
+        .map((value) => String(value).toLowerCase())
+        .join(' ');
+      return !managerText.includes(searchManagerExclude);
+    });
+  }
   if (criteria.bizNumber) {
     const searchBiz = normalizeBizNumber(criteria.bizNumber);
     if (searchBiz) {
