@@ -109,7 +109,12 @@ function parseBusinessYears(value, toNumber, evaluationDate = null) {
   return null;
 }
 
-function calculatePps50To100FinancialScore(candidate, { toNumber, clampScore, evaluationDate = null }) {
+function calculatePps50To100FinancialScore(candidate, {
+  toNumber,
+  clampScore,
+  evaluationDate = null,
+  industryAvg = null,
+}) {
   const debtRatio = parseRatioValue(
     pickCandidateValue(candidate, 'debtRatio', 'debt_ratio', '부채비율'),
     toNumber,
@@ -125,15 +130,26 @@ function calculatePps50To100FinancialScore(candidate, { toNumber, clampScore, ev
   );
   if (debtRatio == null || currentRatio == null || businessYears == null) return null;
 
-  const debtScore = debtRatio < 50 ? 22
-    : debtRatio < 75 ? 19.7
-      : debtRatio < 100 ? 17.5
-        : debtRatio < 125 ? 15.2
+  const debtAverage = toNumber(industryAvg?.debtRatio);
+  const currentAverage = toNumber(industryAvg?.currentRatio);
+  const debtAgainstAverage = parseRatioValue(
+    pickCandidateValue(candidate, 'debtAgainstAverage', '부채평균대비'),
+    toNumber,
+  ) ?? (debtAverage > 0 ? (debtRatio / debtAverage) * 100 : debtRatio);
+  const currentAgainstAverage = parseRatioValue(
+    pickCandidateValue(candidate, 'currentAgainstAverage', '유동평균대비'),
+    toNumber,
+  ) ?? (currentAverage > 0 ? (currentRatio / currentAverage) * 100 : currentRatio);
+
+  const debtScore = debtAgainstAverage < 50 ? 22
+    : debtAgainstAverage < 75 ? 19.7
+      : debtAgainstAverage < 100 ? 17.5
+        : debtAgainstAverage < 125 ? 15.2
           : 13;
-  const currentScore = currentRatio >= 150 ? 21
-    : currentRatio >= 120 ? 18.7
-      : currentRatio >= 100 ? 16.5
-        : currentRatio >= 70 ? 14.2
+  const currentScore = currentAgainstAverage >= 150 ? 21
+    : currentAgainstAverage >= 120 ? 18.7
+      : currentAgainstAverage >= 100 ? 16.5
+        : currentAgainstAverage >= 70 ? 14.2
           : 12;
   const yearsScore = businessYears >= 5 ? 2
     : businessYears >= 3 ? 1.8
@@ -332,6 +348,7 @@ export function getCandidateManagementScore(candidate, {
   preferCurrentEvaluation = false,
   usePps50To100FinancialEvaluation = false,
   evaluationDate = null,
+  industryAvg = null,
 } = {}) {
   if (!candidate || typeof candidate !== 'object') return null;
 
@@ -356,7 +373,13 @@ export function getCandidateManagementScore(candidate, {
   if (preferCurrentEvaluation) return null;
 
   if (usePps50To100FinancialEvaluation) {
-    const financial = calculatePps50To100FinancialScore(candidate, { toNumber, clampScore, evaluationDate });
+    const creditExpired = isCreditScoreExpired(candidate, { evaluationDate });
+    const financial = calculatePps50To100FinancialScore(candidate, {
+      toNumber,
+      clampScore,
+      evaluationDate,
+      industryAvg,
+    });
     let credit = clampScore(
       toNumber(pickCandidateValue(candidate, 'creditScore', '_creditScore', '신용점수', '신용평가점수')),
       managementScoreMax,
@@ -364,7 +387,7 @@ export function getCandidateManagementScore(candidate, {
     if (credit == null) {
       credit = resolvePpsCreditGradeScore(candidate, { clampScore, managementScoreMax });
     }
-    if (credit != null && isCreditScoreExpired(candidate, { evaluationDate })) {
+    if (credit != null && creditExpired) {
       credit = null;
     }
     const candidates = [financial, credit].filter((value) => value != null && Number.isFinite(value));
@@ -374,6 +397,7 @@ export function getCandidateManagementScore(candidate, {
       candidate._agreementManagementScoreVersion = managementScoreVersion;
       return best;
     }
+    if (creditExpired) return null;
   }
 
   const explicitPerfect = [

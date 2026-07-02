@@ -14,6 +14,7 @@ import {
   isCreditScoreExpired,
 } from '../../../../shared/agreements/calculations/managementScore.js';
 import { usesPpsCriteria } from '../../../../shared/agreements/ownerCriteria.js';
+import industryAverages from '../../../../shared/industryAverages.json';
 import agreementCandidatesClient from '../../../../shared/agreementCandidatesClient.js';
 
 const REGION_WINDOW_STORAGE_KEY = '__regionSearchWindow';
@@ -357,6 +358,11 @@ export default function CandidatesModal({
   const isLhOwner = normalizedOwnerId === 'LH';
   const isMoisOwner = normalizedOwnerId === 'MOIS';
   const isMoisShareRange = isMoisOwner && menuKey === 'mois-30to50';
+  const isPps50To100 = isPpsOwner && (menuKey === 'pps-50to100' || rangeId === 'pps-50to100' || menuKey === 'kgas-50to100' || rangeId === 'kgas-50to100');
+  const currentIndustryAvg = useMemo(() => {
+    const key = String(fileType || '').trim().toLowerCase();
+    return industryAverages[key] || null;
+  }, [fileType]);
   const hasEntryLimit = entryMode !== 'none';
   const showTenderFields = (isPpsOwner || isMoisShareRange);
   const showBizYearsMetrics = isPpsOwner || isLhOwner;
@@ -1406,7 +1412,10 @@ const industryToLabel = (type) => {
                       return Math.max(0, Math.min(numeric, limit));
                     },
                     managementScoreMax: 15,
-                    managementScoreVersion: 1,
+                    managementScoreVersion: 5,
+                    usePps50To100FinancialEvaluation: isPps50To100,
+                    evaluationDate: noticeDate,
+                    industryAvg: currentIndustryAvg,
                   });
                   const managementIsMax = managementMax > 0 && Math.abs(managementScore - managementMax) < 1e-6;
                   const hasManagementScores = Number.isFinite(debtScore)

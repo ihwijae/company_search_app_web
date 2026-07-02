@@ -72,8 +72,10 @@ function evalManagementComposite(inputs, rules, industryAvg) {
   const current = toNumber(inputs.currentRatio);
   const years = toNumber(inputs.bizYears);
   const quality = toNumber(inputs.qualityEval || 85); // default 85 if absent
-  const debtNorm = avg.debtRatio ? debt / avg.debtRatio : debt; // lower is better
-  const currentNorm = avg.currentRatio ? current / avg.currentRatio : current; // higher is better
+  const debtAgainst = def.debtRatio && def.debtRatio.against;
+  const currentAgainst = def.currentRatio && def.currentRatio.against;
+  const debtNorm = debtAgainst === 'industryAverage' && avg.debtRatio ? debt / avg.debtRatio : debt; // lower is better
+  const currentNorm = currentAgainst === 'industryAverage' && avg.currentRatio ? current / avg.currentRatio : current; // higher is better
 
   const debtScore = evaluateThresholdScore(debtNorm, def.debtRatio && def.debtRatio.thresholds);
   const currentScore = evaluateThresholdScore(currentNorm, def.currentRatio && def.currentRatio.thresholds);

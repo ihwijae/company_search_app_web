@@ -23,6 +23,7 @@ import { generateMany } from '../../../../shared/agreements/generator.js';
 import { AGREEMENT_GROUPS } from '../../../../shared/navigation.js';
 import { sanitizeHtml } from '../../../../shared/sanitizeHtml.js';
 import { normalizeRegionName } from '../../../../shared/regionNormalizer.js';
+import industryAverages from '../../../../shared/industryAverages.json';
 import searchClient from '../../../../shared/searchClient.js';
 import formulasClient from '../../../../shared/formulasClient.js';
 import lhAwardHistoryClient from '../../../../shared/lhAwardHistoryClient.js';
@@ -127,7 +128,7 @@ const KRAIL_TECHNICIAN_ABILITY_MAX = 5;
 const PERFORMANCE_DEFAULT_MAX = 13;
 const PERFORMANCE_MOIS_DEFAULT_MAX = 15;
 const PERFORMANCE_CAP_VERSION = 2;
-const MANAGEMENT_SCORE_VERSION = 4;
+const MANAGEMENT_SCORE_VERSION = 5;
 const LH_QUALITY_DEFAULT_UNDER_100B = 85;
 const LH_QUALITY_DEFAULT_OVER_100B = 88;
 const LH_SIMPLE_PERFORMANCE_COEFFICIENT = 3;
@@ -1417,6 +1418,10 @@ export default function AgreementBoardWindow({
   const technicianEnabled = isKrailOwner;
   const technicianEditable = technicianEnabled && String(fileType || '').toLowerCase() !== 'sobang';
   const technicianAbilityMax = technicianEnabled ? KRAIL_TECHNICIAN_ABILITY_MAX : null;
+  const currentIndustryAvg = React.useMemo(() => {
+    const key = String(fileType || '').trim().toLowerCase();
+    return industryAverages[key] || null;
+  }, [fileType]);
   const getCandidateManagementScoreForCurrentRange = React.useCallback((candidate) => resolveCandidateManagementScore(candidate, {
     toNumber,
     clampScore,
@@ -1425,7 +1430,8 @@ export default function AgreementBoardWindow({
     preferCurrentEvaluation: !isPps50To100,
     usePps50To100FinancialEvaluation: isPps50To100,
     evaluationDate: noticeDate,
-  }), [isPps50To100, noticeDate]);
+    industryAvg: currentIndustryAvg,
+  }), [currentIndustryAvg, isPps50To100, noticeDate]);
   React.useEffect(() => {
     if (!isKrailOwner) return;
     setCollapsedColumns((prev) => {
