@@ -1,3 +1,5 @@
+import { evaluateScores } from '../../evaluator.web.js';
+
 const CREDIT_DATE_PATTERN = /(\d{2,4})[^0-9]{0,3}(\d{1,2})[^0-9]{0,3}(\d{1,2})/;
 const CREDIT_DATE_PATTERN_GLOBAL = new RegExp(CREDIT_DATE_PATTERN.source, 'g');
 const CREDIT_EXPIRED_REGEX = /(expired|만료|기한\s*경과|유효\s*기간\s*만료|기간\s*만료|만기)/i;
@@ -130,32 +132,18 @@ function calculatePps50To100FinancialScore(candidate, {
   );
   if (debtRatio == null || currentRatio == null || businessYears == null) return null;
 
-  const debtAverage = toNumber(industryAvg?.debtRatio);
-  const currentAverage = toNumber(industryAvg?.currentRatio);
-  const debtAgainstAverage = parseRatioValue(
-    pickCandidateValue(candidate, 'debtAgainstAverage', '부채평균대비'),
-    toNumber,
-  ) ?? (debtAverage > 0 ? (debtRatio / debtAverage) * 100 : debtRatio);
-  const currentAgainstAverage = parseRatioValue(
-    pickCandidateValue(candidate, 'currentAgainstAverage', '유동평균대비'),
-    toNumber,
-  ) ?? (currentAverage > 0 ? (currentRatio / currentAverage) * 100 : currentRatio);
-
-  const debtScore = debtAgainstAverage < 50 ? 22
-    : debtAgainstAverage < 75 ? 19.7
-      : debtAgainstAverage < 100 ? 17.5
-        : debtAgainstAverage < 125 ? 15.2
-          : 13;
-  const currentScore = currentAgainstAverage >= 150 ? 21
-    : currentAgainstAverage >= 120 ? 18.7
-      : currentAgainstAverage >= 100 ? 16.5
-        : currentAgainstAverage >= 70 ? 14.2
-          : 12;
-  const yearsScore = businessYears >= 5 ? 2
-    : businessYears >= 3 ? 1.8
-      : 1.5;
-
-  return clampScore(((debtScore + currentScore + yearsScore) * 15) / 45, 15);
+  const evaluation = evaluateScores({
+    agencyId: 'pps',
+    amount: 5000000000,
+    industryAvg,
+    inputs: {
+      debtRatio,
+      currentRatio,
+      bizYears: businessYears,
+      creditGrade: '',
+    },
+  });
+  return clampScore(evaluation?.management?.composite?.score, 15);
 }
 
 export function extractCreditGrade(candidate) {
