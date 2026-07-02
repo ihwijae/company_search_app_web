@@ -107,7 +107,7 @@ export const AGREEMENT_TEMPLATE_CONFIGS_WEB = {
   'pps-50to100': {
     label: '조달청 50억~100억',
     templateUrl: buildTemplateUrl('조달청50억~100억.xlsx'),
-    sheetName: '양식',
+    sheetName: '템플릿',
     startRow: 5,
     maxRows: 68,
     slotColumns: {
