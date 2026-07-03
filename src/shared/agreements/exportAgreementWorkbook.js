@@ -93,15 +93,35 @@ const buildCredibilityFormula = (members, shareColumns, rowIndex, scaleValue = 1
   let hasResult = false;
   members.forEach((member) => {
     if (!member || typeof member !== 'object') return;
-    const cred = Number(member.credibilityBonus);
-    if (!Number.isFinite(cred) || cred === 0) return;
     const slotIndex = member.slotIndex;
     const shareColumn = shareColumns[slotIndex];
     if (!shareColumn) return;
-    parts.push(`${cred}*${shareColumn}${rowIndex}`);
     const sharePercent = Number(member.sharePercent);
-    if (Number.isFinite(sharePercent)) {
-      const ratio = sharePercent >= 1 ? sharePercent / 100 : sharePercent;
+    const ratio = Number.isFinite(sharePercent)
+      ? (sharePercent >= 1 ? sharePercent / 100 : sharePercent)
+      : null;
+    const credibilityInput = member.credibilityInput;
+    if (credibilityInput && typeof credibilityInput === 'object') {
+      const generalRaw = toExcelNumber(credibilityInput.general);
+      const constructionRaw = toExcelNumber(credibilityInput.construction);
+      const generalExpr = generalRaw != null ? `MIN(${generalRaw}/3,1)` : '';
+      const constructionExpr = constructionRaw != null ? `MIN(${constructionRaw},1)` : '';
+      const scoreTerms = [generalExpr, constructionExpr].filter(Boolean);
+      if (scoreTerms.length === 0) return;
+      const memberExpr = scoreTerms.length > 1 ? `(${scoreTerms.join('+')})` : scoreTerms[0];
+      parts.push(`${memberExpr}*${shareColumn}${rowIndex}`);
+      if (ratio != null) {
+        const generalScore = generalRaw != null ? Math.min(Math.max(generalRaw / 3, 0), 1) : 0;
+        const constructionScore = constructionRaw != null ? Math.min(Math.max(constructionRaw, 0), 1) : 0;
+        result += (generalScore + constructionScore) * ratio;
+        hasResult = true;
+      }
+      return;
+    }
+    const cred = Number(member.credibilityBonus);
+    if (!Number.isFinite(cred) || cred === 0) return;
+    parts.push(`${cred}*${shareColumn}${rowIndex}`);
+    if (ratio != null) {
       result += cred * ratio;
       hasResult = true;
     }

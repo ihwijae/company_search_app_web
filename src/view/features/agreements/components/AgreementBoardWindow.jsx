@@ -4309,6 +4309,7 @@ export default function AgreementBoardWindow({
         ? ratioBaseValue
         : (bidAmountValue != null ? bidAmountValue : null);
       const includePossibleShare = isPpsUnder50
+        || isPps50To100
         || (ownerKeyUpper === 'LH' && (isLhUnder50 || isLh50To100 || isLh100To300))
         || (ownerKeyUpper === 'MOIS' && (rangeId === MOIS_30_TO_50_KEY || rangeId === MOIS_50_TO_100_KEY));
       const dutyRateNumber = parseNumeric(regionDutyRate);
@@ -4448,6 +4449,7 @@ export default function AgreementBoardWindow({
     summary,
     safeGroupSize,
     isLHOwner,
+    isPps50To100,
     rangeImplemented,
     technicianEnabled,
     selectedRangeOption?.key,

@@ -23,6 +23,17 @@ function roundTo(value, digits = 3) {
   return Math.round(numeric * factor) / factor;
 }
 
+function normalizePps50To100CredibilityInput(value) {
+  if (!value || typeof value !== 'object') return null;
+  const general = value.general ?? '';
+  const construction = value.construction ?? '';
+  if (general === '' && construction === '') return null;
+  return {
+    general: String(general),
+    construction: String(construction),
+  };
+}
+
 function buildExportDisplayName({
   companyName = '',
   managerName = '',
@@ -148,7 +159,13 @@ export function buildAgreementExportPayload({
         : null;
       const sipyung = getCandidateSipyungAmount(candidate);
       const credibilitySource = groupCredibility[groupIndex]?.[slotIndex];
-      const credibilityBonus = parseNumeric(credibilitySource);
+      const credibilityInput = normalizePps50To100CredibilityInput(credibilitySource);
+      const credibilityBonus = credibilityInput
+        ? (
+          Math.min(Math.max((parseNumeric(credibilityInput.general) ?? 0) / 3, 0), 1)
+          + Math.min(Math.max(parseNumeric(credibilityInput.construction) ?? 0, 0), 1)
+        )
+        : parseNumeric(credibilitySource);
       const isRegionMember = entry.type === 'region' || isDutyRegionCompany(candidate);
       const companyName = sanitizeCompanyName(getCompanyName(candidate));
       const managerName = getCandidateManagerName(candidate);
@@ -193,6 +210,7 @@ export function buildAgreementExportPayload({
         performanceAmount: performanceAmount != null ? Number(performanceAmount) : null,
         technicianScore: technicianValue != null ? Number(technicianValue) : null,
         sipyung,
+        credibilityInput,
         credibilityBonus: credibilityBonus != null ? Number(credibilityBonus) : null,
         qualityScore: qualityScore != null ? Number(qualityScore) : null,
       };
