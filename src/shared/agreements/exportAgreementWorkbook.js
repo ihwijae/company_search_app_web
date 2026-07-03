@@ -104,15 +104,15 @@ const buildCredibilityFormula = (members, shareColumns, rowIndex, scaleValue = 1
     if (credibilityInput && typeof credibilityInput === 'object') {
       const generalRaw = toExcelNumber(credibilityInput.general);
       const constructionRaw = toExcelNumber(credibilityInput.construction);
-      const generalExpr = generalRaw != null ? `MIN(${generalRaw}/3,1)` : '';
-      const constructionExpr = constructionRaw != null ? `MIN(${constructionRaw},1)` : '';
+      const generalExpr = generalRaw != null ? `${generalRaw}*${shareColumn}${rowIndex}/3` : '';
+      const constructionExpr = constructionRaw != null ? `${constructionRaw}*${shareColumn}${rowIndex}` : '';
       const scoreTerms = [generalExpr, constructionExpr].filter(Boolean);
       if (scoreTerms.length === 0) return;
       const memberExpr = scoreTerms.length > 1 ? `(${scoreTerms.join('+')})` : scoreTerms[0];
-      parts.push(`${memberExpr}*${shareColumn}${rowIndex}`);
+      parts.push(memberExpr);
       if (ratio != null) {
-        const generalScore = generalRaw != null ? Math.min(Math.max(generalRaw / 3, 0), 1) : 0;
-        const constructionScore = constructionRaw != null ? Math.min(Math.max(constructionRaw, 0), 1) : 0;
+        const generalScore = generalRaw != null ? (generalRaw / 3) : 0;
+        const constructionScore = constructionRaw != null ? constructionRaw : 0;
         result += (generalScore + constructionScore) * ratio;
         hasResult = true;
       }
