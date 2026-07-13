@@ -476,6 +476,7 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Prete
 .search-web-results .pagination-btn,
 .search-web-results .summary-status-badge,
 .search-web-results .badge-person,
+.search-web-results .badge-award-history,
 .search-web-results .file-type-badge-small {
   font-size: 12px;
 }

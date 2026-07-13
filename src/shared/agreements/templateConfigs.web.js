@@ -246,6 +246,7 @@ export const AGREEMENT_TEMPLATE_CONFIGS_WEB = {
       noticeTitle: 'O1',
       bidDeadline: 'P2',
       dutySummary: 'T2',
+      memo: 'C1',
     },
     summaryColumns: { credibility: 'AE' },
     regionFill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' }, bgColor: { indexed: 64 } },

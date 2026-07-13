@@ -241,6 +241,21 @@ const AWARD_HISTORY_FONT = {
   bold: true,
 };
 
+const buildCellNote = (text) => {
+  const value = String(text || '').trim();
+  if (!value) return undefined;
+  return {
+    texts: [{ text: value }],
+  };
+};
+
+const applyCellNote = (worksheet, cellRef, text) => {
+  if (!worksheet || !cellRef) return;
+  const note = buildCellNote(text);
+  if (!note) return;
+  worksheet.getCell(cellRef).note = note;
+};
+
 const getApprovalFill = (value) => {
   const approval = String(value || '').trim();
   if (approval === '알림' || approval === '추가' || approval === '정정') {
@@ -420,6 +435,10 @@ async function exportAgreementExcel({
   const deadlineText = header.bidDeadline || header.rawBidDeadline || '';
   const deadlineCell = headerCells.bidDeadline || (isLh100To300 ? null : 'P2');
   const dutyCell = headerCells.dutySummary || (isLh100To300 ? null : 'W2');
+  const memoText = header.memoText
+    ? String(header.memoText).trim()
+    : toPlainText(header.memoHtml || '');
+  const memoNoteCell = isLh100To300 ? memoCell : null;
   if (deadlineCell) {
     worksheet.getCell(deadlineCell).value = deadlineText ? String(deadlineText) : '';
   }
@@ -438,10 +457,7 @@ async function exportAgreementExcel({
       };
     }
   }
-  if (memoCell) {
-    const memoText = header.memoText
-      ? String(header.memoText).trim()
-      : toPlainText(header.memoHtml || '');
+  if (memoCell && !memoNoteCell) {
     worksheet.getCell(memoCell).value = memoText || '';
   }
 
@@ -864,6 +880,7 @@ async function exportAgreementExcel({
   }
 
   clearHoverArtifacts(worksheet);
+  applyCellNote(worksheet, memoNoteCell, memoText);
 
   if (appendWorkbookBuffer) {
     const targetWorkbook = new ExcelJS.Workbook();
@@ -914,6 +931,7 @@ async function exportAgreementExcel({
     try {
       copyWorksheet(worksheet, targetSheet);
       clearHoverArtifacts(targetSheet);
+      applyCellNote(targetSheet, memoNoteCell, memoText);
     } catch (error) {
       console.error('[exportAgreementWorkbook] append worksheet copy failed:', {
         isLh100To300,

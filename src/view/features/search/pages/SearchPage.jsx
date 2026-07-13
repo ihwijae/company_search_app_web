@@ -8,8 +8,14 @@ import Drawer from '../../../../components/Drawer';
 import { INDUSTRY_AVERAGES, DEBT_RATIO_WARN_FACTOR, CURRENT_RATIO_WARN_FACTOR } from '../../../../ratios.js';
 import { loadPersisted, savePersisted } from '../../../../shared/persistence.js';
 import searchClient from '../../../../shared/searchClient.js';
+import lhAwardHistoryClient from '../../../../shared/lhAwardHistoryClient.js';
 import CREDIT_GRADE_ORDER from '../../../../shared/creditGrades.json';
 import { isCreditScoreExpired } from '../../../../shared/agreements/calculations/managementScore.js';
+import {
+  DEFAULT_LH_AWARD_HISTORY_ENTRIES,
+  getLhAwardHistoryMatchInfo,
+  normalizeLhAwardHistoryEntries,
+} from '../../../../shared/agreements/lhAwardHistory.js';
 
 // --- Helper Functions & Components (변경 없음) ---
 const formatNumber = (value) => { if (!value && value !== 0) return ''; const num = String(value).replace(/,/g, ''); return isNaN(num) ? String(value) : Number(num).toLocaleString(); };
@@ -614,6 +620,9 @@ function App() {
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [selectedCompanyKey, setSelectedCompanyKey] = useState('');
   const [selectedCompany, setSelectedCompany] = useState(null);
+  const [awardHistoryEntries, setAwardHistoryEntries] = useState(() => (
+    normalizeLhAwardHistoryEntries(DEFAULT_LH_AWARD_HISTORY_ENTRIES)
+  ));
   const [smppStatus, setSmppStatus] = useState({ busy: false, bizNo: '' });
   const [smppResults, setSmppResults] = useState({});
   const [isLoading, setIsLoading] = useState(false);
@@ -630,6 +639,25 @@ function App() {
   const currentSmppResult = selectedBizNumber ? smppResults[selectedBizNumber] : null;
   const smppBusyForSelected = smppStatus.busy && smppStatus.bizNo === selectedBizNumber;
   const smppSupported = searchClient.supportsSmppLookup();
+
+  const getAwardHistoryInfo = React.useCallback((company) => (
+    getLhAwardHistoryMatchInfo(company, awardHistoryEntries)
+  ), [awardHistoryEntries]);
+
+  useEffect(() => {
+    let canceled = false;
+    lhAwardHistoryClient.load()
+      .then((data) => {
+        if (canceled) return;
+        setAwardHistoryEntries(normalizeLhAwardHistoryEntries(data?.entries || DEFAULT_LH_AWARD_HISTORY_ENTRIES));
+      })
+      .catch((err) => {
+        console.warn('[Search] LH award history load failed:', err);
+      });
+    return () => {
+      canceled = true;
+    };
+  }, []);
 
   const handleCloseUploadDrawer = React.useCallback(() => {
     setUploadOpen(false);
@@ -1579,6 +1607,7 @@ function App() {
                       const womenOwned = isWomenOwnedCompany(company);
                       const hasQualityEvaluation = hasQualityEvaluationData(company);
                       const managerBadgeText = company['담당자명'] || company['담당자'] || company.managerName || company.manager || '';
+                      const awardHistoryInfo = getAwardHistoryInfo(company);
                       return (
                         <li key={listKey} onClick={() => handleCompanySelect(company, globalIndex)} className={`company-list-item ${searchedFileType === 'all' ? (selectedIndex === globalIndex ? 'active' : '') : (isActive ? 'active' : '')}`}>
                           <div className="company-info-wrapper">
@@ -1587,7 +1616,7 @@ function App() {
                                 ? (company._file_type === 'eung' ? '전기' : company._file_type === 'tongsin' ? '통신' : company._file_type === 'sobang' ? '소방' : '')
                                 : fileTypeLabel}
                             </span>
-                            <span className="company-name">{company['검색된 회사']}</span>
+                            <span className={`company-name${awardHistoryInfo ? ' company-name-award-history' : ''}`}>{company['검색된 회사']}</span>
                             {womenOwned && (
                               <span className="badge-female badge-inline" title="여성기업">
                                 女
@@ -1596,6 +1625,14 @@ function App() {
                             {hasQualityEvaluation && (
                               <span className="badge-quality badge-inline" title="LH 품질평가">
                                 LH
+                              </span>
+                            )}
+                            {awardHistoryInfo && (
+                              <span
+                                className="badge-award-history badge-inline"
+                                title={`LH 낙찰이력 패널티 기간: ${awardHistoryInfo.rangeText}`}
+                              >
+                                {awardHistoryInfo.rangeText}
                               </span>
                             )}
                             {managerBadgeText && <span className="badge-person">{managerBadgeText}</span>}
@@ -1645,6 +1682,7 @@ function App() {
                       <tbody>
                         {DISPLAY_ORDER.map((key) => {
                           let value = selectedCompany[key] ?? 'N/A';
+                          const selectedAwardHistoryInfo = getAwardHistoryInfo(selectedCompany);
                           // Normalize: prefer 표준 키 '영업기간' 값 사용
                           if (key.includes('사업기간') || key.includes('영업기간')) {
                             value = (selectedCompany['영업기간'] ?? value);
@@ -1727,7 +1765,15 @@ function App() {
                                   <div className="value-with-status">
                                     <div className="value-main">
                                       <span className={`status-dot ${getStatusClass(status)}`} title={status}></span>
-                                      <span className={extraClass}>{displayValue}</span>
+                                      <span className={`${extraClass}${key === '검색된 회사' && selectedAwardHistoryInfo ? ' company-name-award-history' : ''}`.trim()}>{displayValue}</span>
+                                      {key === '검색된 회사' && selectedAwardHistoryInfo && (
+                                        <span
+                                          className="badge-award-history badge-inline"
+                                          title={`LH 낙찰이력 패널티 기간: ${selectedAwardHistoryInfo.rangeText}`}
+                                        >
+                                          {selectedAwardHistoryInfo.rangeText}
+                                        </span>
+                                      )}
                                       {ratioBadgeText && (
                                         <span className={ratioBadgeClass} title="업종 평균 대비 비율">
                                           {ratioBadgeText}

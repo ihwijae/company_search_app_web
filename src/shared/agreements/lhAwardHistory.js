@@ -227,3 +227,56 @@ export function hasRecentLhAwardHistory(companyOrName, noticeDate, entries = DEF
     return companyKey && normalizeLhAwardCompanyKey(entry.companyName) === companyKey;
   });
 }
+
+const addOneYear = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  return new Date(date.getFullYear() + 1, date.getMonth(), date.getDate());
+};
+
+const formatLhAwardShortDate = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+  const year = String(date.getFullYear()).slice(-2);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}.${month}.${day}`;
+};
+
+export function getLhAwardHistoryMatchInfo(companyOrName, entries = DEFAULT_LH_AWARD_HISTORY_ENTRIES) {
+  const candidate = companyOrName && typeof companyOrName === 'object' ? companyOrName : null;
+  const candidateName = candidate
+    ? (candidate['검색된 회사'] || candidate['업체명'] || candidate.name || candidate.companyName || '')
+    : companyOrName;
+  const candidateBizNo = normalizeLhAwardBizNo(
+    candidate ? (candidate['사업자번호'] || candidate.bizNo || candidate.businessNumber || '') : '',
+  );
+  const companyKey = normalizeLhAwardCompanyKey(candidateName);
+  if (!candidateBizNo && !companyKey) return null;
+
+  const matches = normalizeLhAwardHistoryEntries(entries)
+    .map((entry) => {
+      const contractDate = parseLhAwardDate(entry.contractDate);
+      if (!contractDate) return null;
+      const entryBizNo = normalizeLhAwardBizNo(entry.bizNo);
+      const matched = entryBizNo && candidateBizNo
+        ? entryBizNo === candidateBizNo
+        : (companyKey && normalizeLhAwardCompanyKey(entry.companyName) === companyKey);
+      if (!matched) return null;
+      const expiryDate = addOneYear(contractDate);
+      return {
+        entry,
+        contractDate,
+        expiryDate,
+        contractDateText: formatLhAwardShortDate(contractDate),
+        expiryDateText: formatLhAwardShortDate(expiryDate),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.contractDate.getTime() - a.contractDate.getTime());
+
+  const latest = matches[0] || null;
+  if (!latest) return null;
+  return {
+    ...latest,
+    rangeText: `${latest.contractDateText} ~ ${latest.expiryDateText}`,
+  };
+}

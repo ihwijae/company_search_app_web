@@ -91,6 +91,7 @@ import { runAgreementCandidateScoreEvaluation } from '../../../../shared/agreeme
 import { evaluateSingleBidEligibility } from '../../../../shared/agreements/rules/singleBidEligibility.js';
 import {
   DEFAULT_LH_AWARD_HISTORY_ENTRIES,
+  getLhAwardHistoryText,
   hasRecentLhAwardHistory,
   normalizeLhAwardHistoryEntries,
 } from '../../../../shared/agreements/lhAwardHistory.js';
@@ -4340,6 +4341,7 @@ export default function AgreementBoardWindow({
         safeGroupSize,
         summary,
         memoHtml,
+        memoText: isLh100To300 ? getLhAwardHistoryText(awardHistoryEntries) : '',
         netCostPenaltyNotice,
         groupAssignments,
         groupApprovals,
@@ -4455,6 +4457,8 @@ export default function AgreementBoardWindow({
     selectedRangeOption?.key,
     entryModeResolved,
     memoHtml,
+    isLh100To300,
+    awardHistoryEntries,
     netCostPenaltyNotice,
     candidateDrawerEntries,
     getSharePercent,
