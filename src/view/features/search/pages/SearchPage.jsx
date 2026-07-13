@@ -1633,7 +1633,10 @@ function App() {
                                 className="badge-award-history badge-inline"
                                 title={`낙찰이력 패널티 기간: ${awardHistoryInfo.badgeText || awardHistoryInfo.rangeText}`}
                               >
-                                {awardHistoryInfo.badgeText || awardHistoryInfo.rangeText}
+                                <span>{awardHistoryInfo.rangeText}</span>
+                                {awardHistoryInfo.ownerLabel && (
+                                  <span className="badge-award-history-owner">{awardHistoryInfo.ownerLabel}</span>
+                                )}
                               </span>
                             )}
                             {managerBadgeText && <span className="badge-person">{managerBadgeText}</span>}
@@ -1773,7 +1776,10 @@ function App() {
                                           className="badge-award-history badge-inline"
                                           title={`낙찰이력 패널티 기간: ${selectedAwardHistoryInfo.badgeText || selectedAwardHistoryInfo.rangeText}`}
                                         >
-                                          {selectedAwardHistoryInfo.badgeText || selectedAwardHistoryInfo.rangeText}
+                                          <span>{selectedAwardHistoryInfo.rangeText}</span>
+                                          {selectedAwardHistoryInfo.ownerLabel && (
+                                            <span className="badge-award-history-owner">{selectedAwardHistoryInfo.ownerLabel}</span>
+                                          )}
                                         </span>
                                       )}
                                       {ratioBadgeText && (
