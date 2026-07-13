@@ -310,16 +310,27 @@ export function getLhAwardHistoryMatchInfo(companyOrName, entries = DEFAULT_LH_A
       };
     })
     .filter(Boolean)
-    .sort((a, b) => b.contractDate.getTime() - a.contractDate.getTime());
+    .sort((a, b) => b.expiryDate.getTime() - a.expiryDate.getTime());
 
-  const latest = matches[0] || null;
-  if (!latest) return null;
+  if (matches.length === 0) return null;
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const withDisplay = matches.map((match) => ({
+    ...match,
+    expired: match.expiryDate ? match.expiryDate.getTime() < today.getTime() : false,
+    rangeText: `${match.contractDateText} ~ ${match.expiryDateText}`,
+    badgeText: `${match.contractDateText} ~ ${match.expiryDateText} ${match.ownerLabel}`,
+  }));
+  const latestByOwner = [];
+  const seenOwners = new Set();
+  withDisplay.forEach((match) => {
+    if (seenOwners.has(match.ownerId)) return;
+    seenOwners.add(match.ownerId);
+    latestByOwner.push(match);
+  });
+  const latest = withDisplay[0] || null;
   return {
     ...latest,
-    expired: latest.expiryDate ? latest.expiryDate.getTime() < today.getTime() : false,
-    rangeText: `${latest.contractDateText} ~ ${latest.expiryDateText}`,
-    badgeText: `${latest.contractDateText} ~ ${latest.expiryDateText} ${latest.ownerLabel}`,
+    ownerMatches: latestByOwner,
   };
 }

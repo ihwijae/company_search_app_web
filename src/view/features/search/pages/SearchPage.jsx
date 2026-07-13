@@ -1608,7 +1608,10 @@ function App() {
                       const hasQualityEvaluation = hasQualityEvaluationData(company);
                       const managerBadgeText = company['담당자명'] || company['담당자'] || company.managerName || company.manager || '';
                       const awardHistoryInfo = getAwardHistoryInfo(company);
-                      const activeAwardHistory = awardHistoryInfo && !awardHistoryInfo.expired;
+                      const awardHistoryMatches = Array.isArray(awardHistoryInfo?.ownerMatches)
+                        ? awardHistoryInfo.ownerMatches
+                        : (awardHistoryInfo ? [awardHistoryInfo] : []);
+                      const activeAwardHistory = awardHistoryMatches.some((match) => match && !match.expired);
                       return (
                         <li key={listKey} onClick={() => handleCompanySelect(company, globalIndex)} className={`company-list-item ${searchedFileType === 'all' ? (selectedIndex === globalIndex ? 'active' : '') : (isActive ? 'active' : '')}`}>
                           <div className="company-info-wrapper">
@@ -1628,17 +1631,18 @@ function App() {
                                 LH
                               </span>
                             )}
-                            {awardHistoryInfo && (
+                            {awardHistoryMatches.map((match) => (
                               <span
+                                key={`${match.ownerId}-${match.contractDateText}-${match.expiryDateText}`}
                                 className="badge-award-history badge-inline"
-                                title={`낙찰이력 패널티 기간: ${awardHistoryInfo.badgeText || awardHistoryInfo.rangeText}`}
+                                title={`낙찰이력 패널티 기간: ${match.badgeText || match.rangeText}`}
                               >
-                                <span>{awardHistoryInfo.rangeText}</span>
-                                {awardHistoryInfo.ownerLabel && (
-                                  <span className="badge-award-history-owner">{awardHistoryInfo.ownerLabel}</span>
+                                <span>{match.rangeText}</span>
+                                {match.ownerLabel && (
+                                  <span className="badge-award-history-owner">{match.ownerLabel}</span>
                                 )}
                               </span>
-                            )}
+                            ))}
                             {managerBadgeText && <span className="badge-person">{managerBadgeText}</span>}
                           </div>
                           <span className={`summary-status-badge ${getStatusClass(summaryStatus)}`}>{summaryStatus}</span>
@@ -1687,7 +1691,10 @@ function App() {
                         {DISPLAY_ORDER.map((key) => {
                           let value = selectedCompany[key] ?? 'N/A';
                           const selectedAwardHistoryInfo = getAwardHistoryInfo(selectedCompany);
-                          const selectedActiveAwardHistory = selectedAwardHistoryInfo && !selectedAwardHistoryInfo.expired;
+                          const selectedAwardHistoryMatches = Array.isArray(selectedAwardHistoryInfo?.ownerMatches)
+                            ? selectedAwardHistoryInfo.ownerMatches
+                            : (selectedAwardHistoryInfo ? [selectedAwardHistoryInfo] : []);
+                          const selectedActiveAwardHistory = selectedAwardHistoryMatches.some((match) => match && !match.expired);
                           // Normalize: prefer 표준 키 '영업기간' 값 사용
                           if (key.includes('사업기간') || key.includes('영업기간')) {
                             value = (selectedCompany['영업기간'] ?? value);
@@ -1771,17 +1778,18 @@ function App() {
                                     <div className="value-main">
                                       <span className={`status-dot ${getStatusClass(status)}`} title={status}></span>
                                       <span className={`${extraClass}${key === '검색된 회사' && selectedActiveAwardHistory ? ' company-name-award-history' : ''}`.trim()}>{displayValue}</span>
-                                      {key === '검색된 회사' && selectedAwardHistoryInfo && (
+                                      {key === '검색된 회사' && selectedAwardHistoryMatches.map((match) => (
                                         <span
+                                          key={`${match.ownerId}-${match.contractDateText}-${match.expiryDateText}`}
                                           className="badge-award-history badge-inline"
-                                          title={`낙찰이력 패널티 기간: ${selectedAwardHistoryInfo.badgeText || selectedAwardHistoryInfo.rangeText}`}
+                                          title={`낙찰이력 패널티 기간: ${match.badgeText || match.rangeText}`}
                                         >
-                                          <span>{selectedAwardHistoryInfo.rangeText}</span>
-                                          {selectedAwardHistoryInfo.ownerLabel && (
-                                            <span className="badge-award-history-owner">{selectedAwardHistoryInfo.ownerLabel}</span>
+                                          <span>{match.rangeText}</span>
+                                          {match.ownerLabel && (
+                                            <span className="badge-award-history-owner">{match.ownerLabel}</span>
                                           )}
                                         </span>
-                                      )}
+                                      ))}
                                       {ratioBadgeText && (
                                         <span className={ratioBadgeClass} title="업종 평균 대비 비율">
                                           {ratioBadgeText}
