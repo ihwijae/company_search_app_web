@@ -142,6 +142,36 @@ export const DEFAULT_LH_AWARD_HISTORY_ENTRIES = parseRawHistoryEntries(LH_AWARD_
 
 const LH_AWARD_HISTORY_TEXT_HEADER = '< LH 낙찰이력 보유 현황 > - ①';
 
+export const LH_AWARD_OWNER_OPTIONS = [
+  { id: 'LH', label: 'LH' },
+  { id: 'EX', label: '한국도로공사' },
+  { id: 'KRAIL', label: '국가철도공단' },
+  { id: 'MOIS', label: '행안부' },
+  { id: 'PPS', label: '조달청' },
+];
+
+const LH_AWARD_OWNER_LABEL_BY_ID = LH_AWARD_OWNER_OPTIONS.reduce((acc, option) => {
+  acc[option.id] = option.label;
+  return acc;
+}, {});
+
+const LH_AWARD_OWNER_ID_BY_LABEL = LH_AWARD_OWNER_OPTIONS.reduce((acc, option) => {
+  acc[option.label] = option.id;
+  return acc;
+}, {});
+
+export const resolveLhAwardOwnerId = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return 'LH';
+  const upper = raw.toUpperCase();
+  if (LH_AWARD_OWNER_LABEL_BY_ID[upper]) return upper;
+  return LH_AWARD_OWNER_ID_BY_LABEL[raw] || 'LH';
+};
+
+export const getLhAwardOwnerLabel = (value) => (
+  LH_AWARD_OWNER_LABEL_BY_ID[resolveLhAwardOwnerId(value)] || 'LH'
+);
+
 const formatLhAwardDateDisplay = (value) => {
   const date = parseLhAwardDate(value);
   if (!date) return String(value || '').trim();
@@ -151,13 +181,17 @@ const formatLhAwardDateDisplay = (value) => {
   return `${year}.${month}.${day}`;
 };
 
-export function getLhAwardHistoryText(entries = DEFAULT_LH_AWARD_HISTORY_ENTRIES) {
+export function getLhAwardHistoryText(entries = DEFAULT_LH_AWARD_HISTORY_ENTRIES, options = {}) {
+  const ownerFilter = options?.ownerId ? resolveLhAwardOwnerId(options.ownerId) : '';
   const normalizedEntries = normalizeLhAwardHistoryEntries(entries);
-  if (!normalizedEntries.length) return LH_AWARD_HISTORY_TEXT_HEADER;
+  const filteredEntries = ownerFilter
+    ? normalizedEntries.filter((entry) => resolveLhAwardOwnerId(entry.ownerId) === ownerFilter)
+    : normalizedEntries;
+  if (!filteredEntries.length) return LH_AWARD_HISTORY_TEXT_HEADER;
 
   const groupedEntries = [];
   const groupIndexByCompany = new Map();
-  normalizedEntries.forEach((entry) => {
+  filteredEntries.forEach((entry) => {
     const companyKey = `${entry.companyName}__${entry.bizNo || ''}`;
     const groupIndex = groupIndexByCompany.get(companyKey);
     if (groupIndex !== undefined) {
@@ -173,9 +207,10 @@ export function getLhAwardHistoryText(entries = DEFAULT_LH_AWARD_HISTORY_ENTRIES
 
   const blocks = groupedEntries.map((group) => {
     const lines = group.entries.map((entry) => {
+      const owner = getLhAwardOwnerLabel(entry.ownerId);
       const amount = entry.contractAmount != null ? ` (${Number(entry.contractAmount).toLocaleString('ko-KR')}원)` : '';
       const project = entry.projectName ? ` - ${entry.projectName}` : '';
-      return `- 계약일 : ${formatLhAwardDateDisplay(entry.contractDate)}${amount}${project}`;
+      return `- [${owner}] 계약일 : ${formatLhAwardDateDisplay(entry.contractDate)}${amount}${project}`;
     });
     return `${group.companyName}\n${lines.join('\n')}`;
   });
@@ -196,6 +231,7 @@ export function normalizeLhAwardHistoryEntries(entries = []) {
       id: String(entry?.id || `award-${Date.now()}-${index}`),
       companyName,
       bizNo,
+      ownerId: resolveLhAwardOwnerId(entry?.ownerId || entry?.owner || entry?.agency || entry?.agencyId),
       fileType: String(entry?.fileType || 'eung').trim() || 'eung',
       contractDate,
       contractAmount: Number.isFinite(contractAmount) ? contractAmount : null,
@@ -220,6 +256,7 @@ export function hasRecentLhAwardHistory(companyOrName, noticeDate, entries = DEF
   if (!candidateBizNo && !companyKey) return false;
 
   return normalizeLhAwardHistoryEntries(entries).some((entry) => {
+    if (resolveLhAwardOwnerId(entry.ownerId) !== 'LH') return false;
     const contractDate = parseLhAwardDate(entry.contractDate);
     if (!withinPreviousYear(contractDate, notice)) return false;
     const entryBizNo = normalizeLhAwardBizNo(entry.bizNo);
@@ -264,6 +301,8 @@ export function getLhAwardHistoryMatchInfo(companyOrName, entries = DEFAULT_LH_A
       const expiryDate = addOneYear(contractDate);
       return {
         entry,
+        ownerId: resolveLhAwardOwnerId(entry.ownerId),
+        ownerLabel: getLhAwardOwnerLabel(entry.ownerId),
         contractDate,
         expiryDate,
         contractDateText: formatLhAwardShortDate(contractDate),
@@ -275,8 +314,12 @@ export function getLhAwardHistoryMatchInfo(companyOrName, entries = DEFAULT_LH_A
 
   const latest = matches[0] || null;
   if (!latest) return null;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return {
     ...latest,
+    expired: latest.expiryDate ? latest.expiryDate.getTime() < today.getTime() : false,
     rangeText: `${latest.contractDateText} ~ ${latest.expiryDateText}`,
+    badgeText: `${latest.contractDateText} ~ ${latest.expiryDateText} ${latest.ownerLabel}`,
   };
 }

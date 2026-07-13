@@ -3,15 +3,19 @@ import CompanySearchModal from '../../../../components/CompanySearchModal.jsx';
 import { useFeedback } from '../../../../components/FeedbackProvider.jsx';
 import lhAwardHistoryClient from '../../../../shared/lhAwardHistoryClient.js';
 import {
+  LH_AWARD_OWNER_OPTIONS,
   formatLhAwardDateInput,
+  getLhAwardOwnerLabel,
   getLhAwardHistoryText,
   normalizeLhAwardHistoryEntries,
+  resolveLhAwardOwnerId,
 } from '../../../../shared/agreements/lhAwardHistory.js';
 
 const EMPTY_FORM = {
   id: '',
   companyName: '',
   bizNo: '',
+  ownerId: 'LH',
   fileType: 'eung',
   contractDate: '',
   contractAmount: '',
@@ -129,6 +133,7 @@ export default function LhAwardHistoryWindow({
       id: form.id || `award-${Date.now()}`,
       companyName,
       bizNo: String(form.bizNo || '').trim(),
+      ownerId: resolveLhAwardOwnerId(form.ownerId),
       fileType: form.fileType || fileType || 'eung',
       contractDate,
       contractAmount: parseAmountInput(form.contractAmount),
@@ -149,6 +154,7 @@ export default function LhAwardHistoryWindow({
       id: entry.id,
       companyName: entry.companyName,
       bizNo: entry.bizNo || '',
+      ownerId: resolveLhAwardOwnerId(entry.ownerId),
       fileType: entry.fileType || fileType || 'eung',
       contractDate: formatLhAwardDateInput(entry.contractDate),
       contractAmount: entry.contractAmount != null ? formatAmount(entry.contractAmount) : '',
@@ -335,6 +341,7 @@ export default function LhAwardHistoryWindow({
             <tr>
               <th style={{ width: '20%' }}>업체명</th>
               <th style={{ width: '14%' }}>사업자번호</th>
+              <th style={{ width: '12%' }}>발주처</th>
               <th style={{ width: '12%' }}>계약일</th>
               <th style={{ width: '16%' }}>계약금액</th>
               <th>공사명</th>
@@ -346,6 +353,7 @@ export default function LhAwardHistoryWindow({
               <tr key={entry.id}>
                 <td>{entry.companyName}</td>
                 <td>{entry.bizNo || <span style={{ color: '#b45309', fontWeight: 700 }}>미연결</span>}</td>
+                <td>{getLhAwardOwnerLabel(entry.ownerId)}</td>
                 <td>{entry.contractDate}</td>
                 <td>{entry.contractAmount != null ? `${formatAmount(entry.contractAmount)}원` : '-'}</td>
                 <td>{entry.projectName || '-'}</td>
@@ -362,7 +370,7 @@ export default function LhAwardHistoryWindow({
             ))}
             {normalizedEntries.length === 0 && (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>
+                <td colSpan={7} style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>
                   {loading ? '불러오는 중...' : '등록된 낙찰이력이 없습니다.'}
                 </td>
               </tr>
@@ -433,7 +441,18 @@ export default function LhAwardHistoryWindow({
               {form.bizNo && (
                 <div style={{ fontSize: 12, color: '#64748b' }}>연결된 사업자번호: {form.bizNo}</div>
               )}
-              <div style={{ display: 'grid', gridTemplateColumns: '160px 180px', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '180px 160px 180px', gap: 10 }}>
+                <label style={{ display: 'grid', gap: 6, fontSize: 13, color: '#475569' }}>
+                  발주처
+                  <select
+                    value={form.ownerId}
+                    onChange={(event) => setForm((prev) => ({ ...prev, ownerId: resolveLhAwardOwnerId(event.target.value) }))}
+                  >
+                    {LH_AWARD_OWNER_OPTIONS.map((option) => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
                 <label style={{ display: 'grid', gap: 6, fontSize: 13, color: '#475569' }}>
                   계약일
                   <input

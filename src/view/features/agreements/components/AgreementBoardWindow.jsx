@@ -4341,7 +4341,7 @@ export default function AgreementBoardWindow({
         safeGroupSize,
         summary,
         memoHtml,
-        memoText: isLh100To300 ? getLhAwardHistoryText(awardHistoryEntries) : '',
+        memoText: isLh100To300 ? getLhAwardHistoryText(awardHistoryEntries, { ownerId }) : '',
         netCostPenaltyNotice,
         groupAssignments,
         groupApprovals,

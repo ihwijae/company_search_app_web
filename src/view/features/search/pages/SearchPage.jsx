@@ -1608,6 +1608,7 @@ function App() {
                       const hasQualityEvaluation = hasQualityEvaluationData(company);
                       const managerBadgeText = company['담당자명'] || company['담당자'] || company.managerName || company.manager || '';
                       const awardHistoryInfo = getAwardHistoryInfo(company);
+                      const activeAwardHistory = awardHistoryInfo && !awardHistoryInfo.expired;
                       return (
                         <li key={listKey} onClick={() => handleCompanySelect(company, globalIndex)} className={`company-list-item ${searchedFileType === 'all' ? (selectedIndex === globalIndex ? 'active' : '') : (isActive ? 'active' : '')}`}>
                           <div className="company-info-wrapper">
@@ -1616,7 +1617,7 @@ function App() {
                                 ? (company._file_type === 'eung' ? '전기' : company._file_type === 'tongsin' ? '통신' : company._file_type === 'sobang' ? '소방' : '')
                                 : fileTypeLabel}
                             </span>
-                            <span className={`company-name${awardHistoryInfo ? ' company-name-award-history' : ''}`}>{company['검색된 회사']}</span>
+                            <span className={`company-name${activeAwardHistory ? ' company-name-award-history' : ''}`}>{company['검색된 회사']}</span>
                             {womenOwned && (
                               <span className="badge-female badge-inline" title="여성기업">
                                 女
@@ -1630,9 +1631,9 @@ function App() {
                             {awardHistoryInfo && (
                               <span
                                 className="badge-award-history badge-inline"
-                                title={`LH 낙찰이력 패널티 기간: ${awardHistoryInfo.rangeText}`}
+                                title={`낙찰이력 패널티 기간: ${awardHistoryInfo.badgeText || awardHistoryInfo.rangeText}`}
                               >
-                                {awardHistoryInfo.rangeText}
+                                {awardHistoryInfo.badgeText || awardHistoryInfo.rangeText}
                               </span>
                             )}
                             {managerBadgeText && <span className="badge-person">{managerBadgeText}</span>}
@@ -1683,6 +1684,7 @@ function App() {
                         {DISPLAY_ORDER.map((key) => {
                           let value = selectedCompany[key] ?? 'N/A';
                           const selectedAwardHistoryInfo = getAwardHistoryInfo(selectedCompany);
+                          const selectedActiveAwardHistory = selectedAwardHistoryInfo && !selectedAwardHistoryInfo.expired;
                           // Normalize: prefer 표준 키 '영업기간' 값 사용
                           if (key.includes('사업기간') || key.includes('영업기간')) {
                             value = (selectedCompany['영업기간'] ?? value);
@@ -1765,13 +1767,13 @@ function App() {
                                   <div className="value-with-status">
                                     <div className="value-main">
                                       <span className={`status-dot ${getStatusClass(status)}`} title={status}></span>
-                                      <span className={`${extraClass}${key === '검색된 회사' && selectedAwardHistoryInfo ? ' company-name-award-history' : ''}`.trim()}>{displayValue}</span>
+                                      <span className={`${extraClass}${key === '검색된 회사' && selectedActiveAwardHistory ? ' company-name-award-history' : ''}`.trim()}>{displayValue}</span>
                                       {key === '검색된 회사' && selectedAwardHistoryInfo && (
                                         <span
                                           className="badge-award-history badge-inline"
-                                          title={`LH 낙찰이력 패널티 기간: ${selectedAwardHistoryInfo.rangeText}`}
+                                          title={`낙찰이력 패널티 기간: ${selectedAwardHistoryInfo.badgeText || selectedAwardHistoryInfo.rangeText}`}
                                         >
-                                          {selectedAwardHistoryInfo.rangeText}
+                                          {selectedAwardHistoryInfo.badgeText || selectedAwardHistoryInfo.rangeText}
                                         </span>
                                       )}
                                       {ratioBadgeText && (
