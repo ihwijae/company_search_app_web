@@ -195,6 +195,7 @@ export async function computeGroupSummaries({
   derivedPerformanceMax,
   credibilityEnabled = false,
   ownerCredibilityMax,
+  credibilityMaxCountsTowardTotalMax = true,
   isMois30To50 = false,
   isMois50To100 = false,
   isEx50To100 = false,
@@ -383,7 +384,9 @@ export async function computeGroupSummaries({
         ? lh50To100MaterialScore
         : (isMois50To100 ? mois50To100MaterialScore : 0))
       + (technicianRequired && technicianAbilityMax ? technicianAbilityMax : 0);
-    const totalMaxWithCred = credibilityEnabled ? totalMaxBase + (credibilityMax || 0) : totalMaxBase;
+    const totalMaxWithCred = credibilityEnabled
+      ? totalMaxBase + (credibilityMaxCountsTowardTotalMax ? (credibilityMax || 0) : 0)
+      : totalMaxBase;
 
     return {
       ...metric,

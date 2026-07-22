@@ -4750,6 +4750,7 @@ export default function AgreementBoardWindow({
         derivedPerformanceMax,
         credibilityEnabled,
         ownerCredibilityMax,
+        credibilityMaxCountsTowardTotalMax: !isEx50To100,
         isMois30To50,
         isMois50To100,
         isEx50To100,
