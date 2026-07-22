@@ -19,6 +19,7 @@ export function buildGroupSummaryMetrics({
   entryLimitValue = null,
   isKrailOwner = false,
   krailCredibilityScale = 1,
+  credibilityScale = 1,
 }) {
   const resolveRegionalContributionScore = (sharePercent) => {
     if (!Number.isFinite(Number(sharePercent))) return null;
@@ -96,6 +97,10 @@ export function buildGroupSummaryMetrics({
     }
     if (aggregatedCredibility != null && isKrailOwner) {
       aggregatedCredibility *= krailCredibilityScale;
+    }
+    if (aggregatedCredibility != null) {
+      const scale = Number(credibilityScale);
+      if (Number.isFinite(scale)) aggregatedCredibility *= scale;
     }
 
     const aggregatedManagement = (!managementMissing && shareValid)

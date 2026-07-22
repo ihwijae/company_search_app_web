@@ -1498,6 +1498,7 @@ export default function AgreementBoardWindow({
     if (isKrail50To100) return 0.9 / 3;
     return 1;
   }, [isKrailUnder50, isKrail50To100]);
+  const credibilityScale = isEx50To100 ? 0.3 : 1;
   const resolveKrailTechnicianAbilityScore = React.useCallback(
     (value) => {
       if (!technicianEnabled) return null;
@@ -4699,6 +4700,7 @@ export default function AgreementBoardWindow({
       entryLimitValue,
       isKrailOwner,
       krailCredibilityScale,
+      credibilityScale,
     });
 
     let canceled = false;
@@ -4781,7 +4783,7 @@ export default function AgreementBoardWindow({
     return () => {
       canceled = true;
     };
-  }, [open, participantSignature, groupAssignments, groupShares, groupCredibility, groupTechnicianScores, participantMap, ownerId, ownerKeyUpper, selectedRangeOption?.key, selectedRangeOption?.label, estimatedAmount, baseAmount, entryAmount, entryModeResolved, getSharePercent, getEffectiveCredibilityValue, getTechnicianValue, credibilityEnabled, ownerCredibilityMax, candidateMetricsVersion, derivedMaxScores, effectiveGroupManagementBonus, effectiveNetCostBonusScore, managementScale, managementBonusMultiplier, managementMax, isMois30To50, isMois50To100, isMoisUnderOr30To50, isKrailUnder50, isKrail50To100, isPpsUnder50, isPps50To100, rangeImplemented, isLh50To100, isLh100To300, isDutyRegionCompany, roundForLhTotals, roundForLhPerformanceTotals, roundForMoisManagement, roundForKrailUnder50, roundUpForPpsUnder50, roundForExManagement, resolveKrailTechnicianAbilityScore, resolveSummaryDigits, technicianEditable, technicianEnabled, technicianAbilityMax, getCandidateManagementScoreForCurrentRange, getCandidatePerformanceAmountForCurrentRange]);
+  }, [open, participantSignature, groupAssignments, groupShares, groupCredibility, groupTechnicianScores, participantMap, ownerId, ownerKeyUpper, selectedRangeOption?.key, selectedRangeOption?.label, estimatedAmount, baseAmount, entryAmount, entryModeResolved, getSharePercent, getEffectiveCredibilityValue, getTechnicianValue, credibilityEnabled, ownerCredibilityMax, candidateMetricsVersion, derivedMaxScores, effectiveGroupManagementBonus, effectiveNetCostBonusScore, managementScale, managementBonusMultiplier, managementMax, isMois30To50, isMois50To100, isMoisUnderOr30To50, isKrailUnder50, isKrail50To100, isPpsUnder50, isPps50To100, rangeImplemented, isLh50To100, isLh100To300, isDutyRegionCompany, roundForLhTotals, roundForLhPerformanceTotals, roundForMoisManagement, roundForKrailUnder50, roundUpForPpsUnder50, roundForExManagement, resolveKrailTechnicianAbilityScore, resolveSummaryDigits, technicianEditable, technicianEnabled, technicianAbilityMax, credibilityScale, getCandidateManagementScoreForCurrentRange, getCandidatePerformanceAmountForCurrentRange]);
 
   React.useEffect(() => {
     attemptPendingPlacement();
@@ -5644,6 +5646,7 @@ export default function AgreementBoardWindow({
       formatScore,
       groupCredibility,
       krailCredibilityScale,
+      credibilityScale,
       isPps50To100,
       groupTechnicianScores,
       conflictNotesByGroup,

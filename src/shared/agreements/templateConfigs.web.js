@@ -411,6 +411,8 @@ export const AGREEMENT_TEMPLATE_CONFIGS_WEB = {
     },
     approvalColumn: 'B',
     summaryColumns: { credibility: 'AD', netCostBonus: 'AE' },
+    credibilityScale: 0.3,
+    credibilityScaleExpr: '3/10',
     regionFill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' }, bgColor: { indexed: 64 } },
   },
 };
