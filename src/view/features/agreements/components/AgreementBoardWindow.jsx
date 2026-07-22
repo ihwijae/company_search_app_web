@@ -1835,9 +1835,9 @@ export default function AgreementBoardWindow({
     if (ownerKeyUpper === 'LH') return { enabled: true, max: isLh100To300 ? LH_SIMPLE_REGIONAL_CONTRIBUTION_MAX : null };
     if (isPpsCriteriaOwner) return { enabled: true, max: null };
     if (ownerKeyUpper === 'KRAIL') return { enabled: true, max: null };
-    if (ownerKeyUpper === 'EX') return { enabled: true, max: null };
+    if (ownerKeyUpper === 'EX') return { enabled: true, max: isEx50To100 ? 0.9 : null };
     return { enabled: false, max: null };
-  }, [isLh100To300, ownerKeyUpper, isPpsCriteriaOwner]);
+  }, [isEx50To100, isLh100To300, ownerKeyUpper, isPpsCriteriaOwner]);
   const credibilityEnabled = credibilityConfig.enabled;
   const ownerCredibilityMax = credibilityConfig.max;
   const showCredibilityBeforeStatus = credibilityEnabled && !placeCredibilityAfterQuality;
@@ -5647,6 +5647,7 @@ export default function AgreementBoardWindow({
       groupCredibility,
       krailCredibilityScale,
       credibilityScale,
+      credibilityMax: ownerCredibilityMax,
       isPps50To100,
       groupTechnicianScores,
       conflictNotesByGroup,

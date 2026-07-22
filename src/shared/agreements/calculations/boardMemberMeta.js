@@ -32,6 +32,7 @@ export function buildBoardMemberMeta({
   groupCredibility,
   krailCredibilityScale,
   credibilityScale = 1,
+  credibilityMax = null,
   isPps50To100 = false,
   groupTechnicianScores,
   conflictNotesByGroup,
@@ -137,8 +138,14 @@ export function buildBoardMemberMeta({
   const credibilityProductRaw = (credibilityNumeric != null && shareForCalc != null)
     ? credibilityNumeric * (shareForCalc / 100)
     : null;
-  const credibilityProduct = credibilityProductRaw != null
+  const credibilityProductScaled = credibilityProductRaw != null
     ? credibilityProductRaw * krailCredibilityScale * credibilityScale
+    : null;
+  const credibilityMaxValue = Number(credibilityMax);
+  const credibilityProduct = credibilityProductScaled != null
+    ? (Number.isFinite(credibilityMaxValue)
+      ? Math.min(credibilityProductScaled, credibilityMaxValue)
+      : credibilityProductScaled)
     : null;
   const technicianStored = groupTechnicianScores[groupIndex]?.[slotIndex];
   const technicianValue = technicianStored != null ? String(technicianStored) : '';

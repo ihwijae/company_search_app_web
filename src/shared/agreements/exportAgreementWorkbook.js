@@ -86,7 +86,7 @@ const resolveLhSimpleQualityPoints = (qualityScore) => {
   return 3.6;
 };
 
-const buildCredibilityFormula = (members, shareColumns, rowIndex, scaleValue = 1, scaleExpr = '') => {
+const buildCredibilityFormula = (members, shareColumns, rowIndex, scaleValue = 1, scaleExpr = '', maxValue = null) => {
   if (!Array.isArray(members) || !Array.isArray(shareColumns) || !rowIndex) return null;
   const parts = [];
   let result = 0;
@@ -130,10 +130,13 @@ const buildCredibilityFormula = (members, shareColumns, rowIndex, scaleValue = 1
   const scale = Number(scaleValue);
   const scaleText = scaleExpr || (Number.isFinite(scale) && scale !== 1 ? String(scale) : '');
   const joined = parts.join('+');
-  const formula = scaleText ? `(${joined})*${scaleText}` : joined;
+  const scaledFormula = scaleText ? `(${joined})*${scaleText}` : joined;
+  const max = Number(maxValue);
+  const formula = Number.isFinite(max) ? `MIN(${scaledFormula},${max})` : scaledFormula;
+  const scaledResult = hasResult && Number.isFinite(scale) ? result * scale : null;
   return {
     formula,
-    result: hasResult ? (Number.isFinite(scale) ? result * scale : null) : null,
+    result: scaledResult != null && Number.isFinite(max) ? Math.min(scaledResult, max) : scaledResult,
   };
 };
 
@@ -351,6 +354,7 @@ async function exportAgreementExcel({
   const managementBonusColumn = config.managementBonusColumn || null;
   const credibilityScaleValue = config.credibilityScale ?? 1;
   const credibilityScaleExpr = config.credibilityScaleExpr || '';
+  const credibilityMaxValue = config.credibilityMax ?? null;
 
   const availableRows = config.maxRows
     ? Math.floor((config.maxRows - config.startRow) / rowStep) + 1
@@ -662,7 +666,8 @@ async function exportAgreementExcel({
         slotColumns.share,
         rowIndex,
         credibilityScaleValue,
-        credibilityScaleExpr
+        credibilityScaleExpr,
+        credibilityMaxValue
       );
       if (credibilityFormula) {
         credCell.value = {
