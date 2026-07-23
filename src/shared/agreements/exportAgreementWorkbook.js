@@ -131,12 +131,15 @@ const buildCredibilityFormula = (members, shareColumns, rowIndex, scaleValue = 1
   const scaleText = scaleExpr || (Number.isFinite(scale) && scale !== 1 ? String(scale) : '');
   const joined = parts.join('+');
   const scaledFormula = scaleText ? `(${joined})*${scaleText}` : joined;
-  const max = Number(maxValue);
-  const formula = Number.isFinite(max) ? `MIN(${scaledFormula},${max})` : scaledFormula;
+  const max = maxValue === null || maxValue === undefined || maxValue === ''
+    ? null
+    : Number(maxValue);
+  const hasMax = Number.isFinite(max);
+  const formula = hasMax ? `MIN(${scaledFormula},${max})` : scaledFormula;
   const scaledResult = hasResult && Number.isFinite(scale) ? result * scale : null;
   return {
     formula,
-    result: scaledResult != null && Number.isFinite(max) ? Math.min(scaledResult, max) : scaledResult,
+    result: scaledResult != null && hasMax ? Math.min(scaledResult, max) : scaledResult,
   };
 };
 
