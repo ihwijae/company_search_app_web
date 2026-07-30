@@ -1,5 +1,15 @@
 import { calculatePossibleShareRatio, formatPossibleShareText } from './possibleShare.js';
 
+const formatWeightedScoreHint = (value, digits = 2) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '';
+  const threshold = 1 / (10 ** digits);
+  if (numeric > 0 && numeric < threshold / 2) {
+    return `< ${threshold.toFixed(digits)}점`;
+  }
+  return `${numeric.toFixed(digits)}점`;
+};
+
 export function buildBoardMemberMeta({
   group,
   groupIndex,
@@ -142,8 +152,11 @@ export function buildBoardMemberMeta({
     ? credibilityProductRaw * krailCredibilityScale * credibilityScale
     : null;
   const credibilityMaxValue = Number(credibilityMax);
+  const hasCredibilityMax = credibilityMax !== null
+    && credibilityMax !== undefined
+    && Number.isFinite(credibilityMaxValue);
   const credibilityProduct = credibilityProductScaled != null
-    ? (Number.isFinite(credibilityMaxValue)
+    ? (hasCredibilityMax
       ? Math.min(credibilityProductScaled, credibilityMaxValue)
       : credibilityProductScaled)
     : null;
@@ -183,7 +196,7 @@ export function buildBoardMemberMeta({
     qualityInput: qualityInputRaw,
     credibilityValue,
     credibilityParts,
-    credibilityProduct: credibilityProduct != null ? `${credibilityProduct.toFixed(2)}점` : '',
+    credibilityProduct: credibilityProduct != null ? formatWeightedScoreHint(credibilityProduct, 2) : '',
     technicianValue,
     technicianNumeric,
     dataStatusLabel,
