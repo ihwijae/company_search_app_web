@@ -425,6 +425,56 @@ const formatNoticeDate = (value) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 };
 
+const parseNoticeDateValue = (value) => {
+  if (!value && value !== 0) return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+  const text = String(value || '').trim();
+  if (!text) return null;
+  const match = text.match(/(\d{4})[^0-9]*(\d{1,2})[^0-9]*(\d{1,2})/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  if (
+    Number.isNaN(date.getTime())
+    || date.getFullYear() !== year
+    || date.getMonth() !== month - 1
+    || date.getDate() !== day
+  ) {
+    return null;
+  }
+  return date;
+};
+
+const resolveCurrentIndustryDataStartDate = (baseDate = new Date()) => {
+  const today = parseNoticeDateValue(baseDate) || new Date();
+  const currentYearStart = new Date(today.getFullYear(), 6, 31);
+  if (today.getTime() >= currentYearStart.getTime()) return currentYearStart;
+  return new Date(today.getFullYear() - 1, 6, 31);
+};
+
+const shouldBlockCandidateRefreshByNoticeDate = (noticeDateValue, baseDate = new Date()) => {
+  const parsedNoticeDate = parseNoticeDateValue(noticeDateValue);
+  if (!parsedNoticeDate) {
+    return {
+      blocked: true,
+      reason: 'missing-notice-date',
+      cutoffDate: resolveCurrentIndustryDataStartDate(baseDate),
+    };
+  }
+  const cutoffDate = resolveCurrentIndustryDataStartDate(baseDate);
+  return {
+    blocked: parsedNoticeDate.getTime() < cutoffDate.getTime(),
+    reason: 'before-current-industry-data',
+    noticeDate: parsedNoticeDate,
+    cutoffDate,
+  };
+};
+
 const parseBidDeadlineParts = (value) => {
   if (!value) {
     return { date: '', period: 'AM', hour: '', minute: '' };
@@ -2448,6 +2498,24 @@ export default function AgreementBoardWindow({
       notify({ type: 'info', message: '갱신할 업체가 없습니다.', portalTarget: portalContainer || null });
       return;
     }
+    const refreshDateGuard = shouldBlockCandidateRefreshByNoticeDate(noticeDate);
+    if (refreshDateGuard.blocked) {
+      const cutoffText = formatNoticeDate(refreshDateGuard.cutoffDate);
+      if (refreshDateGuard.reason === 'missing-notice-date') {
+        notify({
+          type: 'warning',
+          message: `업체정보갱신은 공고일 기준으로 판단합니다. 공고일을 입력한 뒤 다시 시도하세요. 현재 업체자료 기준일: ${cutoffText}`,
+          portalTarget: portalContainer || null,
+        });
+        return;
+      }
+      notify({
+        type: 'warning',
+        message: `공고일이 현재 업체자료 기준일(${cutoffText}) 이전입니다. 현재 자료로 덮어쓰면 안 되므로 업체정보갱신을 중단했습니다.`,
+        portalTarget: portalContainer || null,
+      });
+      return;
+    }
     const nameSet = new Set();
     candidates.forEach((candidate) => {
       const rawName = String(getCompanyName(candidate) || '').trim();
@@ -2527,7 +2595,7 @@ export default function AgreementBoardWindow({
       setCandidateRefreshing(false);
       hideLoading();
     }
-  }, [candidateRefreshing, candidates, notify, portalContainer, showLoading, hideLoading, fileType, onUpdateBoard]);
+  }, [candidateRefreshing, candidates, notify, noticeDate, portalContainer, showLoading, hideLoading, fileType, onUpdateBoard]);
 
   const toggleColumnCollapse = React.useCallback((key) => {
     setCollapsedColumns((prev) => ({
