@@ -1194,7 +1194,10 @@ function App() {
       if (formattedKeys.includes(key)) return formatNumber(raw);
       let s = String(raw ?? '');
       if (key === '신용평가') {
-        s = s.replace(/\r\n|\r|\n/g, ' ').replace(/\s+/g, ' ').trim();
+        if (!/\r?\n/.test(s)) {
+          s = s.replace(/\s*\(([^)]*)\)$/, '\n($1)');
+        }
+        s = s.replace(/\r\n|\r/g, '\n');
       } else if (key === '비고') {
         s = s.replace(/\r\n|\r/g, '\n'); // 내부 개행 유지(LF)
       } else {
@@ -1203,10 +1206,10 @@ function App() {
       return s;
     });
 
-    // Build rows for 1-column CSV: in-cell breaks only for 비고 (LF = CHAR(10))
+    // Build rows for 1-column CSV: in-cell breaks only for 신용평가/비고 (LF = CHAR(10))
     const rows = values.map((v, idx) => {
       const key = DISPLAY_ORDER[idx];
-      if (key === '비고') return String(v).replace(/\r\n|\r|\n/g, '\n');
+      if (key === '신용평가' || key === '비고') return String(v).replace(/\r\n|\r|\n/g, '\n');
       return String(v).replace(/\r\n|\r|\n/g, ' ');
     });
 

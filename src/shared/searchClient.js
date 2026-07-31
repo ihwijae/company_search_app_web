@@ -86,7 +86,12 @@ const normalizeRegionsResponse = (payload) => {
 
 const buildSingleColumnCsv = (rows) => {
   const escapeCsvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
-  return (Array.isArray(rows) ? rows : []).map(escapeCsvCell).join('\n');
+  return (Array.isArray(rows) ? rows : []).map(escapeCsvCell).join('\r\n');
+};
+
+const buildSingleColumnCsvWithoutInCellBreaks = (rows) => {
+  const escapeCsvCell = (value) => `"${String(value ?? '').replace(/\r\n|\r|\n/g, ' ').replaceAll('"', '""')}"`;
+  return (Array.isArray(rows) ? rows : []).map(escapeCsvCell).join('\r\n');
 };
 
 const copyRowsToClipboard = async (rows) => {
@@ -105,7 +110,7 @@ const copyRowsToClipboard = async (rows) => {
       console.warn('[searchClient] blob clipboard copy failed, falling back to writeText:', error);
     }
   }
-  await navigator.clipboard.writeText(text);
+  await navigator.clipboard.writeText(buildSingleColumnCsvWithoutInCellBreaks(normalizedRows));
   return { success: true };
 };
 
