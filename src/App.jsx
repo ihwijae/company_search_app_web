@@ -1,6 +1,7 @@
 // src/App.jsx: hash-route shell
 import React from 'react';
 import SearchPage from './view/features/search/pages/SearchPage.jsx';
+import CompanyGridPage from './view/features/company-grid/pages/CompanyGridPage.jsx';
 import AgreementsPage from './view/features/agreements/pages/AgreementsPage.jsx';
 import AgreementBoardPage from './view/features/agreements/pages/AgreementBoardPage.jsx';
 import RegionSearchPage from './view/features/agreements/pages/RegionSearchPage.jsx';
@@ -188,6 +189,9 @@ export default function App() {
       break;
     case '/scan-archive':
       Screen = ScanArchivePage;
+      break;
+    case '/company-grid':
+      Screen = CompanyGridPage;
       break;
     case '/login':
       Screen = LoginPage;

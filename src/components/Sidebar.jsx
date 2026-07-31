@@ -52,6 +52,10 @@ export default function Sidebar({ active, onSelect, fileStatuses, collapsed = tr
       window.location.hash = '#/scan-archive';
       return;
     }
+    if (key === 'company-grid' && typeof window !== 'undefined') {
+      window.location.hash = '#/company-grid';
+      return;
+    }
     if (key === 'kakao-send' && typeof window !== 'undefined') {
       try {
         openKakaoSendWindow();
@@ -81,6 +85,7 @@ export default function Sidebar({ active, onSelect, fileStatuses, collapsed = tr
 
   const navItems = [
     { key: 'search', label: '검색', icon: '🔍' },
+    { key: 'company-grid', label: '바둑판조회', icon: '▦' },
     {
       key: 'company-notes',
       label: '업체별특이사항',
