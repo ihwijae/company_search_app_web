@@ -95,6 +95,16 @@ const copyRowsToClipboard = async (rows) => {
   }
   const normalizedRows = Array.isArray(rows) ? rows : [rows];
   const text = buildSingleColumnCsv(normalizedRows);
+  if (typeof ClipboardItem !== 'undefined' && typeof navigator.clipboard.write === 'function') {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/plain': new Blob([text], { type: 'text/plain' }),
+      })]);
+      return { success: true };
+    } catch (error) {
+      console.warn('[searchClient] blob clipboard copy failed, falling back to writeText:', error);
+    }
+  }
   await navigator.clipboard.writeText(text);
   return { success: true };
 };
