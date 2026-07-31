@@ -548,13 +548,19 @@ export default function CompanyGridPage() {
     try {
       const effectiveIncludeRegions = normalizeRegionSelection(overrides.includeRegions ?? includeRegions);
       const effectiveExcludeRegions = normalizeRegionSelection(overrides.excludeRegions ?? excludeRegions);
+      const preserveSelection = !!overrides.preserveSelection;
+      const preserveVisibleCount = !!overrides.preserveVisibleCount;
       setLoading(true);
       setError('');
       setSearched(true);
-      setResults([]);
-      setSelectedCompanyKey('');
-      setTotalCount(0);
-      setVisibleCount(COMPANY_GRID_RENDER_BATCH_SIZE);
+      if (!preserveSelection) {
+        setResults([]);
+        setSelectedCompanyKey('');
+        setTotalCount(0);
+      }
+      if (!preserveVisibleCount) {
+        setVisibleCount(COMPANY_GRID_RENDER_BATCH_SIZE);
+      }
       const criteria = buildCriteria(filters, effectiveIncludeRegions, effectiveExcludeRegions);
       const options = {
         pagination: null,
@@ -565,7 +571,9 @@ export default function CompanyGridPage() {
       const items = filterResultsForCurrentCriteria(response.data, criteria);
       setResults(items);
       setTotalCount(items.length);
-      setVisibleCount(COMPANY_GRID_RENDER_BATCH_SIZE);
+      if (!preserveVisibleCount) {
+        setVisibleCount(COMPANY_GRID_RENDER_BATCH_SIZE);
+      }
       setSelectedCompanyKey((prev) => (
         prev && items.some((company, index) => getCompanySelectionKey(company, index) === prev) ? prev : ''
       ));
@@ -585,6 +593,25 @@ export default function CompanyGridPage() {
       }
     }
   }, [excludeRegions, fileType, filters, includeRegions, notify]);
+
+  React.useEffect(() => {
+    const unsubscribe = searchClient.onDataUpdated(async () => {
+      try {
+        await loadRegions(fileType);
+        if (searched) {
+          await executeSearch({
+            preserveSelection: true,
+            preserveVisibleCount: true,
+          });
+        }
+      } catch (updateError) {
+        console.error('[CompanyGrid] data update handling failed:', updateError);
+      }
+    });
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [executeSearch, fileType, loadRegions, searched]);
 
   React.useEffect(() => {
     const handleEnterSearch = (event) => {
