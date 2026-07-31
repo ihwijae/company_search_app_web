@@ -23,6 +23,7 @@ const FILE_TYPE_OPTIONS = [
 
 const COMPANIES_PER_GRID_BLOCK = 12;
 const COMPANY_GRID_STORAGE_KEY = 'company-grid-state';
+const COMPANY_GRID_RENDER_BATCH_SIZE = 240;
 
 const CREDIT_GRADE_OPTIONS = Array.isArray(CREDIT_GRADE_ORDER)
   ? CREDIT_GRADE_ORDER.map((grade) => String(grade || '').trim()).filter(Boolean)
@@ -411,6 +412,10 @@ export default function CompanyGridPage() {
   const [results, setResults] = React.useState(() => (
     Array.isArray(persisted.results) ? persisted.results : []
   ));
+  const [visibleCount, setVisibleCount] = React.useState(() => {
+    const savedCount = Number(persisted.visibleCount);
+    return Number.isFinite(savedCount) && savedCount > 0 ? savedCount : COMPANY_GRID_RENDER_BATCH_SIZE;
+  });
   const [selectedCompanyKey, setSelectedCompanyKey] = React.useState(() => (
     typeof persisted.selectedCompanyKey === 'string' ? persisted.selectedCompanyKey : ''
   ));
@@ -429,13 +434,17 @@ export default function CompanyGridPage() {
     regions.filter((region) => region && region !== '전체')
   ), [regions]);
 
+  const visibleResults = React.useMemo(() => (
+    results.slice(0, Math.min(results.length, visibleCount))
+  ), [results, visibleCount]);
+
   const resultBlocks = React.useMemo(() => {
     const blocks = [];
-    for (let index = 0; index < results.length; index += COMPANIES_PER_GRID_BLOCK) {
-      blocks.push(results.slice(index, index + COMPANIES_PER_GRID_BLOCK));
+    for (let index = 0; index < visibleResults.length; index += COMPANIES_PER_GRID_BLOCK) {
+      blocks.push(visibleResults.slice(index, index + COMPANIES_PER_GRID_BLOCK));
     }
     return blocks;
-  }, [results]);
+  }, [visibleResults]);
 
   const selectedCompany = React.useMemo(() => (
     results.find((company, index) => getCompanySelectionKey(company, index) === selectedCompanyKey) || null
@@ -469,11 +478,12 @@ export default function CompanyGridPage() {
       filters: sanitizeFilters(filters),
       filterOpen,
       results: Array.isArray(results) ? results : [],
+      visibleCount,
       selectedCompanyKey,
       totalCount,
       searched,
     });
-  }, [excludeRegions, fileType, filterOpen, filters, includeRegions, regions, results, searched, selectedCompanyKey, totalCount]);
+  }, [excludeRegions, fileType, filterOpen, filters, includeRegions, regions, results, searched, selectedCompanyKey, totalCount, visibleCount]);
 
   React.useEffect(() => {
     let canceled = false;
@@ -544,6 +554,7 @@ export default function CompanyGridPage() {
       setResults([]);
       setSelectedCompanyKey('');
       setTotalCount(0);
+      setVisibleCount(COMPANY_GRID_RENDER_BATCH_SIZE);
       const criteria = buildCriteria(filters, effectiveIncludeRegions, effectiveExcludeRegions);
       const options = {
         pagination: null,
@@ -554,6 +565,7 @@ export default function CompanyGridPage() {
       const items = filterResultsForCurrentCriteria(response.data, criteria);
       setResults(items);
       setTotalCount(items.length);
+      setVisibleCount(COMPANY_GRID_RENDER_BATCH_SIZE);
       setSelectedCompanyKey((prev) => (
         prev && items.some((company, index) => getCompanySelectionKey(company, index) === prev) ? prev : ''
       ));
@@ -597,6 +609,7 @@ export default function CompanyGridPage() {
     setResults([]);
     setSelectedCompanyKey('');
     setTotalCount(0);
+    setVisibleCount(COMPANY_GRID_RENDER_BATCH_SIZE);
     setSearched(false);
   };
 
@@ -636,6 +649,7 @@ export default function CompanyGridPage() {
     setResults([]);
     setSelectedCompanyKey('');
     setTotalCount(0);
+    setVisibleCount(COMPANY_GRID_RENDER_BATCH_SIZE);
     setSearched(false);
     setError('');
   };
@@ -659,6 +673,10 @@ export default function CompanyGridPage() {
     if (!selectionKey) return;
     setSelectedCompanyKey((prev) => (prev === selectionKey ? '' : selectionKey));
   }, []);
+
+  const handleShowMore = React.useCallback(() => {
+    setVisibleCount((prev) => Math.min(results.length, prev + COMPANY_GRID_RENDER_BATCH_SIZE));
+  }, [results.length]);
 
   return (
     <div className="app-shell sidebar-wide">
@@ -733,8 +751,8 @@ export default function CompanyGridPage() {
                 <span>선택 {selectedCompany['검색된 회사'] || selectedCompany['업체명'] || '-'}</span>
               )}
               <span>결과 {totalCount.toLocaleString()}건</span>
-              {results.length > 0 && totalCount > results.length && (
-                <span>표시 {results.length.toLocaleString()}건</span>
+              {results.length > 0 && results.length > visibleResults.length && (
+                <span>표시 {visibleResults.length.toLocaleString()}건</span>
               )}
             </div>
           </div>
@@ -805,6 +823,13 @@ export default function CompanyGridPage() {
                     </tbody>
                   </table>
                 ))}
+                {results.length > visibleResults.length && (
+                  <div className="company-grid-load-more">
+                    <button type="button" onClick={handleShowMore}>
+                      더 보기 ({visibleResults.length.toLocaleString()} / {results.length.toLocaleString()})
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
