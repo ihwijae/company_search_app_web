@@ -112,13 +112,15 @@ const copyRowsToClipboard = async (rows) => {
   const plainText = normalizedRows.map((row) => String(row ?? '')).join('\n');
   if (typeof ClipboardItem !== 'undefined' && typeof navigator.clipboard.write === 'function') {
     const html = buildSingleColumnHtmlTable(normalizedRows);
-    const csv = buildSingleColumnCsv(normalizedRows);
-    await navigator.clipboard.write([new ClipboardItem({
-      'text/html': new Blob([html], { type: 'text/html' }),
-      'text/csv': new Blob([csv], { type: 'text/csv' }),
-      'text/plain': new Blob([plainText], { type: 'text/plain' }),
-    })]);
-    return { success: true };
+    try {
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([plainText], { type: 'text/plain' }),
+      })]);
+      return { success: true };
+    } catch (error) {
+      console.warn('[searchClient] rich clipboard copy failed, falling back to CSV text:', error);
+    }
   }
   const text = buildSingleColumnCsv(normalizedRows);
   await navigator.clipboard.writeText(text);
