@@ -86,7 +86,7 @@ const normalizeRegionsResponse = (payload) => {
 
 const buildSingleColumnCsv = (rows) => {
   const escapeCsvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
-  return (Array.isArray(rows) ? rows : []).map(escapeCsvCell).join('\r\n');
+  return (Array.isArray(rows) ? rows : []).map(escapeCsvCell).join('\n');
 };
 
 const copyRowsToClipboard = async (rows) => {

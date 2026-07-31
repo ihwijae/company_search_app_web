@@ -1194,11 +1194,7 @@ function App() {
       if (formattedKeys.includes(key)) return formatNumber(raw);
       let s = String(raw ?? '');
       if (key === '신용평가') {
-        // 괄호로 유효기간이 이어지는 경우, 셀 내부 줄바꿈(LF) 삽입
-        if (!/\r?\n/.test(s)) {
-          s = s.replace(/\s*\(([^)]*)\)$/, '\n($1)');
-        }
-        s = s.replace(/\r\n|\r/g, '\n'); // 내부 개행은 LF로 표준화
+        s = s.replace(/\r\n|\r|\n/g, ' ').replace(/\s+/g, ' ').trim();
       } else if (key === '비고') {
         s = s.replace(/\r\n|\r/g, '\n'); // 내부 개행 유지(LF)
       } else {
@@ -1207,11 +1203,10 @@ function App() {
       return s;
     });
 
-    // Build rows for 1-column CSV: in-cell breaks only for 신용평가/비고 (LF = CHAR(10))
+    // Build rows for 1-column CSV: in-cell breaks only for 비고 (LF = CHAR(10))
     const rows = values.map((v, idx) => {
       const key = DISPLAY_ORDER[idx];
-      // Excel in-cell newline is LF (CHAR(10)). CR can render as a musical note in some codepages.
-      if (key === '신용평가' || key === '비고') return String(v).replace(/\r\n|\r|\n/g, '\n');
+      if (key === '비고') return String(v).replace(/\r\n|\r|\n/g, '\n');
       return String(v).replace(/\r\n|\r|\n/g, ' ');
     });
 
