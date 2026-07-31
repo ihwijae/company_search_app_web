@@ -197,11 +197,13 @@ const buildCopyRows = (company) => (
 
 const getCompanySelectionKey = (company, fallbackIndex = null) => {
   if (!company) return '';
+  const type = normalizeFileType(company._file_type || company.fileType || company.file_type || '');
+  const typeToken = type && type !== 'all' ? `${type}|` : '';
   const bizNo = String(company['사업자번호'] || '').replace(/[^0-9]/g, '');
-  if (bizNo) return `biz:${bizNo}`;
+  if (bizNo) return `${typeToken}biz:${bizNo}`;
   const name = String(company['검색된 회사'] || company['업체명'] || '').trim();
-  if (name) return `name:${name}`;
-  return fallbackIndex !== null && fallbackIndex !== undefined ? `idx:${fallbackIndex}` : '';
+  if (name) return `${typeToken}name:${name}`;
+  return fallbackIndex !== null && fallbackIndex !== undefined ? `${typeToken}idx:${fallbackIndex}` : '';
 };
 
 const getCompanyFileType = (company, selectedFileType) => {
