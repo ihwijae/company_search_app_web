@@ -29,6 +29,17 @@ function formatDate(value) {
   return date.toLocaleString('ko-KR');
 }
 
+function formatFileMeta(file) {
+  const sizeText = formatBytes(file?.size);
+  const updatedText = formatDate(file?.updatedAt);
+  const createdText = formatDate(file?.createdAt);
+  return {
+    sizeText,
+    updatedText,
+    createdText,
+  };
+}
+
 export default function ScanArchivePage() {
   const initialSavedState = React.useMemo(() => {
     try {
@@ -326,24 +337,33 @@ export default function ScanArchivePage() {
             </div>
             <div className="scan-archive-list">
               {visibleFiles.map((file) => (
-                <button
-                  key={file.path}
-                  type="button"
-                  className={file.path === selectedFilePath ? 'active' : ''}
-                  onClick={() => {
-                    if (hasSearchKeyword) {
-                      handleSelectSearchResult(file);
-                      return;
-                    }
-                    setSelectedFilePath(file.path);
-                  }}
-                >
-                  <span className="scan-archive-file-summary">
-                    <span className={`scan-archive-file-name ${fileTypeClassName(file.name)}`}>📄 {file.name}</span>
-                    {hasSearchKeyword && <span className="scan-archive-file-path">{file.dirPath || '루트 폴더'}</span>}
-                  </span>
-                  {!hasSearchKeyword && <span className="scan-archive-file-meta">{formatBytes(file.size)}</span>}
-                </button>
+                (() => {
+                  const meta = formatFileMeta(file);
+                  return (
+                    <button
+                      key={file.path}
+                      type="button"
+                      className={file.path === selectedFilePath ? 'active' : ''}
+                      onClick={() => {
+                        if (hasSearchKeyword) {
+                          handleSelectSearchResult(file);
+                          return;
+                        }
+                        setSelectedFilePath(file.path);
+                      }}
+                    >
+                      <span className="scan-archive-file-summary">
+                        <span className={`scan-archive-file-name ${fileTypeClassName(file.name)}`}>📄 {file.name}</span>
+                        {hasSearchKeyword && <span className="scan-archive-file-path">{file.dirPath || '루트 폴더'}</span>}
+                        <span className="scan-archive-file-dates">
+                          <span>수정 {meta.updatedText}</span>
+                          <span>등록 {meta.createdText}</span>
+                        </span>
+                      </span>
+                      <span className="scan-archive-file-meta">{meta.sizeText}</span>
+                    </button>
+                  );
+                })()
               ))}
               {visibleFiles.length === 0 && !loading && (
                 <p className="muted">{hasSearchKeyword ? '검색 결과가 없습니다.' : '조건에 맞는 파일이 없습니다.'}</p>
@@ -371,6 +391,13 @@ export default function ScanArchivePage() {
               )}
             </div>
             {!selectedFile && <p className="muted">파일을 선택하세요.</p>}
+            {selectedFile && (
+              <div className="scan-archive-selected-meta">
+                <span>크기 {formatBytes(selectedFile.size)}</span>
+                <span>수정 {formatDate(selectedFile.updatedAt)}</span>
+                <span>등록 {formatDate(selectedFile.createdAt)}</span>
+              </div>
+            )}
             {selectedFile && isPdf && (
               <iframe title={selectedFile.name} src={previewUrl} className="scan-archive-preview-frame" />
             )}

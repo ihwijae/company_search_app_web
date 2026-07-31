@@ -4823,6 +4823,8 @@ body.agreement-load-dragging {
   color: #64748b;
   font-size: 12px;
   white-space: nowrap;
+  align-self: flex-start;
+  padding-top: 2px;
 }
 
 .scan-archive-file-controls {
@@ -4948,6 +4950,7 @@ body.agreement-load-dragging {
   flex-direction: column;
   gap: 3px;
   min-width: 0;
+  flex: 1;
 }
 
 .scan-archive-file-path {
@@ -4955,6 +4958,24 @@ body.agreement-load-dragging {
   font-size: 12px;
   font-weight: 500;
   word-break: break-all;
+}
+
+.scan-archive-file-dates,
+.scan-archive-selected-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.scan-archive-selected-meta {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
 }
 
 .scan-archive-file-name.electric {

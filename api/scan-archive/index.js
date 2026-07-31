@@ -59,6 +59,20 @@ function formatBytes(bytes) {
   return bytes;
 }
 
+function buildFileEntry({ name, relativePath, stat, type, ext }) {
+  const isDirectory = type === 'dir';
+  return {
+    name,
+    path: relativePath,
+    type,
+    ext: isDirectory ? '' : ext,
+    size: isDirectory ? null : formatBytes(stat.size),
+    createdAt: stat.birthtime.toISOString(),
+    updatedAt: stat.mtime.toISOString(),
+    previewable: !isDirectory && (IMAGE_EXTENSIONS.has(ext) || PDF_EXTENSIONS.has(ext)),
+  };
+}
+
 function buildBreadcrumbs(relativeDir) {
   const crumbs = [{ name: '스캔본', path: '' }];
   if (!relativeDir) return crumbs;
@@ -99,15 +113,13 @@ async function listDirectory(root, relativeDir) {
     const childStat = await fs.promises.stat(childAbsolute);
     const ext = path.extname(name).toLowerCase();
     const isDirectory = childStat.isDirectory();
-    return {
+    return buildFileEntry({
       name,
-      path: childRelative,
       type: isDirectory ? 'dir' : 'file',
-      ext: isDirectory ? '' : ext,
-      size: isDirectory ? null : formatBytes(childStat.size),
-      updatedAt: childStat.mtime.toISOString(),
-      previewable: !isDirectory && (IMAGE_EXTENSIONS.has(ext) || PDF_EXTENSIONS.has(ext)),
-    };
+      relativePath: childRelative,
+      stat: childStat,
+      ext,
+    });
   }));
 
   const sanitizedEntries = entries.filter(Boolean);
@@ -140,7 +152,7 @@ async function collectFilesRecursive(baseDirAbsolute, targetDirAbsolute) {
       }
       if (!stat.isFile()) continue;
       const relative = path.relative(baseDirAbsolute, absolute).split(path.sep).join('/');
-      collected.push({ absolute, relative });
+      collected.push({ absolute, relative, stat });
     }
   }
   return collected;
@@ -174,8 +186,13 @@ async function searchFiles(root, query, filter = SEARCH_FILTER.ALL) {
       const name = path.basename(relativePath);
       const dir = path.dirname(relativePath);
       return {
-        name,
-        path: relativePath,
+        ...buildFileEntry({
+          name,
+          relativePath,
+          stat: item.stat,
+          type: 'file',
+          ext: path.extname(name).toLowerCase(),
+        }),
         dirPath: dir === '.' ? '' : dir,
       };
     })
