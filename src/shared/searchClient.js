@@ -84,11 +84,43 @@ const normalizeRegionsResponse = (payload) => {
   return ['전체', ...normalized];
 };
 
+const escapeHtml = (value) => String(value ?? '')
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#39;');
+
+const buildSingleColumnHtmlTable = (rows) => {
+  const cells = (Array.isArray(rows) ? rows : []).map((row) => {
+    const html = escapeHtml(row).replace(/\r\n|\r|\n/g, '<br>');
+    return `<tr><td>${html}</td></tr>`;
+  }).join('');
+  return `<html><body><table>${cells}</table></body></html>`;
+};
+
+const buildSingleColumnCsv = (rows) => {
+  const escapeCsvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
+  return (Array.isArray(rows) ? rows : []).map(escapeCsvCell).join('\r\n');
+};
+
 const copyRowsToClipboard = async (rows) => {
   if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
     throw new Error('Clipboard API is not available');
   }
-  const text = Array.isArray(rows) ? rows.join('\n') : String(rows ?? '');
+  const normalizedRows = Array.isArray(rows) ? rows : [rows];
+  const plainText = normalizedRows.map((row) => String(row ?? '')).join('\n');
+  if (typeof ClipboardItem !== 'undefined' && typeof navigator.clipboard.write === 'function') {
+    const html = buildSingleColumnHtmlTable(normalizedRows);
+    const csv = buildSingleColumnCsv(normalizedRows);
+    await navigator.clipboard.write([new ClipboardItem({
+      'text/html': new Blob([html], { type: 'text/html' }),
+      'text/csv': new Blob([csv], { type: 'text/csv' }),
+      'text/plain': new Blob([plainText], { type: 'text/plain' }),
+    })]);
+    return { success: true };
+  }
+  const text = buildSingleColumnCsv(normalizedRows);
   await navigator.clipboard.writeText(text);
   return { success: true };
 };

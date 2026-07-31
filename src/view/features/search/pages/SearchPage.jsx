@@ -1180,9 +1180,6 @@ function App() {
 
   const handleKeyDown = (e) => { if (e.key === 'Enter') handleSearch(); };
   const handleCopySingle = (key, value) => { navigator.clipboard.writeText(String(value)); setDialog({ isOpen: true, message: `'${key}' 항목이 복사되었습니다.` }); };
-  const escapeHtml = (s) => String(s)
-    .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
-    .replaceAll('"','&quot;').replaceAll("'",'&#39;');
 
   const handleCopyAll = async () => {
     if (!selectedCompany) return;
