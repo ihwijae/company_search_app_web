@@ -4857,10 +4857,36 @@ body.agreement-load-dragging {
 }
 
 .scan-archive-folder-name {
+  position: relative;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.scan-archive-folder-tooltip {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  z-index: 20;
+  display: none;
+  max-width: 320px;
+  padding: 7px 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-all;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.22);
+}
+
+.scan-archive-folder-name:hover .scan-archive-folder-tooltip,
+.scan-archive-folder-name:focus .scan-archive-folder-tooltip {
+  display: block;
 }
 
 .scan-archive-folder-actions {
