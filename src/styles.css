@@ -3944,6 +3944,29 @@ body.agreement-load-dragging {
   cursor: pointer;
 }
 
+.excel-web-v2-note-input-row {
+  display: flex;
+  gap: 6px;
+}
+
+.excel-web-v2-note-input-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.excel-web-v2-note-input-row button {
+  flex: 0 0 auto;
+  min-width: 58px;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
+.excel-web-v2-note-input-row button.active {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #fff;
+}
+
 .excel-web-v2-compare {
   display: grid;
   grid-template-columns: 1fr 1fr;

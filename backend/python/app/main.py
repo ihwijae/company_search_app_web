@@ -1045,6 +1045,7 @@ def _update_management_data_at_position(
     updated_labels: list[str] = []
     try:
         sheet = workbook[sheet_name]
+        clear_note = bool(form_data.get("noteClear"))
         for form_key, raw_value in form_data.items():
             if form_key not in FORM_KEY_TO_KR:
                 continue
@@ -1066,9 +1067,14 @@ def _update_management_data_at_position(
                 cell.font = copy(DEFAULT_FONT)
 
             value_text = str(raw_value or "").strip()
-            updated, ratio_value = _update_cell_value_by_key(cell, kr_key, value_text)
-            if not updated:
-                continue
+            if kr_key == "비고" and clear_note:
+                cell.value = None
+                updated = True
+                ratio_value = None
+            else:
+                updated, ratio_value = _update_cell_value_by_key(cell, kr_key, value_text)
+                if not updated:
+                    continue
             updated_labels.append(excel_label)
 
             if kr_key in {"부채비율", "유동비율"} and ratio_value is not None:

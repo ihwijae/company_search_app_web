@@ -46,6 +46,7 @@ const EMPTY_FORM = {
   jobCreation: '',
   qualityEval: '',
   note: '',
+  noteClear: false,
 };
 
 const EDITOR_MODE = {
@@ -214,7 +215,7 @@ export default function ExcelWebEditPage() {
     if (!loadedData) return null;
     const next = { ...loadedData };
     Object.keys(form).forEach((key) => {
-      if (['creditGrade', 'creditStartDate', 'creditEndDate'].includes(key)) return;
+      if (['creditGrade', 'creditStartDate', 'creditEndDate', 'noteClear'].includes(key)) return;
       const value = String(form[key] || '').trim();
       if (!value) return;
       if (['sipyung', 'perf3y', 'perf5y'].includes(key)) {
@@ -227,6 +228,7 @@ export default function ExcelWebEditPage() {
       }
       next[key] = value;
     });
+    if (form.noteClear) next.note = '';
     if (finalCreditText) next.creditText = finalCreditText;
     return next;
   }, [finalCreditText, form, loadedData]);
@@ -496,7 +498,11 @@ export default function ExcelWebEditPage() {
       value = stripQualityEvalReferenceSuffix(value);
     }
 
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === 'note' ? { noteClear: false } : {}),
+    }));
   };
 
   const changePreviewZoom = React.useCallback((delta) => {
@@ -1261,7 +1267,19 @@ export default function ExcelWebEditPage() {
                   <label>중소기업<input name="smallBusiness" value={form.smallBusiness} onChange={handleInput} /></label>
                   <label>일자리창출실적<input name="jobCreation" value={form.jobCreation} onChange={handleInput} /></label>
                   <label>시공품질평가<input name="qualityEval" value={form.qualityEval} onChange={handleInput} placeholder={`없음 또는 점수만 입력 (저장 시 ${getQualityEvalReferenceDateText()} 자동추가)`} /></label>
-                  <label className="full-row">비고<input name="note" value={form.note} onChange={handleInput} /></label>
+                  <label className="full-row excel-web-v2-note-field">
+                    비고
+                    <div className="excel-web-v2-note-input-row">
+                      <input name="note" value={form.note} onChange={handleInput} disabled={form.noteClear} />
+                      <button
+                        type="button"
+                        className={form.noteClear ? 'active' : ''}
+                        onClick={() => setForm((prev) => ({ ...prev, note: '', noteClear: !prev.noteClear }))}
+                      >
+                        공백
+                      </button>
+                    </div>
+                  </label>
                 </div>
 
                 <h2>5. 실행</h2>
