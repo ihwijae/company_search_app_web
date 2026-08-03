@@ -332,9 +332,9 @@ export default function ScanArchivePage() {
             <div className="scan-archive-head">
               <h2>스캔본 폴더</h2>
               <div className="scan-archive-head-actions">
-                <a href={downloadAllUrl} className="scan-archive-download-all">전체 ZIP 다운로드</a>
-                <button type="button" onClick={openCreateFolderDialog} disabled={archiveBusy}>폴더 생성</button>
-                <button type="button" onClick={() => loadDirectory(currentPath)} disabled={loading}>새로고침</button>
+                <button type="button" onClick={openCreateFolderDialog} disabled={archiveBusy} title="폴더 생성">＋</button>
+                <button type="button" onClick={() => loadDirectory(currentPath)} disabled={loading} title="새로고침">↻</button>
+                <a href={downloadAllUrl} className="scan-archive-download-all" title="전체 ZIP 다운로드">ZIP</a>
               </div>
             </div>
             <p className="scan-archive-root">{rootPath || '-'}</p>
@@ -351,7 +351,7 @@ export default function ScanArchivePage() {
               {folders.map((folder) => (
                 <div key={folder.path} className="scan-archive-folder-row">
                   <button type="button" onClick={() => loadDirectory(folder.path)}>
-                    <span>📁 {folder.name}</span>
+                    <span className="scan-archive-folder-name">📁 {folder.name}</span>
                     <span className="scan-archive-file-meta">{formatDate(folder.updatedAt)}</span>
                   </button>
                   <div className="scan-archive-folder-actions">

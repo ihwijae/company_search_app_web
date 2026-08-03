@@ -4743,7 +4743,7 @@ body.agreement-load-dragging {
 
 .scan-archive-layout {
   display: grid;
-  grid-template-columns: 320px 360px minmax(420px, 1fr);
+  grid-template-columns: minmax(400px, 1.05fr) minmax(380px, 1fr) minmax(320px, 0.75fr);
   gap: 12px;
   height: calc(100vh - 110px);
   min-height: 640px;
@@ -4773,12 +4773,14 @@ body.agreement-load-dragging {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-width: 0;
 }
 
 .scan-archive-head-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
+  flex: 0 0 auto;
 }
 
 .scan-archive-head button {
@@ -4786,8 +4788,11 @@ body.agreement-load-dragging {
   border-radius: 8px;
   background: #f7fafc;
   color: #334155;
-  padding: 6px 10px;
+  min-width: 32px;
+  height: 30px;
+  padding: 5px 8px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .scan-archive-root {
@@ -4835,17 +4840,27 @@ body.agreement-load-dragging {
   cursor: pointer;
   color: #1f2937;
   text-align: left;
+  min-width: 0;
 }
 
 .scan-archive-folder-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 78px;
   gap: 6px;
   align-items: stretch;
 }
 
 .scan-archive-folder-row > button {
   min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.scan-archive-folder-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .scan-archive-folder-actions {
@@ -4855,7 +4870,7 @@ body.agreement-load-dragging {
 
 .scan-archive-folder-actions button {
   justify-content: center;
-  padding: 7px 8px;
+  padding: 6px 7px;
   font-size: 12px;
   white-space: nowrap;
 }
@@ -5001,9 +5016,12 @@ body.agreement-load-dragging {
   background: #0d9488;
   color: #fff;
   border-radius: 8px;
-  padding: 6px 12px;
+  min-width: 34px;
+  height: 30px;
+  padding: 5px 8px;
   text-decoration: none;
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .scan-archive-file-name {
