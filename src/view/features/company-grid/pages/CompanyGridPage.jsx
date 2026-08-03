@@ -231,8 +231,9 @@ const shouldWarnCell = (company, row, selectedFileType) => {
   return false;
 };
 
-const resolveStatusClass = (company) => {
-  const status = String(company?.['요약상태'] || company?.summaryStatus || '').trim();
+const resolveStatusClass = (company, row = null) => {
+  const rowStatus = row?.key ? company?.['데이터상태']?.[row.key] : '';
+  const status = String(rowStatus || company?.['요약상태'] || company?.summaryStatus || '').trim();
   if (status === '최신') return 'latest';
   if (status === '1년 경과') return 'stale';
   return 'old';
@@ -829,7 +830,7 @@ export default function CompanyGridPage() {
                             const absoluteIndex = (blockIndex * COMPANIES_PER_GRID_BLOCK) + index;
                             const selectionKey = getCompanySelectionKey(company, absoluteIndex);
                             const selectedClass = selectionKey && selectionKey === selectedCompanyKey ? 'company-grid-cell-selected' : '';
-                            const statusClass = resolveStatusClass(company);
+                            const statusClass = resolveStatusClass(company, row);
                             const warnClass = shouldWarnCell(company, row, fileType) ? 'company-grid-cell-warn' : '';
                             const industryClass = fileType === 'all' && row.key === '검색된 회사'
                               ? `company-grid-industry-${getCompanyFileType(company, 'all')}`
