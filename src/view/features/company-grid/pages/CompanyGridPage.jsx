@@ -232,8 +232,7 @@ const shouldWarnCell = (company, row, selectedFileType) => {
 };
 
 const resolveStatusClass = (company, row = null) => {
-  const rowStatus = row?.key ? company?.['데이터상태']?.[row.key] : '';
-  const status = String(rowStatus || company?.['요약상태'] || company?.summaryStatus || '').trim();
+  const status = String(row?.key ? company?.['데이터상태']?.[row.key] : '').trim();
   if (status === '최신') return 'latest';
   if (status === '1년 경과') return 'stale';
   return 'old';
