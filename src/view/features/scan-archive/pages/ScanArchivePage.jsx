@@ -347,6 +347,27 @@ export default function ScanArchivePage() {
     clearViewerImageUrl();
   }, [clearViewerImageUrl]);
 
+  React.useEffect(() => {
+    const handleGlobalWheel = (event) => {
+      if (!event.ctrlKey) return;
+      if (event.cancelable) event.preventDefault();
+    };
+
+    const handleGlobalKeydown = (event) => {
+      if (!event.ctrlKey) return;
+      if (event.key === '+' || event.key === '-' || event.key === '=' || event.key === '_' || event.key === '0') {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener('wheel', handleGlobalWheel, { passive: false });
+    window.addEventListener('keydown', handleGlobalKeydown);
+    return () => {
+      window.removeEventListener('wheel', handleGlobalWheel);
+      window.removeEventListener('keydown', handleGlobalKeydown);
+    };
+  }, []);
+
   const openCreateFolderDialog = React.useCallback(() => {
     setFolderDialog({ mode: 'create', target: null });
     setFolderName('');
