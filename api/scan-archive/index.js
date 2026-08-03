@@ -312,6 +312,7 @@ module.exports = async function handler(req, res) {
         const originalName = sanitizeEntryName(uploaded.name || 'upload.bin', 'upload.bin');
         const originalExt = path.extname(originalName);
         const requestedNameRaw = String(form.get('fileName') || '').trim();
+        const overwrite = String(form.get('overwrite') || '').trim() === '1';
         let fileName = sanitizeEntryName(requestedNameRaw || originalName, originalName);
         if (!path.extname(fileName) && originalExt) fileName = `${fileName}${originalExt}`;
 
@@ -323,14 +324,29 @@ module.exports = async function handler(req, res) {
           return sendJson(res, 400, { success: false, message: '저장할 폴더가 없습니다.' });
         }
         const existing = await fs.promises.stat(absolute).catch(() => null);
-        if (existing) return sendJson(res, 409, { success: false, message: '같은 이름의 파일이 이미 있습니다.' });
+        if (existing?.isDirectory()) {
+          return sendJson(res, 409, {
+            success: false,
+            code: 'ENTRY_EXISTS',
+            message: '같은 이름의 폴더가 이미 있습니다.',
+            data: { path: normalized, name: fileName, type: 'dir' },
+          });
+        }
+        if (existing && !overwrite) {
+          return sendJson(res, 409, {
+            success: false,
+            code: 'FILE_EXISTS',
+            message: '같은 이름의 파일이 이미 있습니다.',
+            data: { path: normalized, name: fileName, type: 'file' },
+          });
+        }
 
         const buffer = Buffer.from(await uploaded.arrayBuffer());
         if (buffer.length === 0) return sendJson(res, 400, { success: false, message: '빈 파일은 업로드할 수 없습니다.' });
         await fs.promises.writeFile(absolute, buffer);
         return sendJson(res, 200, {
           success: true,
-          message: '파일을 업로드했습니다.',
+          message: existing ? '파일을 덮어썼습니다.' : '파일을 업로드했습니다.',
           data: { path: normalized, name: fileName },
         });
       } catch (error) {

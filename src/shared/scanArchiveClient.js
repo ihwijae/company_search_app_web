@@ -2,7 +2,11 @@ async function requestJson(url, options = {}) {
   const response = await fetch(url, options);
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload?.success === false) {
-    throw new Error(payload?.message || `요청 실패 (${response.status})`);
+    const error = new Error(payload?.message || `요청 실패 (${response.status})`);
+    error.status = response.status;
+    error.code = payload?.code || '';
+    error.data = payload?.data || null;
+    throw error;
   }
   return payload;
 }
@@ -53,11 +57,12 @@ const scanArchiveClient = {
     });
   },
 
-  async uploadFile(dir, file, fileName) {
+  async uploadFile(dir, file, fileName, options = {}) {
     const params = new URLSearchParams({ action: 'upload-file' });
     const form = new FormData();
     form.append('dir', dir || '');
     form.append('fileName', fileName || '');
+    form.append('overwrite', options.overwrite ? '1' : '');
     form.append('file', file);
     return requestJson(`/api/scan-archive?${params.toString()}`, {
       method: 'POST',

@@ -76,6 +76,7 @@ export default function ScanArchivePage() {
   const [uploadDialogOpen, setUploadDialogOpen] = React.useState(false);
   const [uploadFile, setUploadFile] = React.useState(null);
   const [uploadFileName, setUploadFileName] = React.useState('');
+  const [uploadOverwriteTarget, setUploadOverwriteTarget] = React.useState(null);
   const [archiveBusy, setArchiveBusy] = React.useState(false);
   const [viewerPageNumber, setViewerPageNumber] = React.useState(1);
   const [viewerPageCount, setViewerPageCount] = React.useState(0);
@@ -408,6 +409,7 @@ export default function ScanArchivePage() {
     setUploadDialogOpen(true);
     setUploadFile(null);
     setUploadFileName('');
+    setUploadOverwriteTarget(null);
     setError('');
   }, []);
 
@@ -415,9 +417,10 @@ export default function ScanArchivePage() {
     const file = event.target.files?.[0] || null;
     setUploadFile(file);
     setUploadFileName(file ? String(file.name || '') : '');
+    setUploadOverwriteTarget(null);
   }, []);
 
-  const handleSubmitUpload = React.useCallback(async () => {
+  const handleSubmitUpload = React.useCallback(async (options = {}) => {
     if (!uploadFile) {
       setError('업로드할 파일을 선택하세요.');
       return;
@@ -430,14 +433,24 @@ export default function ScanArchivePage() {
     try {
       setArchiveBusy(true);
       setError('');
-      const response = await scanArchiveClient.uploadFile(currentPath, uploadFile, nextName);
+      const response = await scanArchiveClient.uploadFile(currentPath, uploadFile, nextName, {
+        overwrite: Boolean(options.overwrite),
+      });
       const savedPath = response?.data?.path || '';
       setUploadDialogOpen(false);
       setUploadFile(null);
       setUploadFileName('');
+      setUploadOverwriteTarget(null);
       await loadDirectory(currentPath);
       if (savedPath) setSelectedFilePath(savedPath);
     } catch (uploadError) {
+      if (uploadError?.status === 409 && uploadError?.code === 'FILE_EXISTS') {
+        setUploadOverwriteTarget({
+          name: uploadError.data?.name || nextName,
+          path: uploadError.data?.path || '',
+        });
+        return;
+      }
       setError(uploadError?.message || '파일 업로드에 실패했습니다.');
     } finally {
       setArchiveBusy(false);
@@ -738,9 +751,45 @@ export default function ScanArchivePage() {
                 />
               </label>
               <div className="scan-archive-confirm-actions">
-                <button type="button" onClick={() => setUploadDialogOpen(false)} disabled={archiveBusy}>취소</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUploadDialogOpen(false);
+                    setUploadOverwriteTarget(null);
+                  }}
+                  disabled={archiveBusy}
+                >
+                  취소
+                </button>
                 <button type="button" className="primary" onClick={handleSubmitUpload} disabled={archiveBusy}>
                   {archiveBusy ? '업로드 중...' : '업로드'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {uploadOverwriteTarget && (
+          <div className="scan-archive-confirm-overlay" role="presentation">
+            <div className="scan-archive-confirm" role="dialog" aria-modal="true" aria-labelledby="scan-overwrite-title">
+              <h3 id="scan-overwrite-title">파일 덮어쓰기</h3>
+              <p>
+                같은 이름의 파일이 이미 있습니다.
+                <br />
+                <strong>{uploadOverwriteTarget.name}</strong>
+                <br />
+                기존 파일을 덮어쓸까요?
+              </p>
+              <div className="scan-archive-confirm-actions">
+                <button type="button" onClick={() => setUploadOverwriteTarget(null)} disabled={archiveBusy}>
+                  아니오
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => handleSubmitUpload({ overwrite: true })}
+                  disabled={archiveBusy}
+                >
+                  {archiveBusy ? '덮어쓰는 중...' : '예'}
                 </button>
               </div>
             </div>
