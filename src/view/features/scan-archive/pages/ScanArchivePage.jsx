@@ -352,7 +352,7 @@ export default function ScanArchivePage() {
                 <div key={folder.path} className="scan-archive-folder-row">
                   <button type="button" onClick={() => loadDirectory(folder.path)}>
                     <span className="scan-archive-folder-name" tabIndex={0}>
-                      📁 {folder.name}
+                      <span className="scan-archive-folder-label">📁 {folder.name}</span>
                       <span className="scan-archive-folder-tooltip" role="tooltip">{folder.name}</span>
                     </span>
                     <span className="scan-archive-file-meta">{formatDate(folder.updatedAt)}</span>
