@@ -620,7 +620,6 @@ export default function ExcelWebEditPage() {
       }
 
       const company = result.data.company || {};
-      const formDefaults = result.data.formDefaults || {};
       const colorMap = result.data.colorMap || {};
 
       setLoadedData(company);
@@ -628,9 +627,7 @@ export default function ExcelWebEditPage() {
       setLookupVersion(String(result?.data?.version || ''));
       setForm((prev) => ({
         ...EMPTY_FORM,
-        ...formDefaults,
-        bizNo: formDefaults.bizNo || prev.bizNo || bizNo,
-        region: formDefaults.region || company.region || '',
+        bizNo: prev.bizNo || bizNo,
       }));
       notifyInfo('사업자번호 조회가 완료되었습니다.');
     } catch (error) {
