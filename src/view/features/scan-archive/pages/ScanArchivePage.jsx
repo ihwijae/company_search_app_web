@@ -3,6 +3,7 @@ import '../../../../styles.css';
 import '../../../../fonts.css';
 import Sidebar from '../../../../components/Sidebar';
 import scanArchiveClient from '../../../../shared/scanArchiveClient';
+import excelEditBackendClient from '../../../../shared/excelEditBackendClient';
 
 const SCAN_ARCHIVE_STATE_KEY = 'scan-archive:state:v1';
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
@@ -76,6 +77,14 @@ export default function ScanArchivePage() {
   const [uploadFile, setUploadFile] = React.useState(null);
   const [uploadFileName, setUploadFileName] = React.useState('');
   const [archiveBusy, setArchiveBusy] = React.useState(false);
+  const [viewerPageNumber, setViewerPageNumber] = React.useState(1);
+  const [viewerPageCount, setViewerPageCount] = React.useState(0);
+  const [viewerZoom, setViewerZoom] = React.useState(1);
+  const [viewerRotation, setViewerRotation] = React.useState(0);
+  const [viewerLoading, setViewerLoading] = React.useState(false);
+  const [viewerError, setViewerError] = React.useState('');
+  const [viewerImageUrl, setViewerImageUrl] = React.useState('');
+  const viewerAbortRef = React.useRef(null);
   const searchRequestIdRef = React.useRef(0);
   const initialPathRef = React.useRef(String(initialSavedState?.currentPath || ''));
 
@@ -155,11 +164,42 @@ export default function ScanArchivePage() {
     else if (key === 'scan-archive') window.location.hash = '#/scan-archive';
   }, []);
 
-  const previewUrl = selectedFile ? scanArchiveClient.buildPreviewUrl(selectedFile.path) : '';
   const downloadUrl = selectedFile ? scanArchiveClient.buildDownloadUrl(selectedFile.path) : '';
   const downloadAllUrl = scanArchiveClient.buildDownloadAllUrl(currentPath);
   const isPdf = selectedFile?.ext === '.pdf';
   const isImage = selectedFile ? IMAGE_EXTENSIONS.has(selectedFile.ext) : false;
+  const canUseEnhancedViewer = Boolean(selectedFile && (isPdf || isImage));
+
+  const clearViewerImageUrl = React.useCallback(() => {
+    setViewerImageUrl((prev) => {
+      if (prev?.startsWith('blob:')) {
+        try { URL.revokeObjectURL(prev); } catch (error) { void error; }
+      }
+      return '';
+    });
+  }, []);
+
+  const changeViewerZoom = React.useCallback((delta) => {
+    setViewerZoom((prev) => Math.max(0.5, Number((prev + delta).toFixed(2))));
+  }, []);
+
+  const resetViewerZoom = React.useCallback(() => {
+    setViewerZoom(1);
+  }, []);
+
+  const rotateViewer = React.useCallback((delta) => {
+    setViewerRotation((prev) => (prev + delta + 360) % 360);
+  }, []);
+
+  const resetViewerRotation = React.useCallback(() => {
+    setViewerRotation(0);
+  }, []);
+
+  const handleViewerWheel = React.useCallback((event) => {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    changeViewerZoom(event.deltaY < 0 ? 0.1 : -0.1);
+  }, [changeViewerZoom]);
 
   const handleGlobalSearch = React.useCallback(async () => {
     const keyword = String(searchTerm || '').trim();
@@ -222,6 +262,90 @@ export default function ScanArchivePage() {
       setDeleteBusy(false);
     }
   }, [currentPath, deleteTarget, handleGlobalSearch, hasSearchKeyword, loadDirectory]);
+
+  const renderSelectedFile = React.useCallback(async (pageNumber = 1) => {
+    if (!selectedFile || !canUseEnhancedViewer) return;
+    if (viewerAbortRef.current) viewerAbortRef.current.abort();
+    const controller = new AbortController();
+    viewerAbortRef.current = controller;
+    try {
+      setViewerLoading(true);
+      setViewerError('');
+      const response = await fetch(scanArchiveClient.buildPreviewUrl(selectedFile.path), {
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`파일을 불러오지 못했습니다. (${response.status})`);
+      const sourceBlob = await response.blob();
+      if (controller.signal.aborted) return;
+
+      if (isPdf) {
+        const file = new File([sourceBlob], selectedFile.name || 'scan.pdf', {
+          type: sourceBlob.type || 'application/pdf',
+        });
+        const rendered = await excelEditBackendClient.renderPdfPage({
+          file,
+          page: pageNumber,
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        const nextUrl = URL.createObjectURL(rendered.blob);
+        setViewerImageUrl((prev) => {
+          if (prev?.startsWith('blob:')) {
+            try { URL.revokeObjectURL(prev); } catch (error) { void error; }
+          }
+          return nextUrl;
+        });
+        setViewerPageCount(rendered.pageCount || 0);
+        if (rendered.pageNumber && rendered.pageNumber !== pageNumber) {
+          setViewerPageNumber(rendered.pageNumber);
+        }
+        return;
+      }
+
+      const nextUrl = URL.createObjectURL(sourceBlob);
+      setViewerImageUrl((prev) => {
+        if (prev?.startsWith('blob:')) {
+          try { URL.revokeObjectURL(prev); } catch (error) { void error; }
+        }
+        return nextUrl;
+      });
+      setViewerPageCount(1);
+    } catch (renderError) {
+      if (renderError?.name === 'AbortError') return;
+      setViewerError(renderError?.message || '미리보기를 불러오지 못했습니다.');
+      clearViewerImageUrl();
+      setViewerPageCount(0);
+    } finally {
+      if (viewerAbortRef.current === controller) {
+        viewerAbortRef.current = null;
+        setViewerLoading(false);
+      }
+    }
+  }, [canUseEnhancedViewer, clearViewerImageUrl, isPdf, selectedFile]);
+
+  React.useEffect(() => {
+    setViewerPageNumber(1);
+    setViewerPageCount(0);
+    setViewerError('');
+    clearViewerImageUrl();
+    if (!canUseEnhancedViewer) return undefined;
+    return () => {
+      if (viewerAbortRef.current) {
+        viewerAbortRef.current.abort();
+        viewerAbortRef.current = null;
+      }
+    };
+  }, [canUseEnhancedViewer, clearViewerImageUrl, selectedFile?.path]);
+
+  React.useEffect(() => {
+    if (!selectedFile || !canUseEnhancedViewer) return;
+    renderSelectedFile(viewerPageNumber);
+  }, [canUseEnhancedViewer, renderSelectedFile, selectedFile, viewerPageNumber]);
+
+  React.useEffect(() => () => {
+    if (viewerAbortRef.current) viewerAbortRef.current.abort();
+    clearViewerImageUrl();
+  }, [clearViewerImageUrl]);
 
   const openCreateFolderDialog = React.useCallback(() => {
     setFolderDialog({ mode: 'create', target: null });
@@ -496,15 +620,44 @@ export default function ScanArchivePage() {
                 <span>수정 {formatDate(selectedFile.updatedAt)}</span>
               </div>
             )}
-            {selectedFile && isPdf && (
-              <iframe title={selectedFile.name} src={previewUrl} className="scan-archive-preview-frame" />
-            )}
-            {selectedFile && isImage && (
-              <div className="scan-archive-preview-image-wrap">
-                <img src={previewUrl} alt={selectedFile.name} className="scan-archive-preview-image" />
+            {selectedFile && canUseEnhancedViewer && (
+              <div className="scan-archive-enhanced-viewer">
+                <div className="excel-web-v2-pdf-toolbar">
+                  {isPdf && (
+                    <>
+                      <button type="button" disabled={viewerLoading || viewerPageNumber <= 1} onClick={() => setViewerPageNumber((prev) => Math.max(1, prev - 1))}>이전</button>
+                      <span>{viewerPageCount > 0 ? `${viewerPageNumber} / ${viewerPageCount}` : '0 / 0'}</span>
+                      <button type="button" disabled={viewerLoading || viewerPageCount === 0 || viewerPageNumber >= viewerPageCount} onClick={() => setViewerPageNumber((prev) => Math.min(viewerPageCount, prev + 1))}>다음</button>
+                    </>
+                  )}
+                  <button type="button" onClick={() => rotateViewer(-90)}>↺90°</button>
+                  <button type="button" onClick={() => rotateViewer(90)}>↻90°</button>
+                  <button type="button" onClick={resetViewerRotation}>회전 초기화</button>
+                  <button type="button" onClick={() => changeViewerZoom(-0.1)}>-</button>
+                  <span>{Math.round(viewerZoom * 100)}%</span>
+                  <button type="button" onClick={() => changeViewerZoom(0.1)}>+</button>
+                  <button type="button" onClick={resetViewerZoom}>100%</button>
+                  <a href={downloadUrl} target="_blank" rel="noreferrer">원본 열기</a>
+                </div>
+                <div className="excel-web-v2-pdf-canvas-area" onWheel={handleViewerWheel}>
+                  {viewerLoading && <p className="muted">미리보기 불러오는 중...</p>}
+                  {!viewerLoading && viewerImageUrl && (
+                    <img
+                      src={viewerImageUrl}
+                      alt={selectedFile.name}
+                      className="excel-web-v2-zoom-image"
+                      style={{
+                        width: `${viewerZoom * 100}%`,
+                        transform: `rotate(${viewerRotation}deg)`,
+                        transformOrigin: 'center center',
+                      }}
+                    />
+                  )}
+                  {!viewerLoading && !viewerImageUrl && viewerError && <p className="muted">{viewerError}</p>}
+                </div>
               </div>
             )}
-            {selectedFile && !isPdf && !isImage && (
+            {selectedFile && !canUseEnhancedViewer && (
               <p className="muted">이 파일 형식은 미리보기를 지원하지 않습니다. 다운로드해서 확인해주세요.</p>
             )}
           </section>

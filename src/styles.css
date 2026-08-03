@@ -5004,6 +5004,14 @@ body.agreement-load-dragging {
   min-width: 0;
 }
 
+.scan-archive-enhanced-viewer {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .scan-archive-download {
   display: inline-flex;
   align-items: center;
