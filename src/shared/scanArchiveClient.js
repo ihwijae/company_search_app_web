@@ -35,9 +35,43 @@ const scanArchiveClient = {
     return requestJson(`/api/scan-archive?${params.toString()}`);
   },
 
-  async deleteFile(path) {
+  async createFolder(dir, name) {
+    const params = new URLSearchParams({ action: 'create-folder' });
+    return requestJson(`/api/scan-archive?${params.toString()}`, {
+      method: 'POST',
+      body: JSON.stringify({ dir, name }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+  },
+
+  async renameFolder(path, name) {
+    const params = new URLSearchParams({ action: 'rename-folder' });
+    return requestJson(`/api/scan-archive?${params.toString()}`, {
+      method: 'POST',
+      body: JSON.stringify({ path, name }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+  },
+
+  async uploadFile(dir, file, fileName) {
+    const params = new URLSearchParams({ action: 'upload-file' });
+    const form = new FormData();
+    form.append('dir', dir || '');
+    form.append('fileName', fileName || '');
+    form.append('file', file);
+    return requestJson(`/api/scan-archive?${params.toString()}`, {
+      method: 'POST',
+      body: form,
+    });
+  },
+
+  async deletePath(path) {
     const params = new URLSearchParams({ action: 'delete', path });
     return requestJson(`/api/scan-archive?${params.toString()}`, { method: 'DELETE' });
+  },
+
+  async deleteFile(path) {
+    return this.deletePath(path);
   },
 };
 

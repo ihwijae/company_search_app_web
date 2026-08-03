@@ -4837,6 +4837,35 @@ body.agreement-load-dragging {
   text-align: left;
 }
 
+.scan-archive-folder-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.scan-archive-folder-row > button {
+  min-width: 0;
+}
+
+.scan-archive-folder-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.scan-archive-folder-actions button {
+  justify-content: center;
+  padding: 7px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.scan-archive-folder-actions button.danger {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #be123c;
+}
+
 .scan-archive-list button.active {
   background: #eff6ff;
   border-color: #9ac2ff;
@@ -4877,6 +4906,21 @@ body.agreement-load-dragging {
 
 .scan-archive-search-btn:disabled {
   opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.scan-archive-upload-button {
+  border: 1px solid #0f766e;
+  background: #0d9488;
+  color: #fff;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.scan-archive-upload-button:disabled {
+  opacity: 0.65;
   cursor: not-allowed;
 }
 
@@ -5076,6 +5120,28 @@ body.agreement-load-dragging {
   line-height: 1.6;
 }
 
+.scan-archive-dialog-help {
+  margin-bottom: 12px !important;
+}
+
+.scan-archive-dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.scan-archive-dialog-field input {
+  border: 1px solid #d4ddea;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-weight: 400;
+}
+
 .scan-archive-confirm strong {
   color: #111827;
   word-break: break-all;
@@ -5100,6 +5166,12 @@ body.agreement-load-dragging {
 .scan-archive-confirm-actions button.danger {
   border-color: #dc2626;
   background: #dc2626;
+  color: #fff;
+}
+
+.scan-archive-confirm-actions button.primary {
+  border-color: #2563eb;
+  background: #2563eb;
   color: #fff;
 }
 

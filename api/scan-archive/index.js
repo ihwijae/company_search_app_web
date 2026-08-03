@@ -44,6 +44,22 @@ function normalizeRelativeDir(input) {
   return normalized;
 }
 
+function sanitizeEntryName(input, fallback = '새 항목') {
+  const value = String(input || '').trim();
+  const sanitized = value
+    .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!sanitized || sanitized === '.' || sanitized === '..') return fallback;
+  return sanitized;
+}
+
+function joinRelativePath(dir, name) {
+  const normalizedDir = normalizeRelativeDir(dir);
+  const safeName = sanitizeEntryName(name);
+  return normalizedDir ? `${normalizedDir}/${safeName}` : safeName;
+}
+
 function resolveTargetPath(root, relativePath) {
   const normalized = normalizeRelativeDir(relativePath);
   const target = path.resolve(root, normalized);
@@ -52,6 +68,24 @@ function resolveTargetPath(root, relativePath) {
     throw new Error('Path traversal is not allowed');
   }
   return { normalized, absolute: target };
+}
+
+async function readJsonBody(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(Buffer.from(chunk));
+  if (!chunks.length) return {};
+  return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+}
+
+async function readMultipartForm(req) {
+  const host = req.headers.host || 'localhost';
+  const request = new Request(`http://${host}${req.url || '/'}`, {
+    method: req.method,
+    headers: req.headers,
+    body: req,
+    duplex: 'half',
+  });
+  return request.formData();
 }
 
 function formatBytes(bytes) {
@@ -209,14 +243,103 @@ async function searchFiles(root, query, filter = SEARCH_FILTER.ALL) {
 }
 
 module.exports = async function handler(req, res) {
-  if (!['GET', 'DELETE'].includes(req.method)) {
-    allowMethods(res, ['GET', 'DELETE']);
+  if (!['GET', 'POST', 'DELETE'].includes(req.method)) {
+    allowMethods(res, ['GET', 'POST', 'DELETE']);
     return sendJson(res, 405, { success: false, message: 'Method not allowed' });
   }
 
   const url = new URL(req.url, 'http://localhost');
   const action = String(url.searchParams.get('action') || 'list').trim().toLowerCase();
   const root = resolveArchiveRoot();
+
+  if (req.method === 'POST') {
+    if (action === 'create-folder') {
+      try {
+        const body = await readJsonBody(req);
+        const dir = String(body.dir || '');
+        const name = sanitizeEntryName(body.name, '');
+        if (!name) return sendJson(res, 400, { success: false, message: '폴더명을 입력하세요.' });
+        const relativePath = joinRelativePath(dir, name);
+        const { normalized, absolute } = resolveTargetPath(root, relativePath);
+        const existing = await fs.promises.stat(absolute).catch(() => null);
+        if (existing) return sendJson(res, 409, { success: false, message: '같은 이름의 항목이 이미 있습니다.' });
+        await fs.promises.mkdir(absolute, { recursive: false });
+        return sendJson(res, 200, {
+          success: true,
+          message: '폴더를 생성했습니다.',
+          data: { path: normalized, name },
+        });
+      } catch (error) {
+        return sendJson(res, 400, { success: false, message: error?.message || 'Folder create failed' });
+      }
+    }
+
+    if (action === 'rename-folder') {
+      try {
+        const body = await readJsonBody(req);
+        const sourcePath = String(body.path || '').trim();
+        const nextName = sanitizeEntryName(body.name, '');
+        if (!sourcePath) return sendJson(res, 400, { success: false, message: '폴더 경로가 필요합니다.' });
+        if (!nextName) return sendJson(res, 400, { success: false, message: '폴더명을 입력하세요.' });
+        const { normalized, absolute } = resolveTargetPath(root, sourcePath);
+        const stat = await fs.promises.stat(absolute);
+        if (!stat.isDirectory()) return sendJson(res, 400, { success: false, message: '폴더만 이름을 바꿀 수 있습니다.' });
+        const parent = path.posix.dirname(normalized);
+        const nextRelative = parent === '.' ? nextName : `${parent}/${nextName}`;
+        const target = resolveTargetPath(root, nextRelative);
+        const existing = await fs.promises.stat(target.absolute).catch(() => null);
+        if (existing) return sendJson(res, 409, { success: false, message: '같은 이름의 항목이 이미 있습니다.' });
+        await fs.promises.rename(absolute, target.absolute);
+        return sendJson(res, 200, {
+          success: true,
+          message: '폴더명을 변경했습니다.',
+          data: { oldPath: normalized, path: target.normalized, name: nextName },
+        });
+      } catch (error) {
+        return sendJson(res, 400, { success: false, message: error?.message || 'Folder rename failed' });
+      }
+    }
+
+    if (action === 'upload-file') {
+      try {
+        const form = await readMultipartForm(req);
+        const dir = String(form.get('dir') || '');
+        const uploaded = form.get('file');
+        if (!uploaded || typeof uploaded.arrayBuffer !== 'function') {
+          return sendJson(res, 400, { success: false, message: '업로드할 파일을 선택하세요.' });
+        }
+
+        const originalName = sanitizeEntryName(uploaded.name || 'upload.bin', 'upload.bin');
+        const originalExt = path.extname(originalName);
+        const requestedNameRaw = String(form.get('fileName') || '').trim();
+        let fileName = sanitizeEntryName(requestedNameRaw || originalName, originalName);
+        if (!path.extname(fileName) && originalExt) fileName = `${fileName}${originalExt}`;
+
+        const relativePath = joinRelativePath(dir, fileName);
+        const { normalized, absolute } = resolveTargetPath(root, relativePath);
+        const parentDir = path.dirname(absolute);
+        const parentStat = await fs.promises.stat(parentDir).catch(() => null);
+        if (!parentStat || !parentStat.isDirectory()) {
+          return sendJson(res, 400, { success: false, message: '저장할 폴더가 없습니다.' });
+        }
+        const existing = await fs.promises.stat(absolute).catch(() => null);
+        if (existing) return sendJson(res, 409, { success: false, message: '같은 이름의 파일이 이미 있습니다.' });
+
+        const buffer = Buffer.from(await uploaded.arrayBuffer());
+        if (buffer.length === 0) return sendJson(res, 400, { success: false, message: '빈 파일은 업로드할 수 없습니다.' });
+        await fs.promises.writeFile(absolute, buffer);
+        return sendJson(res, 200, {
+          success: true,
+          message: '파일을 업로드했습니다.',
+          data: { path: normalized, name: fileName },
+        });
+      } catch (error) {
+        return sendJson(res, 400, { success: false, message: error?.message || 'File upload failed' });
+      }
+    }
+
+    return sendJson(res, 400, { success: false, message: 'Invalid action' });
+  }
 
   if (req.method === 'DELETE') {
     if (action !== 'delete') {
@@ -230,17 +353,25 @@ module.exports = async function handler(req, res) {
       }
       const { normalized, absolute } = resolveTargetPath(root, relativePath);
       const stat = await fs.promises.stat(absolute);
-      if (!stat.isFile()) {
-        return sendJson(res, 400, { success: false, message: 'Target is not a file' });
+      if (stat.isDirectory()) {
+        await fs.promises.rm(absolute, { recursive: true, force: false });
+        return sendJson(res, 200, {
+          success: true,
+          message: '폴더를 삭제했습니다.',
+          data: { path: normalized, name: path.basename(absolute), type: 'dir' },
+        });
       }
-      await fs.promises.unlink(absolute);
-      return sendJson(res, 200, {
-        success: true,
-        message: '파일을 삭제했습니다.',
-        data: { path: normalized, name: path.basename(absolute) },
-      });
+      if (stat.isFile()) {
+        await fs.promises.unlink(absolute);
+        return sendJson(res, 200, {
+          success: true,
+          message: '파일을 삭제했습니다.',
+          data: { path: normalized, name: path.basename(absolute), type: 'file' },
+        });
+      }
+      return sendJson(res, 400, { success: false, message: '삭제할 수 없는 항목입니다.' });
     } catch (error) {
-      return sendJson(res, 400, { success: false, message: error?.message || 'File delete failed' });
+      return sendJson(res, 400, { success: false, message: error?.message || 'Delete failed' });
     }
   }
 

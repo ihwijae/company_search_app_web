@@ -38,6 +38,11 @@ function formatFileMeta(file) {
   };
 }
 
+function getExtension(fileName = '') {
+  const match = String(fileName || '').match(/(\.[^./\\]+)$/);
+  return match ? match[1] : '';
+}
+
 export default function ScanArchivePage() {
   const initialSavedState = React.useMemo(() => {
     try {
@@ -65,6 +70,12 @@ export default function ScanArchivePage() {
   const [searchBusy, setSearchBusy] = React.useState(false);
   const [deleteTarget, setDeleteTarget] = React.useState(null);
   const [deleteBusy, setDeleteBusy] = React.useState(false);
+  const [folderDialog, setFolderDialog] = React.useState(null);
+  const [folderName, setFolderName] = React.useState('');
+  const [uploadDialogOpen, setUploadDialogOpen] = React.useState(false);
+  const [uploadFile, setUploadFile] = React.useState(null);
+  const [uploadFileName, setUploadFileName] = React.useState('');
+  const [archiveBusy, setArchiveBusy] = React.useState(false);
   const searchRequestIdRef = React.useRef(0);
   const initialPathRef = React.useRef(String(initialSavedState?.currentPath || ''));
 
@@ -195,7 +206,7 @@ export default function ScanArchivePage() {
     try {
       setDeleteBusy(true);
       setError('');
-      await scanArchiveClient.deleteFile(deleteTarget.path);
+      await scanArchiveClient.deletePath(deleteTarget.path);
       setSelectedFilePath((prev) => (prev === deleteTarget.path ? '' : prev));
       setEntries((prev) => prev.filter((entry) => entry.path !== deleteTarget.path));
       setSearchResults((prev) => prev.filter((entry) => entry.path !== deleteTarget.path));
@@ -211,6 +222,82 @@ export default function ScanArchivePage() {
       setDeleteBusy(false);
     }
   }, [currentPath, deleteTarget, handleGlobalSearch, hasSearchKeyword, loadDirectory]);
+
+  const openCreateFolderDialog = React.useCallback(() => {
+    setFolderDialog({ mode: 'create', target: null });
+    setFolderName('');
+    setError('');
+  }, []);
+
+  const openRenameFolderDialog = React.useCallback((folder) => {
+    setFolderDialog({ mode: 'rename', target: folder });
+    setFolderName(String(folder?.name || ''));
+    setError('');
+  }, []);
+
+  const handleSubmitFolderDialog = React.useCallback(async () => {
+    const nextName = String(folderName || '').trim();
+    if (!nextName) {
+      setError('폴더명을 입력하세요.');
+      return;
+    }
+    try {
+      setArchiveBusy(true);
+      setError('');
+      if (folderDialog?.mode === 'rename') {
+        await scanArchiveClient.renameFolder(folderDialog.target?.path || '', nextName);
+      } else {
+        await scanArchiveClient.createFolder(currentPath, nextName);
+      }
+      setFolderDialog(null);
+      setFolderName('');
+      await loadDirectory(currentPath);
+    } catch (folderError) {
+      setError(folderError?.message || '폴더 작업에 실패했습니다.');
+    } finally {
+      setArchiveBusy(false);
+    }
+  }, [currentPath, folderDialog, folderName, loadDirectory]);
+
+  const openUploadDialog = React.useCallback(() => {
+    setUploadDialogOpen(true);
+    setUploadFile(null);
+    setUploadFileName('');
+    setError('');
+  }, []);
+
+  const handleUploadFileChange = React.useCallback((event) => {
+    const file = event.target.files?.[0] || null;
+    setUploadFile(file);
+    setUploadFileName(file ? String(file.name || '') : '');
+  }, []);
+
+  const handleSubmitUpload = React.useCallback(async () => {
+    if (!uploadFile) {
+      setError('업로드할 파일을 선택하세요.');
+      return;
+    }
+    const nextName = String(uploadFileName || '').trim();
+    if (!nextName) {
+      setError('저장할 파일명을 입력하세요.');
+      return;
+    }
+    try {
+      setArchiveBusy(true);
+      setError('');
+      const response = await scanArchiveClient.uploadFile(currentPath, uploadFile, nextName);
+      const savedPath = response?.data?.path || '';
+      setUploadDialogOpen(false);
+      setUploadFile(null);
+      setUploadFileName('');
+      await loadDirectory(currentPath);
+      if (savedPath) setSelectedFilePath(savedPath);
+    } catch (uploadError) {
+      setError(uploadError?.message || '파일 업로드에 실패했습니다.');
+    } finally {
+      setArchiveBusy(false);
+    }
+  }, [currentPath, loadDirectory, uploadFile, uploadFileName]);
 
   React.useEffect(() => {
     const keyword = String(searchTerm || '').trim();
@@ -246,6 +333,7 @@ export default function ScanArchivePage() {
               <h2>스캔본 폴더</h2>
               <div className="scan-archive-head-actions">
                 <a href={downloadAllUrl} className="scan-archive-download-all">전체 ZIP 다운로드</a>
+                <button type="button" onClick={openCreateFolderDialog} disabled={archiveBusy}>폴더 생성</button>
                 <button type="button" onClick={() => loadDirectory(currentPath)} disabled={loading}>새로고침</button>
               </div>
             </div>
@@ -261,10 +349,16 @@ export default function ScanArchivePage() {
             {error && <p className="scan-archive-error">{error}</p>}
             <div className="scan-archive-list">
               {folders.map((folder) => (
-                <button key={folder.path} type="button" onClick={() => loadDirectory(folder.path)}>
-                  <span>📁 {folder.name}</span>
-                  <span className="scan-archive-file-meta">{formatDate(folder.updatedAt)}</span>
-                </button>
+                <div key={folder.path} className="scan-archive-folder-row">
+                  <button type="button" onClick={() => loadDirectory(folder.path)}>
+                    <span>📁 {folder.name}</span>
+                    <span className="scan-archive-file-meta">{formatDate(folder.updatedAt)}</span>
+                  </button>
+                  <div className="scan-archive-folder-actions">
+                    <button type="button" onClick={() => openRenameFolderDialog(folder)} disabled={archiveBusy}>수정</button>
+                    <button type="button" className="danger" onClick={() => setDeleteTarget(folder)} disabled={archiveBusy}>삭제</button>
+                  </div>
+                </div>
               ))}
               {folders.length === 0 && !loading && <p className="muted">하위 폴더가 없습니다.</p>}
             </div>
@@ -273,6 +367,11 @@ export default function ScanArchivePage() {
           <section className="scan-archive-pane">
             <div className="scan-archive-head">
               <h2>{hasSearchKeyword ? '검색 결과' : '파일 목록'}</h2>
+              {!hasSearchKeyword && (
+                <button type="button" className="scan-archive-upload-button" onClick={openUploadDialog} disabled={archiveBusy}>
+                  파일 업로드
+                </button>
+              )}
             </div>
             <div className="scan-archive-file-controls">
               <input
@@ -410,9 +509,9 @@ export default function ScanArchivePage() {
         {deleteTarget && (
           <div className="scan-archive-confirm-overlay" role="presentation">
             <div className="scan-archive-confirm" role="dialog" aria-modal="true" aria-labelledby="scan-delete-title">
-              <h3 id="scan-delete-title">파일 삭제</h3>
+              <h3 id="scan-delete-title">{deleteTarget.type === 'dir' ? '폴더 삭제' : '파일 삭제'}</h3>
               <p>
-                서버에서 이 파일을 삭제합니다.
+                서버에서 이 {deleteTarget.type === 'dir' ? '폴더와 하위 파일을 모두' : '파일을'} 삭제합니다.
                 <br />
                 <strong>{deleteTarget.name}</strong>
               </p>
@@ -422,6 +521,49 @@ export default function ScanArchivePage() {
                 </button>
                 <button type="button" className="danger" onClick={handleDeleteSelectedFile} disabled={deleteBusy}>
                   {deleteBusy ? '삭제 중...' : '삭제'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {folderDialog && (
+          <div className="scan-archive-confirm-overlay" role="presentation">
+            <div className="scan-archive-confirm" role="dialog" aria-modal="true" aria-labelledby="scan-folder-title">
+              <h3 id="scan-folder-title">{folderDialog.mode === 'rename' ? '폴더명 수정' : '폴더 생성'}</h3>
+              <label className="scan-archive-dialog-field">
+                폴더명
+                <input value={folderName} onChange={(event) => setFolderName(event.target.value)} autoFocus />
+              </label>
+              <div className="scan-archive-confirm-actions">
+                <button type="button" onClick={() => setFolderDialog(null)} disabled={archiveBusy}>취소</button>
+                <button type="button" className="primary" onClick={handleSubmitFolderDialog} disabled={archiveBusy}>
+                  {archiveBusy ? '처리 중...' : '저장'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {uploadDialogOpen && (
+          <div className="scan-archive-confirm-overlay" role="presentation">
+            <div className="scan-archive-confirm scan-archive-upload-dialog" role="dialog" aria-modal="true" aria-labelledby="scan-upload-title">
+              <h3 id="scan-upload-title">파일 업로드</h3>
+              <p className="scan-archive-dialog-help">현재 폴더에 별도 파일을 저장합니다.</p>
+              <label className="scan-archive-dialog-field">
+                파일 선택
+                <input type="file" onChange={handleUploadFileChange} />
+              </label>
+              <label className="scan-archive-dialog-field">
+                저장 파일명
+                <input
+                  value={uploadFileName}
+                  onChange={(event) => setUploadFileName(event.target.value)}
+                  placeholder={uploadFile ? `예: 별도자료${getExtension(uploadFile.name)}` : '파일을 먼저 선택하세요'}
+                />
+              </label>
+              <div className="scan-archive-confirm-actions">
+                <button type="button" onClick={() => setUploadDialogOpen(false)} disabled={archiveBusy}>취소</button>
+                <button type="button" className="primary" onClick={handleSubmitUpload} disabled={archiveBusy}>
+                  {archiveBusy ? '업로드 중...' : '업로드'}
                 </button>
               </div>
             </div>
