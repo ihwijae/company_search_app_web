@@ -61,6 +61,12 @@ const MANAGEMENT_FILE_TYPE_COLORS = {
 };
 const REGION_OPTIONS = ['서울', '경기', '인천', '부산', '대구', '광주', '대전', '울산', '세종', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'];
 
+function inferSheetNameFromRegion(region = '') {
+  const text = String(region || '').trim();
+  if (!text) return '';
+  return REGION_OPTIONS.find((option) => text === option || text.startsWith(`${option} `)) || text;
+}
+
 function buildCreditText(form) {
   const grade = String(form.creditGrade || '').trim();
   const start = String(form.creditStartDate || '').trim();
@@ -594,7 +600,7 @@ export default function ExcelWebEditPage() {
     }
   }, [isPdf, notifyError, notifyInfo, pdfExportFileName, pdfExportPages, removeSourceFile, selectedFile]);
 
-  const handleLoadData = async () => {
+  const handleLoadData = React.useCallback(async () => {
     const bizNo = String(form.bizNo || '').trim();
     if (!bizNo) {
       notifyError('사업자등록번호를 먼저 입력하세요.');
@@ -614,6 +620,7 @@ export default function ExcelWebEditPage() {
       }
 
       const company = result.data.company || {};
+      const formDefaults = result.data.formDefaults || {};
       const colorMap = result.data.colorMap || {};
 
       setLoadedData(company);
@@ -621,7 +628,9 @@ export default function ExcelWebEditPage() {
       setLookupVersion(String(result?.data?.version || ''));
       setForm((prev) => ({
         ...EMPTY_FORM,
-        bizNo: prev.bizNo || bizNo,
+        ...formDefaults,
+        bizNo: formDefaults.bizNo || prev.bizNo || bizNo,
+        region: formDefaults.region || company.region || '',
       }));
       notifyInfo('사업자번호 조회가 완료되었습니다.');
     } catch (error) {
@@ -629,7 +638,7 @@ export default function ExcelWebEditPage() {
     } finally {
       setIsBackendBusy(false);
     }
-  };
+  }, [editorMode, fileType, form.bizNo, notifyError, notifyInfo]);
 
   const handleBizNoKeyDown = React.useCallback((event) => {
     if (event.key !== 'Enter') return;
@@ -806,7 +815,7 @@ export default function ExcelWebEditPage() {
     const region = String(form.region || loadedData?.region || '').trim();
     setCompanySetupDraft({
       companyName: String(form.companyName || loadedData?.companyName || '').trim(),
-      sheetName: mode === 'register' ? region : '',
+      sheetName: mode === 'register' ? inferSheetNameFromRegion(region) : '',
       region,
     });
     setIsCompanySetupModalOpen(true);
@@ -1489,7 +1498,6 @@ export default function ExcelWebEditPage() {
                         setCompanySetupDraft((prev) => ({
                           ...prev,
                           sheetName: nextSheetName,
-                          region: !prev.region || prev.region === prev.sheetName ? nextSheetName : prev.region,
                         }));
                       }}
                       placeholder="예: 경기"

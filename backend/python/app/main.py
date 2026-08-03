@@ -627,7 +627,6 @@ def _extract_company_data_from_workbook(workbook, sheet_name: str, row: int, col
             result[kr_key] = cell.value
         else:
             result[kr_key] = ""
-    result["지역"] = sheet_name
     return result
 
 
@@ -683,7 +682,6 @@ def _extract_company_cells_from_workbook(workbook, sheet_name: str, row: int, co
         else:
             number_format = ""
         result[kr_key] = {"value": value, "color": color, "numberFormat": number_format}
-    result["지역"] = {"value": sheet_name, "color": "#FFFFFF", "numberFormat": ""}
     return result
 
 
@@ -976,7 +974,7 @@ def _add_new_company_data(excel_path: str, form_data: dict, db_type: str) -> dic
         workbook.close()
 
 
-def _build_lookup_payload(raw: dict, db_type: str, excel_path: str, raw_cells: dict | None = None) -> dict:
+def _build_lookup_payload(raw: dict, db_type: str, excel_path: str, sheet_name: str, raw_cells: dict | None = None) -> dict:
     debt_number_format = str((raw_cells or {}).get("부채비율", {}).get("numberFormat") or "")
     current_number_format = str((raw_cells or {}).get("유동비율", {}).get("numberFormat") or "")
     company = {
@@ -1031,7 +1029,7 @@ def _build_lookup_payload(raw: dict, db_type: str, excel_path: str, raw_cells: d
         "source": {
             "dbType": db_type,
             "excelPath": excel_path,
-            "sheetName": company["region"],
+            "sheetName": str(sheet_name or ""),
         },
     }
 
@@ -1501,7 +1499,7 @@ def company_lookup(payload: LookupRequest) -> ApiResponse:
             sheet_name, row, col = position
             raw = _extract_company_data_from_workbook(workbook, sheet_name, row, col)
             raw_cells = _extract_company_cells_from_workbook(workbook, sheet_name, row, col)
-            lookup_payload = _build_lookup_payload(raw, db_type, excel_path, raw_cells=raw_cells)
+            lookup_payload = _build_lookup_payload(raw, db_type, excel_path, sheet_name, raw_cells=raw_cells)
             lookup_payload["version"] = _build_found_version(db_type, excel_path, biz_no, sheet_name, row, col, raw)
             return ApiResponse(
                 success=True,

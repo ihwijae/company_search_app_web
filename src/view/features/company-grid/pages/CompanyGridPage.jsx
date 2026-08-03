@@ -164,7 +164,7 @@ const yearsSince = (date) => {
 const getCompanyValue = (company, row) => {
   if (!company || !row) return '';
   if (row.kind === 'region') {
-    return company['대표지역'] || company['지역'] || '';
+    return company['지역'] || company['대표지역'] || '';
   }
   return company[row.key] ?? '';
 };
@@ -180,7 +180,7 @@ const formatCopyValue = (company, key) => {
   const percentKeys = ['부채비율', '유동비율'];
   const formattedKeys = ['시평', '3년 실적', '5년 실적'];
   const raw = key === '지역'
-    ? (company?.['대표지역'] || company?.['지역'] || '')
+    ? (company?.['지역'] || company?.['대표지역'] || '')
     : (company?.[key] ?? '');
 
   if (percentKeys.includes(key)) return formatPercent(raw);
