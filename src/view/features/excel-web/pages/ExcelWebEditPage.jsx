@@ -54,6 +54,7 @@ const EDITOR_MODE = {
   CREDIT: 'credit',
 };
 
+const MANAGEMENT_FILE_TYPE_PLACEHOLDER = '';
 const MANAGEMENT_FILE_TYPES = ['전기경영상태', '통신경영상태', '소방경영상태'];
 const MANAGEMENT_FILE_TYPE_COLORS = {
   전기경영상태: '#ca8a04',
@@ -153,7 +154,7 @@ function buildCreditLookupPreview(loadedData) {
 export default function ExcelWebEditPage() {
   const { notify } = useFeedback();
   const [activeMenu, setActiveMenu] = React.useState('excel-web-edit');
-  const [fileType, setFileType] = React.useState('전기경영상태');
+  const [fileType, setFileType] = React.useState(MANAGEMENT_FILE_TYPE_PLACEHOLDER);
   const [editorMode, setEditorMode] = React.useState(EDITOR_MODE.MANAGEMENT);
   const [sourceFiles, setSourceFiles] = React.useState([]);
   const [selectedFileId, setSelectedFileId] = React.useState('');
@@ -199,6 +200,13 @@ export default function ExcelWebEditPage() {
     if (!message) return;
     notify({ type: 'error', title: '오류', message, duration: 4800 });
   }, [notify]);
+
+  const requireManagementFileType = React.useCallback(() => {
+    if (editorMode !== EDITOR_MODE.MANAGEMENT) return true;
+    if (fileType) return true;
+    notifyError('자료 종류를 먼저 선택하세요.');
+    return false;
+  }, [editorMode, fileType, notifyError]);
 
   const selectedFile = React.useMemo(
     () => sourceFiles.find((file) => file.id === selectedFileId) || null,
@@ -607,6 +615,7 @@ export default function ExcelWebEditPage() {
   }, [isPdf, notifyError, notifyInfo, pdfExportFileName, pdfExportPages, removeSourceFile, selectedFile]);
 
   const handleLoadData = React.useCallback(async () => {
+    if (!requireManagementFileType()) return;
     const bizNo = String(form.bizNo || '').trim();
     if (!bizNo) {
       notifyError('사업자등록번호를 먼저 입력하세요.');
@@ -641,7 +650,7 @@ export default function ExcelWebEditPage() {
     } finally {
       setIsBackendBusy(false);
     }
-  }, [editorMode, fileType, form.bizNo, notifyError, notifyInfo]);
+  }, [editorMode, fileType, form.bizNo, notifyError, notifyInfo, requireManagementFileType]);
 
   const handleBizNoKeyDown = React.useCallback((event) => {
     if (event.key !== 'Enter') return;
@@ -658,12 +667,13 @@ export default function ExcelWebEditPage() {
       return;
     }
     if (editorMode === EDITOR_MODE.MANAGEMENT && fileType === '신용평가') {
-      setFileType('전기경영상태');
+      setFileType(MANAGEMENT_FILE_TYPE_PLACEHOLDER);
       setLookupVersion('');
     }
   }, [editorMode, fileType]);
 
   const handleYearEndUpdate = async () => {
+    if (!requireManagementFileType()) return;
     try {
       setIsBackendBusy(true);
       const result = await excelEditBackendClient.updateYearEndColor({
@@ -682,6 +692,7 @@ export default function ExcelWebEditPage() {
   };
 
   const handleCreditExpiryUpdate = async () => {
+    if (!requireManagementFileType()) return;
     try {
       setIsBackendBusy(true);
       const result = await excelEditBackendClient.updateCreditExpiry({
@@ -719,6 +730,7 @@ export default function ExcelWebEditPage() {
     setLoadedData(null);
     setLoadedColorMap({});
     setLookupVersion('');
+    setFileType((prev) => (prev === '신용평가' ? prev : MANAGEMENT_FILE_TYPE_PLACEHOLDER));
     setForm(EMPTY_FORM);
     setPdfPageNumber(1);
     setPdfError('');
@@ -733,6 +745,7 @@ export default function ExcelWebEditPage() {
   }, []);
 
   const handleSave = async () => {
+    if (!requireManagementFileType()) return;
     const bizNo = String(form.bizNo || '').trim();
     if (!bizNo) {
       notifyError('사업자등록번호를 먼저 입력하세요.');
@@ -789,6 +802,7 @@ export default function ExcelWebEditPage() {
   };
 
   const handleDeleteCompany = async () => {
+    if (!requireManagementFileType()) return;
     const bizNo = String(form.bizNo || loadedData?.bizNo || '').trim();
     if (!bizNo) {
       notifyError('삭제할 업체의 사업자등록번호가 없습니다. 먼저 불러오기를 진행하세요.');
@@ -825,6 +839,7 @@ export default function ExcelWebEditPage() {
   }, [form.companyName, form.region, loadedData?.companyName, loadedData?.region]);
 
   const saveArchiveOnlyWithDraft = React.useCallback(async ({ companyName, region }) => {
+    if (!requireManagementFileType()) return false;
     if (!selectedFile?.file && !selectedFile?.uploadId) {
       notifyError('저장할 파일이 없습니다. 파일을 먼저 업로드하세요.');
       return false;
@@ -860,7 +875,7 @@ export default function ExcelWebEditPage() {
       setIsBackendBusy(false);
       setBackendStatusMessage('');
     }
-  }, [fileType, form.bizNo, lookupVersion, notifyError, notifyInfo, resetEditorState, selectedFile]);
+  }, [fileType, form.bizNo, lookupVersion, notifyError, notifyInfo, requireManagementFileType, resetEditorState, selectedFile]);
 
   const handleConfirmCompanySetup = React.useCallback(async () => {
     const companyName = String(companySetupDraft.companyName || '').trim();
@@ -1242,8 +1257,11 @@ export default function ExcelWebEditPage() {
                         setLookupVersion('');
                       }}
                     >
+                      <option value={MANAGEMENT_FILE_TYPE_PLACEHOLDER} disabled>
+                        종류를 선택하세요
+                      </option>
                       {MANAGEMENT_FILE_TYPES.map((type) => (
-                        <option key={type} style={{ color: MANAGEMENT_FILE_TYPE_COLORS[type] || '#0f172a' }}>
+                        <option key={type} value={type} style={{ color: MANAGEMENT_FILE_TYPE_COLORS[type] || '#0f172a' }}>
                           {type}
                         </option>
                       ))}
