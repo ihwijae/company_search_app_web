@@ -1132,7 +1132,7 @@ const normalizeBizNo = (value) => (value ? String(value).replace(/[^0-9]/g, '') 
 const pickCandidateRefreshPreservedFields = (candidate = {}) => {
   const preserved = {};
   Object.keys(candidate || {}).forEach((key) => {
-    if (CANDIDATE_REFRESH_PRESERVE_KEYS.has(key) || key.startsWith('_agreement')) {
+    if (CANDIDATE_REFRESH_PRESERVE_KEYS.has(key)) {
       preserved[key] = candidate[key];
     }
   });
@@ -2582,6 +2582,8 @@ export default function AgreementBoardWindow({
         };
       });
 
+      candidateScoreCacheRef.current.clear();
+      setCandidateMetricsVersion((prev) => prev + 1);
       onUpdateBoard({ candidates: nextCandidates });
       notify({
         type: 'success',
