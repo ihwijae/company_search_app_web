@@ -1773,6 +1773,25 @@ button.primary:hover { background: var(--accent-2); }
   border-color: #cbd5e1;
   cursor: not-allowed;
 }
+.excel-field-block.bid-amount-disabled-block {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+.excel-field-block input.bid-amount-unused-input {
+  background: #e2e8f0;
+  color: #475569;
+  border-color: #94a3b8;
+  font-weight: 700;
+  text-align: center;
+  cursor: not-allowed;
+  opacity: 1;
+}
+.excel-field-block .readonly-note.bid-amount-unused-note {
+  color: #64748b;
+  font-weight: 700;
+  padding: 1px 2px 0;
+  text-align: center;
+}
 .field-label { font-size: 11px; font-weight: 600; color: #334155; letter-spacing: 0.04em; }
 .field-label.sub { font-size: 10px; font-weight: 500; color: #64748b; letter-spacing: 0; }
 .excel-field-block .input,

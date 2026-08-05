@@ -1,5 +1,6 @@
 import React from 'react';
 import agreementBoardClient from '../../../../shared/agreementBoardClient.js';
+import { usesBidAmountLimit } from '../../../../shared/agreements/templateConfigs.web.js';
 
 const DEFAULT_FILTERS = {
   ownerId: '',
@@ -79,71 +80,75 @@ export default function useAgreementBoardStorage({
   const [loadRootPath, setLoadRootPath] = React.useState('');
   const [activeAgreementPath, setActiveAgreementPath] = React.useState('');
 
-  const buildAgreementSnapshot = React.useCallback(() => ({
-    meta: {
-      ownerId,
-      ownerLabel: ownerDisplayLabel,
-      rangeId: selectedRangeOption?.key || '',
-      rangeLabel: selectedRangeOption?.label || '',
-      industryLabel: industryLabel || '',
-      dutyRegions: Array.isArray(dutyRegions) ? dutyRegions.slice() : [],
-      estimatedAmount: parseNumeric(estimatedAmount),
-      estimatedAmountLabel: estimatedAmount || '',
-      noticeDate: noticeDate || '',
-      noticeNo: noticeNo || '',
-      noticeTitle: noticeTitle || '',
-      savedById: currentUserId || '',
-      savedByName: currentUserName || currentUserId || '',
-      smsStatus: String(smsStatus || '').trim().toLowerCase() === 'sent' ? 'sent' : 'pending',
-      smsCompletedAt: smsCompletedAt || '',
-    },
-    payload: {
-      ownerId,
-      rangeId: selectedRangeOption?.key || '',
-      industryLabel: industryLabel || '',
-      splitIndustryLabel: splitIndustryLabel || '',
-      splitEntryAmount: splitEntryAmount || '',
-      estimatedAmount: estimatedAmount || '',
-      baseAmount: baseAmount || '',
-      bidAmount: bidAmount || '',
-      ratioBaseAmount: ratioBaseAmount || '',
-      bidRate: bidRate || '',
-      adjustmentRate: adjustmentRate || '',
-      entryAmount: entryAmount || '',
-      entryMode: entryModeResolved || '',
-      noticeNo: noticeNo || '',
-      noticeTitle: noticeTitle || '',
-      noticeDate: noticeDate || '',
-      savedById: currentUserId || '',
-      savedByName: currentUserName || currentUserId || '',
-      smsStatus: String(smsStatus || '').trim().toLowerCase() === 'sent' ? 'sent' : 'pending',
-      smsCompletedAt: smsCompletedAt || '',
-      bidDeadline: bidDeadline || '',
-      regionDutyRate: regionDutyRate || '',
-      participantLimit: participantLimit || safeGroupSize,
-      dutyRegions: Array.isArray(dutyRegions) ? dutyRegions.slice() : [],
-      groupSize: safeGroupSize,
-      fileType: fileType || '',
-      netCostAmount: netCostAmount || '',
-      aValue: aValue || '',
-      memoHtml: memoHtml || '',
-      candidates: Array.isArray(candidates) ? candidates : [],
-      pinned: Array.isArray(pinned) ? pinned : [],
-      excluded: Array.isArray(excluded) ? excluded : [],
-      alwaysInclude: Array.isArray(alwaysInclude) ? alwaysInclude : [],
-      groupAssignments: Array.isArray(groupAssignments) ? groupAssignments : [],
-      groupShares: Array.isArray(groupShares) ? groupShares : [],
-      groupShareRawInputs: Array.isArray(groupShareRawInputs) ? groupShareRawInputs : [],
-      groupCredibility: Array.isArray(groupCredibility) ? groupCredibility : [],
-      groupTechnicianScores: Array.isArray(groupTechnicianScores) ? groupTechnicianScores : [],
-      groupApprovals: Array.isArray(groupApprovals) ? groupApprovals : [],
-      groupManagementBonus: Array.isArray(groupManagementBonus) ? groupManagementBonus : [],
-      groupQualityScores: Array.isArray(groupQualityScores) ? groupQualityScores : [],
-      technicianEntriesByTarget: technicianEntriesByTarget && typeof technicianEntriesByTarget === 'object'
-        ? technicianEntriesByTarget
-        : {},
-    },
-  }), [
+  const buildAgreementSnapshot = React.useCallback(() => {
+    const rangeId = selectedRangeOption?.key || '';
+    const shouldKeepBidAmount = usesBidAmountLimit(ownerId, rangeId);
+    return {
+      meta: {
+        ownerId,
+        ownerLabel: ownerDisplayLabel,
+        rangeId,
+        rangeLabel: selectedRangeOption?.label || '',
+        industryLabel: industryLabel || '',
+        dutyRegions: Array.isArray(dutyRegions) ? dutyRegions.slice() : [],
+        estimatedAmount: parseNumeric(estimatedAmount),
+        estimatedAmountLabel: estimatedAmount || '',
+        noticeDate: noticeDate || '',
+        noticeNo: noticeNo || '',
+        noticeTitle: noticeTitle || '',
+        savedById: currentUserId || '',
+        savedByName: currentUserName || currentUserId || '',
+        smsStatus: String(smsStatus || '').trim().toLowerCase() === 'sent' ? 'sent' : 'pending',
+        smsCompletedAt: smsCompletedAt || '',
+      },
+      payload: {
+        ownerId,
+        rangeId,
+        industryLabel: industryLabel || '',
+        splitIndustryLabel: splitIndustryLabel || '',
+        splitEntryAmount: splitEntryAmount || '',
+        estimatedAmount: estimatedAmount || '',
+        baseAmount: baseAmount || '',
+        bidAmount: shouldKeepBidAmount ? (bidAmount || '') : '',
+        ratioBaseAmount: ratioBaseAmount || '',
+        bidRate: bidRate || '',
+        adjustmentRate: adjustmentRate || '',
+        entryAmount: entryAmount || '',
+        entryMode: entryModeResolved || '',
+        noticeNo: noticeNo || '',
+        noticeTitle: noticeTitle || '',
+        noticeDate: noticeDate || '',
+        savedById: currentUserId || '',
+        savedByName: currentUserName || currentUserId || '',
+        smsStatus: String(smsStatus || '').trim().toLowerCase() === 'sent' ? 'sent' : 'pending',
+        smsCompletedAt: smsCompletedAt || '',
+        bidDeadline: bidDeadline || '',
+        regionDutyRate: regionDutyRate || '',
+        participantLimit: participantLimit || safeGroupSize,
+        dutyRegions: Array.isArray(dutyRegions) ? dutyRegions.slice() : [],
+        groupSize: safeGroupSize,
+        fileType: fileType || '',
+        netCostAmount: netCostAmount || '',
+        aValue: aValue || '',
+        memoHtml: memoHtml || '',
+        candidates: Array.isArray(candidates) ? candidates : [],
+        pinned: Array.isArray(pinned) ? pinned : [],
+        excluded: Array.isArray(excluded) ? excluded : [],
+        alwaysInclude: Array.isArray(alwaysInclude) ? alwaysInclude : [],
+        groupAssignments: Array.isArray(groupAssignments) ? groupAssignments : [],
+        groupShares: Array.isArray(groupShares) ? groupShares : [],
+        groupShareRawInputs: Array.isArray(groupShareRawInputs) ? groupShareRawInputs : [],
+        groupCredibility: Array.isArray(groupCredibility) ? groupCredibility : [],
+        groupTechnicianScores: Array.isArray(groupTechnicianScores) ? groupTechnicianScores : [],
+        groupApprovals: Array.isArray(groupApprovals) ? groupApprovals : [],
+        groupManagementBonus: Array.isArray(groupManagementBonus) ? groupManagementBonus : [],
+        groupQualityScores: Array.isArray(groupQualityScores) ? groupQualityScores : [],
+        technicianEntriesByTarget: technicianEntriesByTarget && typeof technicianEntriesByTarget === 'object'
+          ? technicianEntriesByTarget
+          : {},
+      },
+    };
+  }, [
     ownerId,
     ownerDisplayLabel,
     selectedRangeOption?.key,
@@ -315,15 +320,18 @@ export default function useAgreementBoardStorage({
 
   const applyAgreementSnapshot = React.useCallback((snapshot) => {
     if (!snapshot || typeof snapshot !== 'object') return;
+    const nextOwnerId = snapshot.ownerId || ownerId;
+    const nextRangeId = snapshot.rangeId || null;
+    const shouldKeepBidAmount = usesBidAmountLimit(nextOwnerId, nextRangeId);
     const next = {
-      ownerId: snapshot.ownerId || ownerId,
-      rangeId: snapshot.rangeId || null,
+      ownerId: nextOwnerId,
+      rangeId: nextRangeId,
       industryLabel: snapshot.industryLabel || '',
       splitIndustryLabel: snapshot.splitIndustryLabel || '',
       splitEntryAmount: snapshot.splitEntryAmount || '',
       estimatedAmount: snapshot.estimatedAmount || '',
       baseAmount: snapshot.baseAmount || '',
-      bidAmount: snapshot.bidAmount || '',
+      bidAmount: shouldKeepBidAmount ? (snapshot.bidAmount || '') : '',
       ratioBaseAmount: snapshot.ratioBaseAmount || '',
       bidRate: snapshot.bidRate || '',
       adjustmentRate: snapshot.adjustmentRate || '',

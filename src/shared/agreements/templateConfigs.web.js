@@ -474,3 +474,12 @@ export const isWebAgreementRangeCalculationImplemented = (ownerId, rangeId, file
   if (ownerKey === 'KGAS' && rangeKey === KGAS_50_TO_100_KEY) return true;
   return isWebAgreementRangeImplemented(ownerId, rangeId, fileType);
 };
+
+export const usesBidAmountLimit = (ownerId, rangeId) => {
+  const ownerKey = String(ownerId || '').toUpperCase();
+  const rangeKey = String(rangeId || '').toLowerCase();
+  if (ownerKey === 'PPS') return rangeKey === PPS_UNDER_50_KEY || rangeKey === PPS_50_TO_100_KEY;
+  if (ownerKey === 'KGAS') return rangeKey === KGAS_UNDER_50_KEY || rangeKey === KGAS_50_TO_100_KEY;
+  if (ownerKey === 'MOIS') return rangeKey === MOIS_30_TO_50_KEY || rangeKey === MOIS_50_TO_100_KEY;
+  return false;
+};

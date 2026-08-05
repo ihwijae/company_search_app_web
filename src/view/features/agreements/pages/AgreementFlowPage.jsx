@@ -13,7 +13,10 @@ import { useAgreementBoard } from '../context/AgreementBoardContext.jsx';
 import { BASE_ROUTES, AGREEMENT_GROUPS, AGREEMENT_MENU_ITEMS, findMenuByKey } from '../../../../shared/navigation.js';
 import { loadPersisted, savePersisted } from '../../../../shared/persistence.js';
 import { normalizeRegionName, normalizeRegionList } from '../../../../shared/regionNormalizer.js';
-import { isWebAgreementRangeCalculationImplemented } from '../../../../shared/agreements/templateConfigs.web.js';
+import {
+  isWebAgreementRangeCalculationImplemented,
+  usesBidAmountLimit,
+} from '../../../../shared/agreements/templateConfigs.web.js';
 import { usesPpsCriteria } from '../../../../shared/agreements/ownerCriteria.js';
 import searchClient from '../../../../shared/searchClient.js';
 
@@ -130,7 +133,11 @@ export default function AgreementFlowPage({
   const entryMode = form.entryQualificationMode === 'sum'
     ? 'sum'
     : (form.entryQualificationMode === 'none' ? 'none' : 'ratio');
-  const showTenderFields = (isPPS || isMoisBidRange);
+  const usesBidAmountCriteria = React.useMemo(
+    () => usesBidAmountLimit(resolvedOwnerId, activeMenuKey),
+    [activeMenuKey, resolvedOwnerId],
+  );
+  const showTenderFields = usesBidAmountCriteria;
   const [baseTouched, setBaseTouched] = React.useState(false);
   const [bidTouched, setBidTouched] = React.useState(false);
   const baseAutoRef = React.useRef('');
@@ -211,6 +218,16 @@ export default function AgreementFlowPage({
       return changed ? next : prev;
     });
   }, [isPPSUnder50, isMoisBidRange, isMois50To100, entryMode]);
+
+  React.useEffect(() => {
+    if (usesBidAmountCriteria) return;
+    setBidTouched(false);
+    bidAutoRef.current = '';
+    setForm((prev) => {
+      if (!prev.bidAmount && (prev.bidAmountMode || 'auto') === 'auto') return prev;
+      return { ...prev, bidAmount: '', bidAmountMode: 'auto' };
+    });
+  }, [usesBidAmountCriteria]);
 
   React.useEffect(() => {
     const groupSizeValue = Number(form.teamSizeMax) > 0 ? Number(form.teamSizeMax) : 5;
@@ -442,6 +459,9 @@ export default function AgreementFlowPage({
   React.useEffect(() => {
     if (boardState?.open) return;
 
+    const resolvedBidAmount = usesBidAmountCriteria ? (form.bidAmount || '') : '';
+    const resolvedBidAmountMode = usesBidAmountCriteria ? (form.bidAmountMode || 'auto') : 'auto';
+
     const same = boardState?.noticeNo === (form.noticeNo || '')
       && boardState?.noticeTitle === (form.title || '')
       && boardState?.industryLabel === (form.industry || '')
@@ -450,8 +470,8 @@ export default function AgreementFlowPage({
       && boardState?.noticeDate === (form.noticeDate || '')
       && boardState?.bidDeadline === (form.bidDeadline || '')
       && boardState?.regionDutyRate === (form.regionDutyRate || '')
-      && boardState?.bidAmount === (form.bidAmount || '')
-      && (boardState?.bidAmountMode || 'auto') === (form.bidAmountMode || 'auto')
+      && boardState?.bidAmount === resolvedBidAmount
+      && (boardState?.bidAmountMode || 'auto') === resolvedBidAmountMode
       && boardState?.aValue === (form.aValue || '')
       && boardState?.ratioBaseAmount === (form.ratioBaseAmount || '')
       && boardState?.bidRate === (form.bidRate || '')
@@ -468,8 +488,8 @@ export default function AgreementFlowPage({
       estimatedAmount: form.estimatedPrice || '',
       bidDeadline: form.bidDeadline || '',
       regionDutyRate: form.regionDutyRate || '',
-      bidAmount: form.bidAmount || '',
-      bidAmountMode: form.bidAmountMode || 'auto',
+      bidAmount: resolvedBidAmount,
+      bidAmountMode: resolvedBidAmountMode,
       aValue: form.aValue || '',
       ratioBaseAmount: form.ratioBaseAmount || '',
       bidRate: form.bidRate || '',
@@ -510,14 +530,15 @@ export default function AgreementFlowPage({
     form.bidRate,
     form.adjustmentRate,
     form.entryQualificationAmount,
+    usesBidAmountCriteria,
     entryMode,
     updateBoard,
   ]);
 
   React.useEffect(() => {
     if (!boardState?.open) return;
-    const bidFromBoard = boardState.bidAmount || '';
-    const bidAmountModeFromBoard = boardState.bidAmountMode || 'auto';
+    const bidFromBoard = usesBidAmountCriteria ? (boardState.bidAmount || '') : '';
+    const bidAmountModeFromBoard = usesBidAmountCriteria ? (boardState.bidAmountMode || 'auto') : 'auto';
     const ratioFromBoard = boardState.ratioBaseAmount || '';
     const entryFromBoard = boardState.entryAmount || '';
     const modeFromBoard = boardState.entryMode === 'sum'
@@ -556,7 +577,7 @@ export default function AgreementFlowPage({
     if (Object.keys(updates).length > 0) {
       setForm((prev) => ({ ...prev, ...updates }));
     }
-  }, [boardState?.open, boardState?.bidAmount, boardState?.bidAmountMode, boardState?.ratioBaseAmount, boardState?.entryAmount, boardState?.entryMode, boardState?.bidRate, boardState?.adjustmentRate, boardState?.aValue, form.bidAmount, form.bidAmountMode, form.ratioBaseAmount, form.entryQualificationAmount, form.bidRate, form.adjustmentRate, form.aValue, entryMode]);
+  }, [boardState?.open, boardState?.bidAmount, boardState?.bidAmountMode, boardState?.ratioBaseAmount, boardState?.entryAmount, boardState?.entryMode, boardState?.bidRate, boardState?.adjustmentRate, boardState?.aValue, form.bidAmount, form.bidAmountMode, form.ratioBaseAmount, form.entryQualificationAmount, form.bidRate, form.adjustmentRate, form.aValue, usesBidAmountCriteria, entryMode]);
 
   const evalSingleBid = (company) => {
     if (!company) return;
@@ -645,18 +666,18 @@ export default function AgreementFlowPage({
     entryMode,
     baseAmount: form.baseAmount,
     estimatedAmount: form.estimatedPrice,
-    bidAmount: form.bidAmount,
-    bidAmountMode: form.bidAmountMode || 'auto',
+    bidAmount: usesBidAmountCriteria ? form.bidAmount : '',
+    bidAmountMode: usesBidAmountCriteria ? (form.bidAmountMode || 'auto') : 'auto',
     aValue: form.aValue,
     bidRate: form.bidRate,
     adjustmentRate: form.adjustmentRate,
     perfectPerformanceAmount,
     perfectPerformanceBasis,
     dutyRegions,
-    ratioBaseAmount: isPPS ? (form.bidAmount || '') : (form.ratioBaseAmount || form.bidAmount || ''),
+    ratioBaseAmount: isPPS && usesBidAmountCriteria ? (form.bidAmount || '') : (form.ratioBaseAmount || ''),
     defaultExcludeSingle: true,
     readOnly: true,
-  }), [resolvedOwnerId, activeMenuKey, currentFileType, form.noticeNo, form.title, form.noticeDate, form.industry, form.entryQualificationAmount, entryMode, form.baseAmount, form.estimatedPrice, form.bidAmount, form.bidAmountMode, form.aValue, form.bidRate, form.adjustmentRate, perfectPerformanceAmount, perfectPerformanceBasis, dutyRegions, isPPS, form.ratioBaseAmount]);
+  }), [resolvedOwnerId, activeMenuKey, currentFileType, form.noticeNo, form.title, form.noticeDate, form.industry, form.entryQualificationAmount, entryMode, form.baseAmount, form.estimatedPrice, form.bidAmount, form.bidAmountMode, form.aValue, form.bidRate, form.adjustmentRate, perfectPerformanceAmount, perfectPerformanceBasis, dutyRegions, isPPS, usesBidAmountCriteria, form.ratioBaseAmount]);
 
   const handleOpenRegionSearch = useCallback(() => {
     const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -698,10 +719,10 @@ export default function AgreementFlowPage({
       industryLabel: form.industry || '',
       baseAmount: form.baseAmount || '',
       estimatedAmount: form.estimatedPrice || '',
-      bidAmount: form.bidAmount || '',
-      bidAmountMode: form.bidAmountMode || 'auto',
+      bidAmount: usesBidAmountCriteria ? (form.bidAmount || '') : '',
+      bidAmountMode: usesBidAmountCriteria ? (form.bidAmountMode || 'auto') : 'auto',
       aValue: form.aValue || '',
-      ratioBaseAmount: isPPS ? (form.bidAmount || '') : (form.ratioBaseAmount || form.bidAmount || ''),
+      ratioBaseAmount: isPPS && usesBidAmountCriteria ? (form.bidAmount || '') : (form.ratioBaseAmount || ''),
       bidRate: form.bidRate || '',
       adjustmentRate: form.adjustmentRate || '',
       bidDeadline: form.bidDeadline || '',
@@ -710,7 +731,7 @@ export default function AgreementFlowPage({
       entryMode,
       inlineMode: false,
     });
-  }, [openBoard, dutyRegions, form.teamSizeMax, resolvedOwnerId, currentFileType, activeMenuKey, form.noticeNo, form.title, form.industry, form.baseAmount, form.estimatedPrice, form.bidAmount, form.bidAmountMode, form.aValue, isPPS, form.ratioBaseAmount, form.bidRate, form.adjustmentRate, form.bidDeadline, form.regionDutyRate, form.entryQualificationAmount, entryMode]);
+  }, [openBoard, dutyRegions, form.teamSizeMax, resolvedOwnerId, currentFileType, activeMenuKey, form.noticeNo, form.title, form.industry, form.baseAmount, form.estimatedPrice, form.bidAmount, form.bidAmountMode, form.aValue, isPPS, usesBidAmountCriteria, form.ratioBaseAmount, form.bidRate, form.adjustmentRate, form.bidDeadline, form.regionDutyRate, form.entryQualificationAmount, entryMode]);
 
   return (
     <div className="app-shell">

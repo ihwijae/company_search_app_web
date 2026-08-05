@@ -38,6 +38,7 @@ import {
   isWebAgreementRangeCalculationImplemented,
   resolveWebAgreementTemplateConfig,
   resolveWebAgreementTemplateKey,
+  usesBidAmountLimit,
 } from '../../../../shared/agreements/templateConfigs.web.js';
 import { needsLeaderBizNo, resolveCriteriaOwnerId, usesPpsCriteria } from '../../../../shared/agreements/ownerCriteria.js';
 import {
@@ -1388,6 +1389,10 @@ export default function AgreementBoardWindow({
     rangeOptions.find((item) => item.key === rangeId) || rangeOptions[0] || null
   ), [rangeId, rangeOptions]);
   const selectedRangeKey = selectedRangeOption?.key || '';
+  const usesBidAmountCriteria = React.useMemo(
+    () => usesBidAmountLimit(ownerKeyUpper, selectedRangeKey),
+    [ownerKeyUpper, selectedRangeKey],
+  );
   const rangeImplemented = React.useMemo(
     () => isWebAgreementRangeCalculationImplemented(ownerKeyUpper, selectedRangeKey, fileType),
     [fileType, ownerKeyUpper, selectedRangeKey],
@@ -1604,14 +1609,24 @@ export default function AgreementBoardWindow({
     const group = agreementGroupsForBoard.find((item) => item.id === groupId);
     if (!group) return;
     const nextRange = group.items && group.items.length > 0 ? group.items[0].key : null;
-    if (typeof onUpdateBoard === 'function') onUpdateBoard({ ownerId: group.ownerId, rangeId: nextRange });
+    const nextUpdates = { ownerId: group.ownerId, rangeId: nextRange };
+    if (!usesBidAmountLimit(group.ownerId, nextRange)) {
+      nextUpdates.bidAmount = '';
+      nextUpdates.bidAmountMode = 'auto';
+    }
+    if (typeof onUpdateBoard === 'function') onUpdateBoard(nextUpdates);
   }, [agreementGroupsForBoard, onUpdateBoard]);
 
   const handleRangeSelectChange = React.useCallback((event) => {
     const nextKey = event.target.value || null;
     if (nextKey === rangeId) return;
-    if (typeof onUpdateBoard === 'function') onUpdateBoard({ rangeId: nextKey });
-  }, [onUpdateBoard, rangeId]);
+    const nextUpdates = { rangeId: nextKey };
+    if (!usesBidAmountLimit(ownerKeyUpper, nextKey)) {
+      nextUpdates.bidAmount = '';
+      nextUpdates.bidAmountMode = 'auto';
+    }
+    if (typeof onUpdateBoard === 'function') onUpdateBoard(nextUpdates);
+  }, [onUpdateBoard, ownerKeyUpper, rangeId]);
 
   const handleNoticeNoChange = React.useCallback((event) => {
     if (typeof onUpdateBoard === 'function') onUpdateBoard({ noticeNo: event.target.value });
@@ -1945,6 +1960,13 @@ export default function AgreementBoardWindow({
   }, [onUpdateBoard]);
 
   const handleBidAmountModeChange = React.useCallback((event) => {
+    if (!usesBidAmountCriteria) {
+      setBidTouched(false);
+      bidAutoRef.current = '';
+      setEditableBidAmount('');
+      if (typeof onUpdateBoard === 'function') onUpdateBoard({ bidAmount: '', bidAmountMode: 'auto' });
+      return;
+    }
     const nextMode = event.target.checked ? 'auto' : 'manual';
     const updates = { bidAmountMode: nextMode };
     if (nextMode === 'auto') {
@@ -1963,7 +1985,7 @@ export default function AgreementBoardWindow({
       setBidTouched(Boolean(String(editableBidAmount || '').trim()));
     }
     if (typeof onUpdateBoard === 'function') onUpdateBoard(updates);
-  }, [aValue, adjustmentRate, baseAmount, bidRate, editableBidAmount, onUpdateBoard]);
+  }, [aValue, adjustmentRate, baseAmount, bidRate, editableBidAmount, onUpdateBoard, usesBidAmountCriteria]);
 
   const markSkipAssignmentSync = React.useCallback(() => {
     skipAssignmentSyncRef.current = true;
@@ -1985,12 +2007,12 @@ export default function AgreementBoardWindow({
   const possibleShareBase = React.useMemo(() => {
     const sources = ownerKeyUpper === 'LH'
       ? [ratioBaseAmount]
-      : [editableBidAmount, bidAmount];
+      : (usesBidAmountCriteria ? [editableBidAmount, bidAmount] : []);
     for (const source of sources) {
       const parsed = parseAmountValue(source);
       if (parsed !== null && parsed > 0) return parsed;
     }
-    if (ownerKeyUpper === 'MOIS' && (selectedRangeKey === MOIS_30_TO_50_KEY || selectedRangeKey === MOIS_50_TO_100_KEY)) {
+    if (usesBidAmountCriteria && ownerKeyUpper === 'MOIS' && (selectedRangeKey === MOIS_30_TO_50_KEY || selectedRangeKey === MOIS_50_TO_100_KEY)) {
       const baseValue = parseAmountValue(baseAmount);
       const bidRateValue = parsePercentValue(bidRate);
       const adjustmentValue = parsePercentValue(adjustmentRate);
@@ -2004,7 +2026,7 @@ export default function AgreementBoardWindow({
       }
     }
     return null;
-  }, [ownerKeyUpper, selectedRangeKey, ratioBaseAmount, editableBidAmount, bidAmount, baseAmount, bidRate, adjustmentRate, aValue, hasAValueInput]);
+  }, [ownerKeyUpper, selectedRangeKey, ratioBaseAmount, editableBidAmount, bidAmount, baseAmount, bidRate, adjustmentRate, aValue, hasAValueInput, usesBidAmountCriteria]);
 
   const { perfectPerformanceAmount, perfectPerformanceBasis } = React.useMemo(() => {
     const rangeKey = ownerKeyUpper === 'LH'
@@ -2124,7 +2146,7 @@ export default function AgreementBoardWindow({
     perfectPerformanceAmount,
     perfectPerformanceBasis,
     dutyRegions,
-    ratioBaseAmount: isPpsUnder50 ? (bidAmount || ratioBaseAmount || '') : (ratioBaseAmount || bidAmount || ''),
+    ratioBaseAmount: isPpsUnder50 && usesBidAmountCriteria ? (bidAmount || ratioBaseAmount || '') : (ratioBaseAmount || ''),
     defaultExcludeSingle: true,
     readOnly: true,
   }), [
@@ -2150,6 +2172,7 @@ export default function AgreementBoardWindow({
     dutyRegions,
     ratioBaseAmount,
     isPpsUnder50,
+    usesBidAmountCriteria,
   ]);
 
   const handleOpenRegionSearch = React.useCallback(() => {
@@ -2878,9 +2901,20 @@ export default function AgreementBoardWindow({
     setBidTouched(false);
     baseAutoRef.current = '';
     bidAutoRef.current = '';
-  }, [ownerKeyUpper]);
+  }, [ownerKeyUpper, selectedRangeKey]);
+
+  React.useEffect(() => {
+    if (ownerKeyUpper === 'LH' || usesBidAmountCriteria) return;
+    setBidTouched(false);
+    bidAutoRef.current = '';
+    setEditableBidAmount('');
+    if ((bidAmount || '') !== '' || (bidAmountMode || 'auto') !== 'auto') {
+      if (typeof onUpdateBoard === 'function') onUpdateBoard({ bidAmount: '', bidAmountMode: 'auto' });
+    }
+  }, [bidAmount, bidAmountMode, onUpdateBoard, ownerKeyUpper, usesBidAmountCriteria]);
 
   const bidAutoConfig = React.useMemo(() => {
+    if (!usesBidAmountCriteria) return null;
     if (isPpsUnder50) {
       return { bidRate: '88.745', adjustmentRate: '101.6', baseMultiplier: 1.1 };
     }
@@ -2894,7 +2928,7 @@ export default function AgreementBoardWindow({
       return { bidRate: '87.495', adjustmentRate: '101.6', baseMultiplier: 1.1 };
     }
     return null;
-  }, [ownerKeyUpper, selectedRangeOption?.key, isPpsUnder50, isPps50To100]);
+  }, [ownerKeyUpper, selectedRangeOption?.key, isPpsUnder50, isPps50To100, usesBidAmountCriteria]);
 
   React.useEffect(() => {
     if (!bidAutoConfig) return;
@@ -2956,6 +2990,11 @@ export default function AgreementBoardWindow({
   }, [bidAutoConfig, baseAmount, bidRate, adjustmentRate, editableBidAmount, isBidAmountAutoMode, onUpdateBoard, aValue, hasAValueInput]);
 
   const handleBidAmountChange = (value) => {
+    if (!usesBidAmountCriteria) {
+      setEditableBidAmount('');
+      if (onUpdateBoard) onUpdateBoard({ bidAmount: '', bidAmountMode: 'auto' });
+      return;
+    }
     setEditableBidAmount(value);
     setBidTouched(true);
     if (onUpdateBoard) {
@@ -4370,7 +4409,7 @@ export default function AgreementBoardWindow({
       const baseValue = parseAmountValue(baseAmount);
       const ratioBaseValue = parseAmountValue(ratioBaseAmount);
       const entryAmountValue = parseAmountValue(entryAmount);
-      const bidAmountValue = parseAmountValue(bidAmount);
+      const bidAmountValue = usesBidAmountCriteria ? parseAmountValue(bidAmount) : null;
       const amountForScore = (estimatedValue != null && estimatedValue > 0)
         ? estimatedValue
         : (baseValue != null && baseValue > 0 ? baseValue : null);
@@ -4379,11 +4418,9 @@ export default function AgreementBoardWindow({
         : amountForScore;
       const possibleShareBase = ownerKeyUpper === 'LH'
         ? ratioBaseValue
-        : (bidAmountValue != null ? bidAmountValue : null);
-      const includePossibleShare = isPpsUnder50
-        || isPps50To100
-        || (ownerKeyUpper === 'LH' && (isLhUnder50 || isLh50To100 || isLh100To300))
-        || (ownerKeyUpper === 'MOIS' && (rangeId === MOIS_30_TO_50_KEY || rangeId === MOIS_50_TO_100_KEY));
+        : (usesBidAmountCriteria && bidAmountValue != null ? bidAmountValue : null);
+      const includePossibleShare = usesBidAmountCriteria
+        || (ownerKeyUpper === 'LH' && (isLhUnder50 || isLh50To100 || isLh100To300));
       const dutyRateNumber = parseNumeric(regionDutyRate);
       const dutySummaryText = buildExportDutySummary(dutyRegions, dutyRateNumber, safeParticipantLimit, {
         compact: isLh100To300,
@@ -4523,6 +4560,7 @@ export default function AgreementBoardWindow({
     safeGroupSize,
     isLHOwner,
     isPps50To100,
+    usesBidAmountCriteria,
     rangeImplemented,
     technicianEnabled,
     selectedRangeOption?.key,
@@ -6836,10 +6874,10 @@ export default function AgreementBoardWindow({
                   <span className="field-label">공고일</span>
                   <input className="input" type="date" value={noticeDate || ''} onChange={handleNoticeDateChange} />
                 </div>
-                <div className="excel-field-block size-md">
+                <div className={`excel-field-block size-md${!isLH && !usesBidAmountCriteria ? ' bid-amount-disabled-block' : ''}`}>
                   <div className="bid-amount-label-row">
                     <span className="field-label">{isLH ? '시공비율기준금액' : '투찰금액'}</span>
-                    {!isLH && (
+                    {!isLH && usesBidAmountCriteria && (
                       <label className="bid-auto-toggle" title="투찰금액 자동계산">
                         <input
                           type="checkbox"
@@ -6852,6 +6890,17 @@ export default function AgreementBoardWindow({
                   </div>
                   {isLH ? (
                     <AmountInput value={ratioBaseAmount || ''} onChange={handleRatioBaseAmountChange} placeholder="원" />
+                  ) : !usesBidAmountCriteria ? (
+                    <>
+                      <input
+                        className="input bid-amount-unused-input"
+                        value="해당 없음"
+                        readOnly
+                        disabled
+                        aria-label="투찰금액 기준 없음"
+                      />
+                      <div className="readonly-note bid-amount-unused-note">가능지분 제한 기준 없음</div>
+                    </>
                   ) : (
                     <AmountInput
                       value={editableBidAmount}
