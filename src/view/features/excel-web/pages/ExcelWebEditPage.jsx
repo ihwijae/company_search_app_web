@@ -55,6 +55,7 @@ const EDITOR_MODE = {
 };
 
 const MANAGEMENT_FILE_TYPE_PLACEHOLDER = '';
+const TIFF_EXTENSIONS = new Set(['.tif', '.tiff']);
 const MANAGEMENT_FILE_TYPES = ['전기경영상태', '통신경영상태', '소방경영상태'];
 const MANAGEMENT_FILE_TYPE_COLORS = {
   전기경영상태: '#ca8a04',
@@ -151,6 +152,11 @@ function buildCreditLookupPreview(loadedData) {
   return [header, creditText].filter(Boolean).join('\n');
 }
 
+function getFileExtension(fileName = '') {
+  const match = String(fileName || '').toLowerCase().match(/(\.[^./\\]+)$/);
+  return match ? match[1] : '';
+}
+
 export default function ExcelWebEditPage() {
   const { notify } = useFeedback();
   const [activeMenu, setActiveMenu] = React.useState('excel-web-edit');
@@ -215,6 +221,7 @@ export default function ExcelWebEditPage() {
 
   const previewSrc = selectedFile?.url || '';
   const isPdf = selectedFile?.type?.includes('pdf') || selectedFile?.name?.toLowerCase().endsWith('.pdf');
+  const isTiff = TIFF_EXTENSIONS.has(getFileExtension(selectedFile?.name));
   const effectivePdfPageCount = isPdf ? backendPdfPageCount : 1;
   const finalCreditText = buildCreditText(form);
   const creditLookupPreview = React.useMemo(() => buildCreditLookupPreview(loadedData), [loadedData]);
@@ -995,7 +1002,16 @@ export default function ExcelWebEditPage() {
     if (!selectedFile?.file && !selectedFile?.url) return false;
     try {
       setBackendPdfLoading(true);
-      const nextUrl = selectedFile.file ? URL.createObjectURL(selectedFile.file) : selectedFile.url;
+      let nextUrl = '';
+      if (isTiff) {
+        const rendered = await excelEditBackendClient.renderImage({
+          file: selectedFile.uploadId ? null : selectedFile.file,
+          uploadId: selectedFile.uploadId || '',
+        });
+        nextUrl = URL.createObjectURL(rendered.blob);
+      } else {
+        nextUrl = selectedFile.file ? URL.createObjectURL(selectedFile.file) : selectedFile.url;
+      }
       setBackendPreviewUrl((prev) => {
         if (prev?.startsWith('blob:')) {
           try { URL.revokeObjectURL(prev); } catch (error) { void error; }
@@ -1017,7 +1033,7 @@ export default function ExcelWebEditPage() {
     } finally {
       setBackendPdfLoading(false);
     }
-  }, [notifyError, selectedFile]);
+  }, [isTiff, notifyError, selectedFile]);
 
   React.useEffect(() => {
     let canceled = false;
@@ -1089,7 +1105,7 @@ export default function ExcelWebEditPage() {
           <section className="excel-web-v2-pane left">
             <h2>1. PDF/이미지 뷰어</h2>
             <div className="excel-web-v2-upload-row">
-              <input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={handleSourceUpload} />
+              <input type="file" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff" onChange={handleSourceUpload} />
             </div>
             <div className="excel-web-v2-file-list">
               {sourceFiles.length === 0 && <p className="muted">업로드된 파일이 없습니다.</p>}

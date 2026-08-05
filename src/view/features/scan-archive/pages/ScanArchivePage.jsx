@@ -6,7 +6,8 @@ import scanArchiveClient from '../../../../shared/scanArchiveClient';
 import excelEditBackendClient from '../../../../shared/excelEditBackendClient';
 
 const SCAN_ARCHIVE_STATE_KEY = 'scan-archive:state:v1';
-const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tif', '.tiff']);
+const TIFF_EXTENSIONS = new Set(['.tif', '.tiff']);
 const FILE_FILTER = {
   ALL: 'all',
   ELECTRIC: 'electric',
@@ -169,6 +170,7 @@ export default function ScanArchivePage() {
   const downloadAllUrl = scanArchiveClient.buildDownloadAllUrl(currentPath);
   const isPdf = selectedFile?.ext === '.pdf';
   const isImage = selectedFile ? IMAGE_EXTENSIONS.has(selectedFile.ext) : false;
+  const isTiff = selectedFile ? TIFF_EXTENSIONS.has(selectedFile.ext) : false;
   const canUseEnhancedViewer = Boolean(selectedFile && (isPdf || isImage));
 
   const clearViewerImageUrl = React.useCallback(() => {
@@ -303,6 +305,26 @@ export default function ScanArchivePage() {
         return;
       }
 
+      if (isTiff) {
+        const file = new File([sourceBlob], selectedFile.name || 'scan.tif', {
+          type: sourceBlob.type || 'image/tiff',
+        });
+        const rendered = await excelEditBackendClient.renderImage({
+          file,
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        const nextUrl = URL.createObjectURL(rendered.blob);
+        setViewerImageUrl((prev) => {
+          if (prev?.startsWith('blob:')) {
+            try { URL.revokeObjectURL(prev); } catch (error) { void error; }
+          }
+          return nextUrl;
+        });
+        setViewerPageCount(1);
+        return;
+      }
+
       const nextUrl = URL.createObjectURL(sourceBlob);
       setViewerImageUrl((prev) => {
         if (prev?.startsWith('blob:')) {
@@ -322,7 +344,7 @@ export default function ScanArchivePage() {
         setViewerLoading(false);
       }
     }
-  }, [canUseEnhancedViewer, clearViewerImageUrl, isPdf, selectedFile]);
+  }, [canUseEnhancedViewer, clearViewerImageUrl, isPdf, isTiff, selectedFile]);
 
   React.useEffect(() => {
     setViewerPageNumber(1);

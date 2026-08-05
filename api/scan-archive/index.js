@@ -4,7 +4,7 @@ const path = require('path');
 const AdmZip = require('adm-zip');
 const { sendJson, allowMethods } = require('../_lib/http');
 
-const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tif', '.tiff']);
 const PDF_EXTENSIONS = new Set(['.pdf']);
 
 const CONTENT_TYPES = {
@@ -15,6 +15,8 @@ const CONTENT_TYPES = {
   '.gif': 'image/gif',
   '.webp': 'image/webp',
   '.bmp': 'image/bmp',
+  '.tif': 'image/tiff',
+  '.tiff': 'image/tiff',
   '.txt': 'text/plain; charset=utf-8',
 };
 
