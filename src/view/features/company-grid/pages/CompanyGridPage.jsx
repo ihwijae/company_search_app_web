@@ -422,6 +422,11 @@ export default function CompanyGridPage() {
   const [selectedCompanyKey, setSelectedCompanyKey] = React.useState(() => (
     typeof persisted.selectedCompanyKey === 'string' ? persisted.selectedCompanyKey : ''
   ));
+  const [sortKey, setSortKey] = React.useState(() => persisted.sortKey || null);
+  const [sortDir, setSortDir] = React.useState(() => (persisted.sortDir === 'asc' ? 'asc' : 'desc'));
+  const [onlyLatest, setOnlyLatest] = React.useState(() => !!persisted.onlyLatest);
+  const [onlyLHQuality, setOnlyLHQuality] = React.useState(() => !!persisted.onlyLHQuality);
+  const [onlyWomenOwned, setOnlyWomenOwned] = React.useState(() => !!persisted.onlyWomenOwned);
   const [totalCount, setTotalCount] = React.useState(() => (
     Number.isFinite(Number(persisted.totalCount)) ? Number(persisted.totalCount) : 0
   ));
@@ -432,6 +437,7 @@ export default function CompanyGridPage() {
     normalizeLhAwardHistoryEntries(DEFAULT_LH_AWARD_HISTORY_ENTRIES)
   ));
   const lastSearchRequestIdRef = React.useRef(0);
+  const lastAutoSearchRef = React.useRef({ fileType, sortKey, sortDir, onlyLatest, onlyLHQuality, onlyWomenOwned });
 
   const regionOptions = React.useMemo(() => (
     regions.filter((region) => region && region !== '전체')
@@ -483,10 +489,32 @@ export default function CompanyGridPage() {
       results: Array.isArray(results) ? results : [],
       visibleCount,
       selectedCompanyKey,
+      sortKey,
+      sortDir,
+      onlyLatest,
+      onlyLHQuality,
+      onlyWomenOwned,
       totalCount,
       searched,
     });
-  }, [excludeRegions, fileType, filterOpen, filters, includeRegions, regions, results, searched, selectedCompanyKey, totalCount, visibleCount]);
+  }, [
+    excludeRegions,
+    fileType,
+    filterOpen,
+    filters,
+    includeRegions,
+    onlyLHQuality,
+    onlyLatest,
+    onlyWomenOwned,
+    regions,
+    results,
+    searched,
+    selectedCompanyKey,
+    sortDir,
+    sortKey,
+    totalCount,
+    visibleCount,
+  ]);
 
   React.useEffect(() => {
     let canceled = false;
@@ -566,6 +594,11 @@ export default function CompanyGridPage() {
       }
       const criteria = buildCriteria(filters, effectiveIncludeRegions, effectiveExcludeRegions);
       const options = {
+        onlyLatest: overrides.onlyLatest ?? onlyLatest,
+        onlyLHQuality: overrides.onlyLHQuality ?? onlyLHQuality,
+        onlyWomenOwned: overrides.onlyWomenOwned ?? onlyWomenOwned,
+        sortKey: overrides.sortKey ?? sortKey,
+        sortDir: overrides.sortDir ?? sortDir,
         pagination: null,
       };
       const response = await searchClient.searchCompanies(criteria, normalizeFileType(fileType), options);
@@ -595,7 +628,7 @@ export default function CompanyGridPage() {
         setLoading(false);
       }
     }
-  }, [excludeRegions, fileType, filters, includeRegions, notify]);
+  }, [excludeRegions, fileType, filters, includeRegions, notify, onlyLHQuality, onlyLatest, onlyWomenOwned, sortDir, sortKey]);
 
   React.useEffect(() => {
     const unsubscribe = searchClient.onDataUpdated(async () => {
@@ -682,7 +715,39 @@ export default function CompanyGridPage() {
     setVisibleCount(COMPANY_GRID_RENDER_BATCH_SIZE);
     setSearched(false);
     setError('');
+    setSortKey(null);
+    setSortDir('desc');
+    setOnlyLatest(false);
+    setOnlyLHQuality(false);
+    setOnlyWomenOwned(false);
   };
+
+  const toggleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('desc');
+    }
+  };
+
+  React.useEffect(() => {
+    const nextState = { fileType, sortKey, sortDir, onlyLatest, onlyLHQuality, onlyWomenOwned };
+    const prevState = lastAutoSearchRef.current || {};
+    const modifiersChanged = prevState.fileType !== nextState.fileType
+      || prevState.sortKey !== nextState.sortKey
+      || prevState.sortDir !== nextState.sortDir
+      || prevState.onlyLatest !== nextState.onlyLatest
+      || prevState.onlyLHQuality !== nextState.onlyLHQuality
+      || prevState.onlyWomenOwned !== nextState.onlyWomenOwned;
+    lastAutoSearchRef.current = nextState;
+
+    if (!modifiersChanged) return;
+    if (prevState.fileType !== nextState.fileType) return;
+    if (!searched) return;
+
+    executeSearch({ preserveSelection: true });
+  }, [executeSearch, fileType, onlyLHQuality, onlyLatest, onlyWomenOwned, searched, sortDir, sortKey]);
 
   const handleCopyAll = React.useCallback(async () => {
     if (!selectedCompany) {
@@ -775,6 +840,26 @@ export default function CompanyGridPage() {
                   ))}
                 </div>
               </div>
+            </div>
+            <div className="company-grid-sort-toolbar" aria-label="정렬 및 빠른 필터">
+              <button type="button" className={`sort-btn ${sortKey === 'sipyung' ? 'active' : ''}`} onClick={() => toggleSort('sipyung')}>
+                시평액 {sortKey === 'sipyung' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+              </button>
+              <button type="button" className={`sort-btn ${sortKey === '3y' ? 'active' : ''}`} onClick={() => toggleSort('3y')}>
+                3년 실적 {sortKey === '3y' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+              </button>
+              <button type="button" className={`sort-btn ${sortKey === '5y' ? 'active' : ''}`} onClick={() => toggleSort('5y')}>
+                5년 실적 {sortKey === '5y' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+              </button>
+              <button type="button" className={`sort-btn ${onlyLatest ? 'active' : ''}`} onClick={() => setOnlyLatest((prev) => !prev)} title="최신 자료만 보기">
+                최신만 {onlyLatest ? '✔' : ''}
+              </button>
+              <button type="button" className={`sort-btn ${onlyLHQuality ? 'active' : ''}`} onClick={() => setOnlyLHQuality((prev) => !prev)} title="LH 품질평가 데이터가 있는 업체만 보기">
+                LH품질 {onlyLHQuality ? '✔' : ''}
+              </button>
+              <button type="button" className={`sort-btn ${onlyWomenOwned ? 'active' : ''}`} onClick={() => setOnlyWomenOwned((prev) => !prev)} title="여성기업만 보기">
+                여성기업 {onlyWomenOwned ? '✔' : ''}
+              </button>
             </div>
             <div className="company-grid-summary">
               {selectedCompany && (
