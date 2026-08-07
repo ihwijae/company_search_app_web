@@ -25,11 +25,11 @@ export default function useTechnicianScoreWorkflow({
 
   const openTechnicianModal = React.useCallback(() => {
     setTechnicianModalOpen(true);
-  }, []);
+  }, [setTechnicianModalOpen]);
 
   const closeTechnicianModal = React.useCallback(() => {
     setTechnicianModalOpen(false);
-  }, []);
+  }, [setTechnicianModalOpen]);
 
   const addTechnicianEntry = React.useCallback(() => {
     setTechnicianEntries((prev) => [
@@ -147,25 +147,61 @@ export default function useTechnicianScoreWorkflow({
     }
   }, [technicianTarget.groupIndex, technicianTarget.slotIndex, technicianTargetOptions]);
 
-  const applyTechnicianScoreToTarget = React.useCallback(() => {
+  const applyTechnicianScoresToTargets = React.useCallback(() => {
     if (!technicianEditable) return;
     if (!technicianTargetOptions.length) return;
-    const resolved = roundTo(technicianScoreTotal, 2);
-    if (resolved == null) return;
+    const activeKey = technicianEntriesTargetKeyRef.current || resolveTechnicianStorageKeyByTarget(technicianTarget);
+    const entriesByTarget = {
+      ...technicianEntriesByTargetRef.current,
+      ...(activeKey ? { [activeKey]: technicianEntries } : {}),
+    };
+    technicianEntriesByTargetRef.current = entriesByTarget;
+    if (typeof onUpdateBoard === 'function') onUpdateBoard({ technicianEntriesByTarget: entriesByTarget });
+
+    const updates = technicianTargetOptions
+      .map((option) => {
+        const key = resolveTechnicianStorageKeyBySlot(option.groupIndex, option.slotIndex);
+        if (!key || !Object.prototype.hasOwnProperty.call(entriesByTarget, key)) return null;
+        const entries = entriesByTarget[key];
+        if (!Array.isArray(entries)) return null;
+        const resolved = roundTo(
+          entries.reduce((sum, entry) => sum + computeTechnicianScore(entry), 0),
+          2,
+        );
+        if (resolved == null) return null;
+        return {
+          groupIndex: option.groupIndex,
+          slotIndex: option.slotIndex,
+          value: String(resolved),
+        };
+      })
+      .filter(Boolean);
+    if (!updates.length) return;
+
     setGroupTechnicianScores((prev) => {
       const next = prev.map((row) => row.slice());
-      const { groupIndex, slotIndex } = technicianTarget;
-      while (next.length <= groupIndex) next.push([]);
-      while (next[groupIndex].length <= slotIndex) next[groupIndex].push('');
-      next[groupIndex][slotIndex] = String(resolved);
+      updates.forEach(({ groupIndex, slotIndex, value }) => {
+        while (next.length <= groupIndex) next.push([]);
+        while (next[groupIndex].length <= slotIndex) next[groupIndex].push('');
+        next[groupIndex][slotIndex] = value;
+      });
       return next;
     });
-  }, [setGroupTechnicianScores, technicianEditable, technicianScoreTotal, technicianTarget, technicianTargetOptions.length]);
+  }, [
+    onUpdateBoard,
+    resolveTechnicianStorageKeyBySlot,
+    resolveTechnicianStorageKeyByTarget,
+    setGroupTechnicianScores,
+    technicianEditable,
+    technicianEntries,
+    technicianTarget,
+    technicianTargetOptions,
+  ]);
 
   const handleSaveTechnicianScore = React.useCallback(() => {
-    applyTechnicianScoreToTarget();
+    applyTechnicianScoresToTargets();
     closeTechnicianModal();
-  }, [applyTechnicianScoreToTarget, closeTechnicianModal]);
+  }, [applyTechnicianScoresToTargets, closeTechnicianModal]);
 
   return {
     technicianEntries,
