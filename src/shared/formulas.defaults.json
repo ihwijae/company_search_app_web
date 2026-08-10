@@ -2692,13 +2692,13 @@
               }
             },
             "performance": {
-              "formula": "((Math.round((perf5y / (baseAmount * 2)) * 100) / 100) * 15)",
+              "formula": "((Math.round((perf5y / (baseAmount * 2)) * 100) / 100) * 10)",
               "variables": [
                 "perf5y",
                 "baseAmount",
                 "estimatedAmount"
               ],
-              "maxScore": 15,
+              "maxScore": 10,
               "rounding": {
                 "method": "round",
                 "digits": 2
@@ -2712,8 +2712,8 @@
                       "sobang"
                     ]
                   },
-                  "formula": "((Math.round((perf5y / (baseAmount * 3)) * 100) / 100) * 15)",
-                  "maxScore": 15
+                  "formula": "((Math.round((perf5y / (baseAmount * 3)) * 100) / 100) * 10)",
+                  "maxScore": 10
                 }
               ]
             },
