@@ -3326,11 +3326,11 @@ export default function AgreementBoardWindow({
 
     if (!loadWindowRef.current) {
       const width = Math.min(1520, Math.max(1180, window.innerWidth - 120));
-      const height = Math.min(900, Math.max(720, window.innerHeight - 120));
+      const height = Math.min(1080, Math.max(860, window.innerHeight - 56));
       const dualScreenLeft = window.screenLeft !== undefined ? window.screenLeft : window.screenX;
       const dualScreenTop = window.screenTop !== undefined ? window.screenTop : window.screenY;
       const left = Math.max(32, dualScreenLeft + Math.max(0, (window.innerWidth - width) / 2) + 48);
-      const top = Math.max(32, dualScreenTop + Math.max(0, (window.innerHeight - height) / 2) + 32);
+      const top = Math.max(24, dualScreenTop + Math.max(0, (window.innerHeight - height) / 2));
       const features = `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`;
       const child = window.open('', 'company-search-agreement-load', features);
       if (!child) return;
