@@ -18,6 +18,7 @@ export default function AgreementLoadModal({
   onDelete,
   onResetFilters,
   formatAmount,
+  detachedWindow = false,
 }) {
   const pageSize = 5;
   const modalRef = React.useRef(null);
@@ -58,7 +59,7 @@ export default function AgreementLoadModal({
   }, [currentPage, totalPages, open]);
 
   React.useEffect(() => {
-    if (!open) return undefined;
+    if (!open || detachedWindow) return undefined;
     userMovedRef.current = false;
     const frameId = window.requestAnimationFrame(() => {
       const modal = modalRef.current;
@@ -69,10 +70,10 @@ export default function AgreementLoadModal({
       setPosition(clampPosition(centeredX, centeredY));
     });
     return () => window.cancelAnimationFrame(frameId);
-  }, [open, clampPosition]);
+  }, [open, detachedWindow, clampPosition]);
 
   React.useEffect(() => {
-    if (!open || userMovedRef.current) return undefined;
+    if (!open || detachedWindow || userMovedRef.current) return undefined;
     const frameId = window.requestAnimationFrame(() => {
       const modal = modalRef.current;
       if (!modal) return;
@@ -82,19 +83,19 @@ export default function AgreementLoadModal({
       setPosition(clampPosition(centeredX, centeredY));
     });
     return () => window.cancelAnimationFrame(frameId);
-  }, [open, busy, error, items.length, currentPage, totalPages, clampPosition]);
+  }, [open, detachedWindow, busy, error, items.length, currentPage, totalPages, clampPosition]);
 
   React.useEffect(() => {
-    if (!open) return undefined;
+    if (!open || detachedWindow) return undefined;
     const handleResize = () => {
       setPosition((prev) => clampPosition(prev.x, prev.y));
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [open, clampPosition]);
+  }, [open, detachedWindow, clampPosition]);
 
   React.useEffect(() => {
-    if (!open) return undefined;
+    if (!open || detachedWindow) return undefined;
     const handlePointerMove = (event) => {
       const dragState = dragStateRef.current;
       if (!dragState) return;
@@ -116,7 +117,7 @@ export default function AgreementLoadModal({
       document.body.classList.remove('agreement-load-dragging');
       dragStateRef.current = null;
     };
-  }, [open, clampPosition]);
+  }, [open, detachedWindow, clampPosition]);
 
   if (!open) return null;
 
@@ -137,6 +138,7 @@ export default function AgreementLoadModal({
   };
 
   const handleDragStart = (event) => {
+    if (detachedWindow) return;
     if (event.button !== 0) return;
     if (event.target instanceof Element && event.target.closest('button, input, select, textarea, a')) return;
     const modal = modalRef.current;
@@ -151,11 +153,11 @@ export default function AgreementLoadModal({
   };
 
   return (
-    <div className="agreement-load-overlay" onClick={onClose}>
+    <div className={detachedWindow ? 'agreement-load-window-shell' : 'agreement-load-overlay'}>
       <div
         ref={modalRef}
-        className="agreement-load-modal"
-        style={{ left: `${position.x}px`, top: `${position.y}px` }}
+        className={`agreement-load-modal${detachedWindow ? ' agreement-load-modal--window' : ''}`}
+        style={detachedWindow ? undefined : { left: `${position.x}px`, top: `${position.y}px` }}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="agreement-load-header" onPointerDown={handleDragStart}>
@@ -298,20 +300,20 @@ export default function AgreementLoadModal({
                   <div className="agreement-load-title">
                     <strong>{noticeTitle || meta.noticeTitle || meta.noticeNo || '협정'}</strong>
                     {(meta.ownerLabel || meta.ownerId) && (
-                      <span className={resolveOwnerBadgeClass(meta.ownerLabel || meta.ownerId)}>
+                      <span className={`${resolveOwnerBadgeClass(meta.ownerLabel || meta.ownerId)} agreement-badge--primary-meta`}>
                         {meta.ownerLabel || meta.ownerId}
                       </span>
                     )}
                     {(meta.rangeLabel || meta.rangeId) && (
-                      <span className="agreement-badge">{meta.rangeLabel || meta.rangeId}</span>
+                      <span className="agreement-badge agreement-badge--primary-meta">{meta.rangeLabel || meta.rangeId}</span>
                     )}
                     {meta.industryLabel && (
-                      <span className={resolveIndustryBadgeClass(meta.industryLabel)}>
+                      <span className={`${resolveIndustryBadgeClass(meta.industryLabel)} agreement-badge--primary-meta`}>
                         {meta.industryLabel}
                       </span>
                     )}
                     {dutyRegions.map((region) => (
-                      <span key={region} className="agreement-badge">{region}</span>
+                      <span key={region} className="agreement-badge agreement-badge--primary-meta">{region}</span>
                     ))}
                     {(meta.savedByName || meta.savedById) && (
                       <span className="agreement-badge agreement-badge--saved-by">

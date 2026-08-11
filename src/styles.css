@@ -1568,8 +1568,8 @@ button.primary:hover { background: var(--accent-2); }
 }
 
 .agreement-load-modal {
-  border-radius: 20px;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
   border: 1px solid rgba(148, 163, 184, 0.35);
 }
 .agreement-load-header h3 {
@@ -2030,23 +2030,42 @@ button.primary:hover { background: var(--accent-2); }
 .agreement-load-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.45);
+  background: transparent;
   z-index: 1100;
-  padding: 24px;
+  padding: 0;
+  pointer-events: none;
+}
+
+.agreement-load-window-shell {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 18px;
+  background: #f8fafc;
+  overflow: hidden;
 }
 
 .agreement-load-modal {
   position: absolute;
   box-sizing: border-box;
   background: #fff;
-  border-radius: 18px;
-  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.35);
-  width: min(1180px, 97vw);
+  border-radius: 16px;
+  box-shadow: 0 26px 70px rgba(15, 23, 42, 0.22);
+  width: min(1480px, calc(100vw - 48px));
   max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 20px 24px 24px;
+  padding: 22px 28px 26px;
+  pointer-events: auto;
+}
+
+.agreement-load-modal--window {
+  position: static;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  box-shadow: none;
 }
 
 .agreement-load-header {
@@ -2105,7 +2124,7 @@ body.agreement-load-dragging {
 
 .agreement-load-filters {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 12px;
   align-items: end;
 }
@@ -2133,7 +2152,7 @@ body.agreement-load-dragging {
   gap: 10px;
   overflow-y: auto;
   padding-right: 6px;
-  min-height: 240px;
+  min-height: 300px;
   flex: 1 1 auto;
 }
 
@@ -2141,8 +2160,8 @@ body.agreement-load-dragging {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 12px 14px;
+  gap: 22px;
+  padding: 14px 18px;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
   background: #f8fafc;
@@ -2175,13 +2194,16 @@ body.agreement-load-dragging {
 .agreement-load-main {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .agreement-load-title {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
+  align-items: center;
   font-size: 14px;
   color: #1f2937;
 }
@@ -2193,6 +2215,14 @@ body.agreement-load-dragging {
   padding: 2px 8px;
   font-size: 12px;
   font-weight: 700;
+}
+.agreement-load-title .agreement-badge--primary-meta {
+  padding: 6px 13px;
+  font-size: 15px;
+  line-height: 1.15;
+  font-weight: 800;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 .agreement-badge--owner-lh,
 .agreement-load-title .agreement-badge.agreement-badge--owner-lh { background: #dcfce7; color: #166534; }

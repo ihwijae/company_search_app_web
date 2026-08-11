@@ -1244,8 +1244,10 @@ export default function AgreementBoardWindow({
   const rangeId = _rangeId;
   const boardWindowRef = React.useRef(null);
   const candidateWindowRef = React.useRef(null);
+  const loadWindowRef = React.useRef(null);
   const [portalContainer, setPortalContainer] = React.useState(null);
   const [candidatePortalContainer, setCandidatePortalContainer] = React.useState(null);
+  const [loadPortalContainer, setLoadPortalContainer] = React.useState(null);
   const [groupAssignments, setGroupAssignments] = React.useState(() => (
     Array.isArray(initialGroupAssignments) ? initialGroupAssignments.map((row) => (Array.isArray(row) ? row.slice() : [])) : []
   ));
@@ -3301,6 +3303,72 @@ export default function AgreementBoardWindow({
     }
   }, [candidateWindowOpen, candidatePortalContainer]);
 
+  const closeLoadWindow = React.useCallback(() => {
+    const win = loadWindowRef.current;
+    if (win && !win.closed) {
+      if (win.__agreementBoardCleanup) {
+        try { win.__agreementBoardCleanup(); } catch {}
+        delete win.__agreementBoardCleanup;
+      }
+      win.close();
+    }
+    loadWindowRef.current = null;
+    setLoadPortalContainer(null);
+  }, []);
+
+  const ensureLoadWindow = React.useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (!loadModalOpen) return;
+    if (loadWindowRef.current && loadWindowRef.current.closed) {
+      loadWindowRef.current = null;
+      setLoadPortalContainer(null);
+    }
+
+    if (!loadWindowRef.current) {
+      const width = Math.min(1520, Math.max(1180, window.innerWidth - 120));
+      const height = Math.min(900, Math.max(720, window.innerHeight - 120));
+      const dualScreenLeft = window.screenLeft !== undefined ? window.screenLeft : window.screenX;
+      const dualScreenTop = window.screenTop !== undefined ? window.screenTop : window.screenY;
+      const left = Math.max(32, dualScreenLeft + Math.max(0, (window.innerWidth - width) / 2) + 48);
+      const top = Math.max(32, dualScreenTop + Math.max(0, (window.innerHeight - height) / 2) + 32);
+      const features = `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`;
+      const child = window.open('', 'company-search-agreement-load', features);
+      if (!child) return;
+      child.document.title = '협정 불러오기';
+      child.document.documentElement.style.height = '100%';
+      child.document.documentElement.style.overflow = 'hidden';
+      child.document.body.style.margin = '0';
+      child.document.body.style.height = '100%';
+      child.document.body.style.background = '#f8fafc';
+      child.document.body.innerHTML = '';
+      const root = child.document.createElement('div');
+      root.id = 'agreement-load-root';
+      root.style.height = '100%';
+      child.document.body.appendChild(root);
+      copyDocumentStyles(document, child.document);
+      loadWindowRef.current = child;
+      setLoadPortalContainer(root);
+      const handleBeforeUnload = () => {
+        loadWindowRef.current = null;
+        setLoadPortalContainer(null);
+        closeLoadModal();
+      };
+      child.addEventListener('beforeunload', handleBeforeUnload);
+      child.__agreementBoardCleanup = () => child.removeEventListener('beforeunload', handleBeforeUnload);
+    } else {
+      const win = loadWindowRef.current;
+      if (win.document && win.document.readyState === 'complete') {
+        copyDocumentStyles(document, win.document);
+      }
+      if (!loadPortalContainer && win.document) {
+        const existingRoot = win.document.getElementById('agreement-load-root');
+        if (existingRoot) setLoadPortalContainer(existingRoot);
+      }
+      win.document.title = '협정 불러오기';
+      try { win.focus(); } catch {}
+    }
+  }, [closeLoadModal, loadModalOpen, loadPortalContainer]);
+
   const closeWindow = React.useCallback(() => {
     if (inlineMode) return;
     const win = boardWindowRef.current;
@@ -3313,10 +3381,11 @@ export default function AgreementBoardWindow({
     }
     boardWindowRef.current = null;
     setPortalContainer(null);
+    closeLoadWindow();
     closeTechnicianWindow();
     closeCandidateWindow();
     closeAwardHistoryWindow();
-  }, [inlineMode, closeTechnicianWindow, closeCandidateWindow, closeAwardHistoryWindow]);
+  }, [inlineMode, closeLoadWindow, closeTechnicianWindow, closeCandidateWindow, closeAwardHistoryWindow]);
 
   const ensureWindow = React.useCallback(() => {
     if (inlineMode) return;
@@ -3400,6 +3469,16 @@ export default function AgreementBoardWindow({
   }, [open, candidateWindowOpen]);
 
   React.useEffect(() => () => { closeCandidateWindow(); }, [closeCandidateWindow]);
+
+  React.useEffect(() => {
+    if (!open || !loadModalOpen) {
+      closeLoadWindow();
+      return;
+    }
+    ensureLoadWindow();
+  }, [open, loadModalOpen, ensureLoadWindow, closeLoadWindow]);
+
+  React.useEffect(() => () => { closeLoadWindow(); }, [closeLoadWindow]);
 
   React.useEffect(() => {
     if (!open || !technicianModalOpen) {
@@ -7988,28 +8067,6 @@ export default function AgreementBoardWindow({
           </div>
         </div>
       </Modal>
-      <AgreementLoadModal
-        open={loadModalOpen}
-        onClose={closeLoadModal}
-        filters={loadFilters}
-        setFilters={setLoadFilters}
-        rootPath={loadRootPath}
-        onPickRoot={handlePickRoot}
-        dutyRegionOptions={dutyRegionOptions}
-        rangeOptions={loadRangeOptions}
-        agreementGroups={agreementGroupsForBoard}
-        industryOptions={INDUSTRY_OPTIONS}
-        items={filteredLoadItems}
-        busy={loadBusy}
-        error={loadError}
-        onLoad={handleLoadAgreement}
-        onResetFilters={resetFilters}
-        onDelete={(path) => handleDeleteAgreement(
-          path,
-          (options = {}) => confirm({ ...options, portalTarget: portalContainer || null }),
-        )}
-        formatAmount={formatAmount}
-      />
       {regionPickerOpen && (
         <div className="region-modal-backdrop" onClick={closeRegionModal}>
           <div className="region-modal" onClick={(event) => event.stopPropagation()}>
@@ -8099,8 +8156,36 @@ export default function AgreementBoardWindow({
       formatScore={formatScore}
     />
   );
+  const loadWindowMarkup = (
+    <AgreementLoadModal
+      open={loadModalOpen}
+      onClose={closeLoadModal}
+      filters={loadFilters}
+      setFilters={setLoadFilters}
+      rootPath={loadRootPath}
+      onPickRoot={handlePickRoot}
+      dutyRegionOptions={dutyRegionOptions}
+      rangeOptions={loadRangeOptions}
+      agreementGroups={agreementGroupsForBoard}
+      industryOptions={INDUSTRY_OPTIONS}
+      items={filteredLoadItems}
+      busy={loadBusy}
+      error={loadError}
+      onLoad={handleLoadAgreement}
+      onResetFilters={resetFilters}
+      onDelete={(path) => handleDeleteAgreement(
+        path,
+        (options = {}) => confirm({ ...options, portalTarget: loadPortalContainer || portalContainer || null }),
+      )}
+      formatAmount={formatAmount}
+      detachedWindow={true}
+    />
+  );
   const candidatePortal = (open && candidateWindowOpen && candidatePortalContainer)
     ? createPortal(candidateWindowMarkup, candidatePortalContainer)
+    : null;
+  const loadPortal = (open && loadModalOpen && loadPortalContainer)
+    ? createPortal(loadWindowMarkup, loadPortalContainer)
     : null;
   const awardHistoryPortal = (open && awardHistoryWindowOpen && awardHistoryPortalContainer)
     ? createPortal(
@@ -8125,6 +8210,7 @@ export default function AgreementBoardWindow({
       <>
         {boardMarkup}
         {candidatePortal}
+        {loadPortal}
         {awardHistoryPortal}
         {technicianPortal}
       </>
@@ -8136,6 +8222,7 @@ export default function AgreementBoardWindow({
     <>
       {createPortal(boardMarkup, portalContainer)}
       {candidatePortal}
+      {loadPortal}
       {awardHistoryPortal}
       {technicianPortal}
     </>
