@@ -305,7 +305,9 @@ export default function AgreementLoadModal({
                       </span>
                     )}
                     {(meta.rangeLabel || meta.rangeId) && (
-                      <span className="agreement-badge agreement-badge--primary-meta">{meta.rangeLabel || meta.rangeId}</span>
+                      <span className="agreement-badge agreement-badge--primary-meta agreement-badge--range">
+                        {meta.rangeLabel || meta.rangeId}
+                      </span>
                     )}
                     {meta.industryLabel && (
                       <span className={`${resolveIndustryBadgeClass(meta.industryLabel)} agreement-badge--primary-meta`}>

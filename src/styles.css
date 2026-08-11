@@ -2230,6 +2230,7 @@ body.agreement-load-dragging {
 .agreement-load-title .agreement-badge.agreement-badge--owner-mois { background: #dbeafe; color: #1d4ed8; }
 .agreement-badge--owner-pps,
 .agreement-load-title .agreement-badge.agreement-badge--owner-pps { background: #ffedd5; color: #c2410c; }
+.agreement-load-title .agreement-badge--range { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
 .agreement-load-title .agreement-badge--eung { background: #fef9c3; color: #92400e; }
 .agreement-load-title .agreement-badge--tongsin { background: #e0f2fe; color: #075985; }
 .agreement-load-title .agreement-badge--sobang { background: #fee2e2; color: #991b1b; }
