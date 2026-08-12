@@ -781,14 +781,21 @@ export default function CompanyGridPage() {
         <section className="company-grid-workspace">
           <div className="company-grid-toolbar">
             <div className="company-grid-toolbar-left">
-              <label className="company-grid-filetype">
-                공종
-                <select value={fileType} onChange={handleFileTypeChange}>
+              <div className="company-grid-filetype" role="radiogroup" aria-label="공종">
+                <div className="radio-group company-grid-filetype-options">
                   {FILE_TYPE_OPTIONS.map((option) => (
-                    <option key={option.key} value={option.key}>{option.label}</option>
+                    <label key={option.key}>
+                      <input
+                        type="radio"
+                        value={option.key}
+                        checked={fileType === option.key}
+                        onChange={handleFileTypeChange}
+                      />
+                      {option.label}
+                    </label>
                   ))}
-                </select>
-              </label>
+                </div>
+              </div>
               <button type="button" className="company-grid-filter-button" onClick={() => setFilterOpen((prev) => !prev)}>
                 검색/필터
               </button>

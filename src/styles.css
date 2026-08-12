@@ -5320,17 +5320,18 @@ body.agreement-load-dragging {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   padding: 8px 10px;
   border: 1px solid #d9e0ee;
   border-radius: 8px;
   background: #fff;
+  box-sizing: border-box;
 }
 
 .company-grid-toolbar-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
   flex-wrap: wrap;
   flex: 0 0 auto;
   align-self: center;
@@ -5339,10 +5340,21 @@ body.agreement-load-dragging {
 .company-grid-filetype {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 0;
   color: #334155;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
+}
+
+.company-grid-filetype-options {
+  gap: 3px;
+  flex-wrap: nowrap;
+}
+
+.company-grid-filetype-options label {
+  min-width: 44px;
+  padding: 5px 8px;
+  font-size: 14px;
 }
 
 .company-grid-filetype select,
@@ -5362,8 +5374,8 @@ body.agreement-load-dragging {
 .company-grid-filter-actions .btn-primary,
 .company-grid-filter-actions .btn-muted {
   border-radius: 6px;
-  padding: 7px 12px;
-  font-size: 13px;
+  padding: 7px 10px;
+  font-size: 15px;
   cursor: pointer;
 }
 
@@ -5402,12 +5414,12 @@ body.agreement-load-dragging {
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 7px;
   flex: 0 0 auto;
   color: #475569;
-  font-size: 13px;
+  font-size: 14px;
   white-space: nowrap;
-  max-width: 230px;
+  max-width: 170px;
   align-self: center;
 }
 
@@ -5416,24 +5428,25 @@ body.agreement-load-dragging {
   flex-direction: column;
   gap: 4px;
   padding: 0;
-  flex: 1 1 560px;
+  flex: 2 1 680px;
   min-width: 280px;
   max-width: none;
+  justify-content: center;
 }
 
 .company-grid-region-row {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
 .company-grid-region-label {
   flex: 0 0 auto;
-  min-width: 30px;
+  min-width: 28px;
   padding-top: 5px;
   color: #1d4ed8;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 900;
   text-align: center;
 }
@@ -5445,7 +5458,7 @@ body.agreement-load-dragging {
 .company-grid-region-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
   overflow: visible;
   padding: 0 0 2px;
   flex: 1 1 auto;
@@ -5458,9 +5471,9 @@ body.agreement-load-dragging {
   border-radius: 999px;
   background: #fff;
   color: #334155;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
-  padding: 5px 10px;
+  padding: 5px 8px;
   cursor: pointer;
 }
 
@@ -5481,9 +5494,9 @@ body.agreement-load-dragging {
   align-items: center;
   justify-content: flex-start;
   flex-wrap: wrap;
-  gap: 6px;
-  flex: 0 1 380px;
-  min-width: 220px;
+  gap: 5px;
+  flex: 0 1 310px;
+  min-width: 190px;
   align-self: center;
 }
 
@@ -5493,9 +5506,9 @@ body.agreement-load-dragging {
   border-radius: 8px;
   background: #fff;
   color: var(--text);
-  padding: 5px 9px;
+  padding: 5px 7px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -5572,6 +5585,10 @@ body.agreement-load-dragging {
   font-weight: 800;
   text-align: center;
   overflow: visible;
+}
+
+.company-grid-table tr:first-child td {
+  font-size: 14px;
 }
 
 .company-grid-table tr:first-child th {
