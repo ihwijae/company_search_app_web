@@ -1518,6 +1518,22 @@ function App() {
     }
   ), []);
 
+  useEffect(() => {
+    const handlePageHide = () => {
+      const resultsScroll = resultsScrollRef.current;
+      const resultsScrollPosition = resultsScroll
+        ? { top: resultsScroll.scrollTop, left: resultsScroll.scrollLeft }
+        : resultsScrollPositionRef.current;
+      rememberSearchPageState({
+        ...latestStateRef.current,
+        latestQuery: latestQueryRef.current,
+        resultsScrollPosition,
+      });
+    };
+    window.addEventListener('pagehide', handlePageHide);
+    return () => window.removeEventListener('pagehide', handlePageHide);
+  }, []);
+
   React.useLayoutEffect(() => {
     if (resultsScrollRestoredRef.current) return;
     const resultsScroll = resultsScrollRef.current;

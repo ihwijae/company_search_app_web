@@ -103,7 +103,11 @@ export const loadPersisted = (key, fallback) => {
   const fallbackValue = loadFromElectron(fullKey);
   if (fallbackValue !== undefined) {
     if (storage) {
-      try { storage.setItem(fullKey, JSON.stringify(fallbackValue)); } catch {}
+      try {
+        storage.setItem(fullKey, JSON.stringify(fallbackValue));
+      } catch (err) {
+        console.warn('[persistence] electron fallback cache failed:', err);
+      }
     }
     return fallbackValue;
   }
@@ -118,7 +122,12 @@ export const savePersisted = (key, value) => {
     try {
       storage.setItem(fullKey, JSON.stringify(value));
     } catch (err) {
-      console.warn('[persistence] save failed (localStorage):', err);
+      try {
+        storage.removeItem(fullKey);
+        storage.setItem(fullKey, JSON.stringify(value));
+      } catch (retryErr) {
+        console.warn('[persistence] save failed (localStorage):', retryErr || err);
+      }
     }
   }
   saveToElectron(fullKey, value);

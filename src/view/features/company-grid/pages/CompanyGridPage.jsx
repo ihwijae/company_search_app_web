@@ -605,6 +605,21 @@ export default function CompanyGridPage() {
     }
   ), []);
 
+  React.useEffect(() => {
+    const handlePageHide = () => {
+      const tableWrap = tableWrapRef.current;
+      const scrollPosition = tableWrap
+        ? { top: tableWrap.scrollTop, left: tableWrap.scrollLeft }
+        : scrollPositionRef.current;
+      rememberCompanyGridState({
+        ...latestStateRef.current,
+        scrollPosition,
+      });
+    };
+    window.addEventListener('pagehide', handlePageHide);
+    return () => window.removeEventListener('pagehide', handlePageHide);
+  }, []);
+
   React.useLayoutEffect(() => {
     if (scrollRestoredRef.current) return;
     const tableWrap = tableWrapRef.current;
