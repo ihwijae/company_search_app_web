@@ -34,11 +34,28 @@ import authClient from './shared/authClient.js';
 import { loadPersisted, savePersisted } from './shared/persistence.js';
 
 const LAST_ROUTE_STORAGE_KEY = 'last-route';
+const NON_RESTORABLE_LAST_ROUTE_PATHS = new Set([
+  '/agreement-board',
+  '/agreements',
+  '/region-search',
+  '/lh/under50',
+  '/lh/50to100',
+  '/pps/under50',
+  '/pps/50to100',
+  '/kgas/under50',
+  '/kgas/50to100',
+  '/mois/under30',
+  '/mois/30to50',
+  '/mois/50to100',
+]);
 
 const normalizeInitialRoute = (route) => {
   const value = String(route || '').trim();
   if (!value || value === '#/login') return '#/search';
-  return value.startsWith('#') ? value : `#${value}`;
+  const normalized = value.startsWith('#') ? value : `#${value}`;
+  const normalizedPath = normalized.replace('#', '').split('?')[0] || '/search';
+  if (NON_RESTORABLE_LAST_ROUTE_PATHS.has(normalizedPath)) return '#/search';
+  return normalized;
 };
 
 export default function App() {
@@ -88,6 +105,7 @@ export default function App() {
 
   React.useEffect(() => {
     if (path === '/login') return;
+    if (NON_RESTORABLE_LAST_ROUTE_PATHS.has(path)) return;
     savePersisted(LAST_ROUTE_STORAGE_KEY, route);
   }, [path, route]);
 
