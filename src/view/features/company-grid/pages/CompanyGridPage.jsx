@@ -286,6 +286,11 @@ const buildAwardHistoryTooltip = (matches) => (
     .filter(Boolean)
 );
 
+const normalizeScrollPosition = (value) => ({
+  top: Number.isFinite(Number(value?.top)) ? Math.max(0, Number(value.top)) : 0,
+  left: Number.isFinite(Number(value?.left)) ? Math.max(0, Number(value.left)) : 0,
+});
+
 const buildCompanyGridState = ({
   fileType,
   includeRegions,
@@ -303,6 +308,7 @@ const buildCompanyGridState = ({
   onlyWomenOwned,
   totalCount,
   searched,
+  scrollPosition,
 }) => ({
   fileType,
   includeRegions,
@@ -320,6 +326,7 @@ const buildCompanyGridState = ({
   onlyWomenOwned,
   totalCount,
   searched,
+  scrollPosition: normalizeScrollPosition(scrollPosition),
 });
 
 const buildCompanyGridStorageState = (state) => ({
@@ -329,6 +336,7 @@ const buildCompanyGridStorageState = (state) => ({
   selectedCompanyKey: '',
   totalCount: 0,
   searched: false,
+  scrollPosition: { top: 0, left: 0 },
 });
 
 const rememberCompanyGridState = (state) => {
@@ -451,6 +459,7 @@ export default function CompanyGridPage() {
       ? persisted.excludeRegions
       : (Array.isArray(persisted.filters?.excludeRegions) ? persisted.filters.excludeRegions : []),
   );
+  const restoredScrollPosition = normalizeScrollPosition(persisted.scrollPosition);
 
   const { notify } = useFeedback();
   const [activeMenu, setActiveMenu] = React.useState('company-grid');
@@ -491,6 +500,9 @@ export default function CompanyGridPage() {
   const lastSearchRequestIdRef = React.useRef(0);
   const lastAutoSearchRef = React.useRef({ fileType, sortKey, sortDir, onlyLatest, onlyLHQuality, onlyWomenOwned });
   const latestStateRef = React.useRef(null);
+  const tableWrapRef = React.useRef(null);
+  const scrollPositionRef = React.useRef(restoredScrollPosition);
+  const scrollRestoredRef = React.useRef(false);
 
   const regionOptions = React.useMemo(() => (
     regions.filter((region) => region && region !== '전체')
@@ -549,6 +561,7 @@ export default function CompanyGridPage() {
       onlyWomenOwned,
       totalCount,
       searched,
+      scrollPosition: scrollPositionRef.current,
     })
   ), [
     excludeRegions,
@@ -579,11 +592,31 @@ export default function CompanyGridPage() {
 
   React.useEffect(() => (
     () => {
+      const tableWrap = tableWrapRef.current;
+      const scrollPosition = tableWrap
+        ? { top: tableWrap.scrollTop, left: tableWrap.scrollLeft }
+        : scrollPositionRef.current;
       if (latestStateRef.current) {
-        rememberCompanyGridState(latestStateRef.current);
+        rememberCompanyGridState({
+          ...latestStateRef.current,
+          scrollPosition,
+        });
       }
     }
   ), []);
+
+  React.useLayoutEffect(() => {
+    if (scrollRestoredRef.current) return;
+    const tableWrap = tableWrapRef.current;
+    if (!tableWrap) return;
+    if (!results.length) return;
+    scrollRestoredRef.current = true;
+    const { top, left } = scrollPositionRef.current;
+    window.requestAnimationFrame(() => {
+      tableWrap.scrollTop = top;
+      tableWrap.scrollLeft = left;
+    });
+  }, [results.length, visibleCount]);
 
   React.useEffect(() => {
     let canceled = false;
@@ -842,6 +875,22 @@ export default function CompanyGridPage() {
     setVisibleCount((prev) => Math.min(results.length, prev + COMPANY_GRID_RENDER_BATCH_SIZE));
   }, [results.length]);
 
+  const handleTableScroll = React.useCallback((event) => {
+    const target = event.currentTarget;
+    const scrollPosition = {
+      top: target.scrollTop,
+      left: target.scrollLeft,
+    };
+    scrollPositionRef.current = scrollPosition;
+    if (latestStateRef.current) {
+      latestStateRef.current = {
+        ...latestStateRef.current,
+        scrollPosition,
+      };
+      companyGridPageStateCache = latestStateRef.current;
+    }
+  }, []);
+
   return (
     <div className="app-shell sidebar-wide">
       <Sidebar active={activeMenu} onSelect={handleSelectMenu} collapsed={false} />
@@ -960,7 +1009,7 @@ export default function CompanyGridPage() {
 
           {error && <p className="company-grid-error">{error}</p>}
 
-          <div className="company-grid-table-wrap">
+          <div className="company-grid-table-wrap" ref={tableWrapRef} onScroll={handleTableScroll}>
             {!searched && (
               <div className="company-grid-empty">
                 <strong>검색 조건을 설정하고 검색하세요.</strong>

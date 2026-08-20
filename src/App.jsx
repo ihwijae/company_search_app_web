@@ -31,9 +31,20 @@ import LoginPage from './view/features/auth/pages/LoginPage.jsx';
 import ExcelWebEditPage from './view/features/excel-web/pages/ExcelWebEditPage.jsx';
 import ScanArchivePage from './view/features/scan-archive/pages/ScanArchivePage.jsx';
 import authClient from './shared/authClient.js';
+import { loadPersisted, savePersisted } from './shared/persistence.js';
+
+const LAST_ROUTE_STORAGE_KEY = 'last-route';
+
+const normalizeInitialRoute = (route) => {
+  const value = String(route || '').trim();
+  if (!value || value === '#/login') return '#/search';
+  return value.startsWith('#') ? value : `#${value}`;
+};
 
 export default function App() {
-  const [route, setRoute] = React.useState(window.location.hash || '#/search');
+  const [route, setRoute] = React.useState(() => (
+    window.location.hash || normalizeInitialRoute(loadPersisted(LAST_ROUTE_STORAGE_KEY, '#/search'))
+  ));
   const [authState, setAuthState] = React.useState({
     checking: true,
     authenticated: false,
@@ -74,6 +85,11 @@ export default function App() {
 
   const normalizedRoute = route.replace('#', '') || '/search';
   const [path] = normalizedRoute.split('?');
+
+  React.useEffect(() => {
+    if (path === '/login') return;
+    savePersisted(LAST_ROUTE_STORAGE_KEY, route);
+  }, [path, route]);
 
   React.useEffect(() => {
     if (authState.checking) return;
@@ -222,7 +238,7 @@ export default function App() {
             user: payload?.user || null,
           });
           if (window.location.hash === '#/login' || !window.location.hash) {
-            window.location.hash = '#/search';
+            window.location.hash = normalizeInitialRoute(loadPersisted(LAST_ROUTE_STORAGE_KEY, '#/search'));
           }
         }}
       />
