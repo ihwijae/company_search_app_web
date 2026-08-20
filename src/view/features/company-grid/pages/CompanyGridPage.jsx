@@ -5,7 +5,7 @@ import Sidebar from '../../../../components/Sidebar.jsx';
 import { useFeedback } from '../../../../components/FeedbackProvider.jsx';
 import searchClient from '../../../../shared/searchClient.js';
 import CREDIT_GRADE_ORDER from '../../../../shared/creditGrades.json';
-import { loadPersisted, savePersisted } from '../../../../shared/persistence.js';
+import { loadPersisted, loadPersistedAsync, savePersisted } from '../../../../shared/persistence.js';
 import { INDUSTRY_AVERAGES, DEBT_RATIO_WARN_FACTOR, CURRENT_RATIO_WARN_FACTOR } from '../../../../ratios.js';
 import lhAwardHistoryClient from '../../../../shared/lhAwardHistoryClient.js';
 import {
@@ -503,6 +503,31 @@ export default function CompanyGridPage() {
   const tableWrapRef = React.useRef(null);
   const scrollPositionRef = React.useRef(restoredScrollPosition);
   const scrollRestoredRef = React.useRef(false);
+
+  React.useEffect(() => {
+    let canceled = false;
+    loadPersistedAsync(COMPANY_GRID_STORAGE_KEY, null)
+      .then((saved) => {
+        if (canceled || !saved || companyGridPageStateCache) return;
+        setFileType(normalizeFileType(saved.fileType || 'eung'));
+        setIncludeRegions(normalizeRegionSelection(saved.includeRegions || saved.filters?.includeRegions || []));
+        setExcludeRegions(normalizeRegionSelection(saved.excludeRegions || saved.filters?.excludeRegions || []));
+        setRegions(Array.isArray(saved.regions) && saved.regions.length > 0 ? saved.regions : ['전체']);
+        setFilters(restoreFilters(saved.filters));
+        setFilterOpen(!!saved.filterOpen);
+        setSortKey(saved.sortKey || null);
+        setSortDir(saved.sortDir === 'asc' ? 'asc' : 'desc');
+        setOnlyLatest(!!saved.onlyLatest);
+        setOnlyLHQuality(!!saved.onlyLHQuality);
+        setOnlyWomenOwned(!!saved.onlyWomenOwned);
+      })
+      .catch((error) => {
+        console.warn('[CompanyGrid] persisted backup load failed:', error);
+      });
+    return () => {
+      canceled = true;
+    };
+  }, []);
 
   const regionOptions = React.useMemo(() => (
     regions.filter((region) => region && region !== '전체')

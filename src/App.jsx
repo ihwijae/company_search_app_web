@@ -31,7 +31,7 @@ import LoginPage from './view/features/auth/pages/LoginPage.jsx';
 import ExcelWebEditPage from './view/features/excel-web/pages/ExcelWebEditPage.jsx';
 import ScanArchivePage from './view/features/scan-archive/pages/ScanArchivePage.jsx';
 import authClient from './shared/authClient.js';
-import { loadPersisted, savePersisted } from './shared/persistence.js';
+import { loadPersisted, loadPersistedAsync, savePersisted } from './shared/persistence.js';
 
 const LAST_ROUTE_STORAGE_KEY = 'last-route';
 const NON_RESTORABLE_LAST_ROUTE_PATHS = new Set([
@@ -73,6 +73,25 @@ export default function App() {
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
+
+  React.useEffect(() => {
+    if (window.location.hash) return undefined;
+    let canceled = false;
+    loadPersistedAsync(LAST_ROUTE_STORAGE_KEY, '#/search')
+      .then((savedRoute) => {
+        if (canceled || window.location.hash) return;
+        const nextRoute = normalizeInitialRoute(savedRoute);
+        if (nextRoute && nextRoute !== route) {
+          setRoute(nextRoute);
+        }
+      })
+      .catch((error) => {
+        console.warn('[App] last route backup load failed:', error);
+      });
+    return () => {
+      canceled = true;
+    };
+  }, [route]);
 
   React.useEffect(() => {
     let canceled = false;

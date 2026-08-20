@@ -6,7 +6,7 @@ import '../../../../fonts.css';
 import Sidebar from '../../../../components/Sidebar';
 import Drawer from '../../../../components/Drawer';
 import { INDUSTRY_AVERAGES, DEBT_RATIO_WARN_FACTOR, CURRENT_RATIO_WARN_FACTOR } from '../../../../ratios.js';
-import { loadPersisted, savePersisted } from '../../../../shared/persistence.js';
+import { loadPersisted, loadPersistedAsync, savePersisted } from '../../../../shared/persistence.js';
 import searchClient from '../../../../shared/searchClient.js';
 import lhAwardHistoryClient from '../../../../shared/lhAwardHistoryClient.js';
 import CREDIT_GRADE_ORDER from '../../../../shared/creditGrades.json';
@@ -726,6 +726,29 @@ function App() {
   const currentSmppResult = selectedBizNumber ? smppResults[selectedBizNumber] : null;
   const smppBusyForSelected = smppStatus.busy && smppStatus.bizNo === selectedBizNumber;
   const smppSupported = searchClient.supportsSmppLookup();
+
+  useEffect(() => {
+    let canceled = false;
+    loadPersistedAsync(SEARCH_STORAGE_KEY, null)
+      .then((saved) => {
+        if (canceled || !saved || searchPageStateCache) return;
+        setFilters(sanitizeSearchFilters(saved.filters));
+        setFileType(normalizeFileType(saved.fileType || 'eung'));
+        setSearchedFileType(normalizeFileType(saved.searchedFileType || saved.fileType || 'eung'));
+        setRegions(Array.isArray(saved.regions) && saved.regions.length > 0 ? saved.regions : ['전체']);
+        setSortKey(saved.sortKey || null);
+        setSortDir(saved.sortDir === 'asc' ? 'asc' : 'desc');
+        setOnlyLatest(!!saved.onlyLatest);
+        setOnlyLHQuality(!!saved.onlyLHQuality);
+        setOnlyWomenOwned(!!saved.onlyWomenOwned);
+      })
+      .catch((error) => {
+        console.warn('[Search] persisted backup load failed:', error);
+      });
+    return () => {
+      canceled = true;
+    };
+  }, []);
 
   const getAwardHistoryInfo = React.useCallback((company) => (
     getLhAwardHistoryMatchInfo(company, awardHistoryEntries)
