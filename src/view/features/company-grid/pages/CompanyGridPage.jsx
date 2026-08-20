@@ -25,6 +25,8 @@ const COMPANIES_PER_GRID_BLOCK = 12;
 const COMPANY_GRID_STORAGE_KEY = 'company-grid-state';
 const COMPANY_GRID_RENDER_BATCH_SIZE = 240;
 
+let companyGridPageStateCache = null;
+
 const CREDIT_GRADE_OPTIONS = Array.isArray(CREDIT_GRADE_ORDER)
   ? CREDIT_GRADE_ORDER.map((grade) => String(grade || '').trim()).filter(Boolean)
   : [];
@@ -284,6 +286,56 @@ const buildAwardHistoryTooltip = (matches) => (
     .filter(Boolean)
 );
 
+const buildCompanyGridState = ({
+  fileType,
+  includeRegions,
+  excludeRegions,
+  regions,
+  filters,
+  filterOpen,
+  results,
+  visibleCount,
+  selectedCompanyKey,
+  sortKey,
+  sortDir,
+  onlyLatest,
+  onlyLHQuality,
+  onlyWomenOwned,
+  totalCount,
+  searched,
+}) => ({
+  fileType,
+  includeRegions,
+  excludeRegions,
+  regions: Array.isArray(regions) && regions.length > 0 ? regions : ['전체'],
+  filters: sanitizeFilters(filters),
+  filterOpen,
+  results: Array.isArray(results) ? results : [],
+  visibleCount,
+  selectedCompanyKey,
+  sortKey,
+  sortDir,
+  onlyLatest,
+  onlyLHQuality,
+  onlyWomenOwned,
+  totalCount,
+  searched,
+});
+
+const buildCompanyGridStorageState = (state) => ({
+  ...state,
+  results: [],
+  visibleCount: COMPANY_GRID_RENDER_BATCH_SIZE,
+  selectedCompanyKey: '',
+  totalCount: 0,
+  searched: false,
+});
+
+const rememberCompanyGridState = (state) => {
+  companyGridPageStateCache = state;
+  savePersisted(COMPANY_GRID_STORAGE_KEY, buildCompanyGridStorageState(state));
+};
+
 function FilterPanel({
   open,
   filters,
@@ -380,7 +432,7 @@ function FilterPanel({
 export default function CompanyGridPage() {
   const persistedRef = React.useRef(null);
   if (persistedRef.current === null) {
-    persistedRef.current = loadPersisted(COMPANY_GRID_STORAGE_KEY, null);
+    persistedRef.current = companyGridPageStateCache || loadPersisted(COMPANY_GRID_STORAGE_KEY, null);
   }
   const persisted = persistedRef.current || {};
   const restoredFilters = restoreFilters(persisted.filters);
@@ -438,6 +490,7 @@ export default function CompanyGridPage() {
   ));
   const lastSearchRequestIdRef = React.useRef(0);
   const lastAutoSearchRef = React.useRef({ fileType, sortKey, sortDir, onlyLatest, onlyLHQuality, onlyWomenOwned });
+  const latestStateRef = React.useRef(null);
 
   const regionOptions = React.useMemo(() => (
     regions.filter((region) => region && region !== '전체')
@@ -478,15 +531,15 @@ export default function CompanyGridPage() {
     loadRegions(fileType);
   }, [fileType, loadRegions]);
 
-  React.useEffect(() => {
-    savePersisted(COMPANY_GRID_STORAGE_KEY, {
+  const pageState = React.useMemo(() => (
+    buildCompanyGridState({
       fileType,
       includeRegions,
       excludeRegions,
-      regions: Array.isArray(regions) && regions.length > 0 ? regions : ['전체'],
-      filters: sanitizeFilters(filters),
+      regions,
+      filters,
       filterOpen,
-      results: Array.isArray(results) ? results : [],
+      results,
       visibleCount,
       selectedCompanyKey,
       sortKey,
@@ -496,8 +549,8 @@ export default function CompanyGridPage() {
       onlyWomenOwned,
       totalCount,
       searched,
-    });
-  }, [
+    })
+  ), [
     excludeRegions,
     fileType,
     filterOpen,
@@ -515,6 +568,22 @@ export default function CompanyGridPage() {
     totalCount,
     visibleCount,
   ]);
+
+  latestStateRef.current = pageState;
+
+  React.useEffect(() => {
+    rememberCompanyGridState(pageState);
+  }, [
+    pageState,
+  ]);
+
+  React.useEffect(() => (
+    () => {
+      if (latestStateRef.current) {
+        rememberCompanyGridState(latestStateRef.current);
+      }
+    }
+  ), []);
 
   React.useEffect(() => {
     let canceled = false;
