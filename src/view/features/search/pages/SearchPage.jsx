@@ -68,6 +68,8 @@ const hasQualityEvaluationData = (company) => {
 const SEARCH_STORAGE_KEY = 'search:page';
 const PAGE_SIZE = 12;
 
+let searchPageStateCache = null;
+
 const normalizeFileType = (value) => {
   const token = String(value ?? '').trim();
   if (!token) return 'eung';
@@ -101,6 +103,81 @@ const createDefaultFilters = () => ({
   max_5y: '',
   min_credit_grade: '',
 });
+
+const sanitizeSearchFilters = (filters) => ({
+  ...createDefaultFilters(),
+  ...(filters && typeof filters === 'object' && !Array.isArray(filters) ? filters : {}),
+  includeRegions: Array.isArray(filters?.includeRegions) ? [...filters.includeRegions] : [],
+  excludeRegions: Array.isArray(filters?.excludeRegions) ? [...filters.excludeRegions] : [],
+});
+
+const normalizeScrollPosition = (value) => ({
+  top: Number.isFinite(Number(value?.top)) ? Math.max(0, Number(value.top)) : 0,
+  left: Number.isFinite(Number(value?.left)) ? Math.max(0, Number(value.left)) : 0,
+});
+
+const buildSearchPageState = ({
+  filters,
+  fileType,
+  searchedFileType,
+  regions,
+  searchPerformed,
+  searchResults,
+  page,
+  totalCount,
+  totalPages,
+  sortKey,
+  sortDir,
+  onlyLatest,
+  onlyLHQuality,
+  onlyWomenOwned,
+  selectedIndex,
+  selectedCompanyKey,
+  selectedCompany,
+  latestQuery,
+  resultsScrollPosition,
+}) => ({
+  filters: sanitizeSearchFilters(filters),
+  fileType: normalizeFileType(fileType || 'eung'),
+  searchedFileType: normalizeFileType(searchedFileType || fileType || 'eung'),
+  regions: Array.isArray(regions) && regions.length > 0 ? regions : ['전체'],
+  searchPerformed: !!searchPerformed,
+  searchResults: Array.isArray(searchResults) ? searchResults : [],
+  page: Number.isFinite(Number(page)) && Number(page) > 0 ? Number(page) : 1,
+  totalCount: Number.isFinite(Number(totalCount)) ? Number(totalCount) : 0,
+  totalPages: Number.isFinite(Number(totalPages)) && Number(totalPages) > 0 ? Number(totalPages) : 1,
+  sortKey: sortKey || null,
+  sortDir: sortDir === 'asc' ? 'asc' : 'desc',
+  onlyLatest: !!onlyLatest,
+  onlyLHQuality: !!onlyLHQuality,
+  onlyWomenOwned: !!onlyWomenOwned,
+  selectedIndex: Number.isFinite(Number(selectedIndex)) ? Number(selectedIndex) : null,
+  selectedCompanyKey: typeof selectedCompanyKey === 'string' ? selectedCompanyKey : '',
+  selectedCompany: selectedCompany || null,
+  latestQuery: latestQuery || null,
+  resultsScrollPosition: normalizeScrollPosition(resultsScrollPosition),
+});
+
+const buildSearchStorageState = (state) => ({
+  ...state,
+  searchPerformed: false,
+  searchResults: [],
+  page: 1,
+  totalCount: 0,
+  totalPages: 1,
+  selectedIndex: null,
+  selectedCompanyKey: '',
+  selectedCompany: null,
+  latestQuery: null,
+  resultsScrollPosition: { top: 0, left: 0 },
+  // legacy key retained for backwards compatibility in case old snapshots exist
+  selectedBizNo: '',
+});
+
+const rememberSearchPageState = (state) => {
+  searchPageStateCache = state;
+  savePersisted(SEARCH_STORAGE_KEY, buildSearchStorageState(state));
+};
 
 const composeCompanyKey = (company, fallbackIndex = null) => {
   if (!company) return '';
@@ -201,7 +278,7 @@ const parseFlexibleDate = (v) => {
   if (!v && v !== 0) return null;
   if (v instanceof Date && !isNaN(v)) return v;
   const s = String(v).trim();
-  const m = s.match(/(\d{4})[\.\-\/년\s]*(\d{1,2})[\.\-\/월\s]*(\d{1,2})?/);
+  const m = s.match(/(\d{4})[./년\s-]*(\d{1,2})[./월\s-]*(\d{1,2})?/);
   if (m) {
     const y = Number(m[1]);
     const mo = Number(m[2]);
@@ -337,7 +414,7 @@ const extractManagerNameForCreditMessage = (company) => {
   const text = String(notes).replace(/\s+/g, ' ').trim();
   if (!text) return '담당자 미지정';
   const firstToken = text.split(/[ ,/|·-]+/).filter(Boolean)[0] || '';
-  const cleanedFirst = firstToken.replace(/^[\[\(（【]([^\]\)）】]+)[\]\)】]?$/, '$1');
+  const cleanedFirst = firstToken.replace(/^[[(（【]/, '').replace(/[\])）】]$/, '');
   if (/^[가-힣]{2,4}$/.test(cleanedFirst)) return cleanedFirst;
   let match = text.match(/담당자?\s*[:：-]?\s*([가-힣]{2,4})/);
   if (match?.[1]) return match[1];
@@ -586,7 +663,7 @@ function RegionSelector({
 function App() {
   const persistedRef = useRef(null);
   if (persistedRef.current === null) {
-    persistedRef.current = loadPersisted(SEARCH_STORAGE_KEY, null);
+    persistedRef.current = searchPageStateCache || loadPersisted(SEARCH_STORAGE_KEY, null);
   }
   const persisted = persistedRef.current || {};
 
@@ -595,31 +672,38 @@ function App() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadCount, setUploadCount] = useState(0);
   const [filters, setFilters] = useState(() => {
-    const base = createDefaultFilters();
-    const saved = persisted.filters;
-    if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
-      return { ...base, ...saved };
-    }
-    return base;
+    return sanitizeSearchFilters(persisted.filters);
   });
   const [fileType, setFileType] = useState(() => normalizeFileType(persisted.fileType || 'eung'));
-  const [searchedFileType, setSearchedFileType] = useState(() => normalizeFileType(persisted.fileType || 'eung'));
+  const [searchedFileType, setSearchedFileType] = useState(() => normalizeFileType(persisted.searchedFileType || persisted.fileType || 'eung'));
   const [regions, setRegions] = useState(() => (
     Array.isArray(persisted.regions) && persisted.regions.length > 0 ? persisted.regions : ['전체']
   ));
-  const [searchPerformed, setSearchPerformed] = useState(false);
-  const [searchResults, setSearchResults] = useState([]);
-  const [page, setPage] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
+  const [searchPerformed, setSearchPerformed] = useState(() => !!persisted.searchPerformed);
+  const [searchResults, setSearchResults] = useState(() => (
+    Array.isArray(persisted.searchResults) ? persisted.searchResults : []
+  ));
+  const [page, setPage] = useState(() => (
+    Number.isFinite(Number(persisted.page)) && Number(persisted.page) > 0 ? Number(persisted.page) : 1
+  ));
+  const [totalCount, setTotalCount] = useState(() => (
+    Number.isFinite(Number(persisted.totalCount)) ? Number(persisted.totalCount) : 0
+  ));
+  const [totalPages, setTotalPages] = useState(() => (
+    Number.isFinite(Number(persisted.totalPages)) && Number(persisted.totalPages) > 0 ? Number(persisted.totalPages) : 1
+  ));
   const [sortKey, setSortKey] = useState(() => persisted.sortKey || null); // 'sipyung' | '3y' | '5y'
   const [onlyLatest, setOnlyLatest] = useState(() => !!persisted.onlyLatest);
   const [onlyLHQuality, setOnlyLHQuality] = useState(() => !!persisted.onlyLHQuality);
   const [onlyWomenOwned, setOnlyWomenOwned] = useState(() => !!persisted.onlyWomenOwned);
   const [sortDir, setSortDir] = useState(() => (persisted.sortDir === 'asc' ? 'asc' : 'desc'));
-  const [selectedIndex, setSelectedIndex] = useState(null);
-  const [selectedCompanyKey, setSelectedCompanyKey] = useState('');
-  const [selectedCompany, setSelectedCompany] = useState(null);
+  const [selectedIndex, setSelectedIndex] = useState(() => (
+    Number.isFinite(Number(persisted.selectedIndex)) ? Number(persisted.selectedIndex) : null
+  ));
+  const [selectedCompanyKey, setSelectedCompanyKey] = useState(() => (
+    typeof persisted.selectedCompanyKey === 'string' ? persisted.selectedCompanyKey : ''
+  ));
+  const [selectedCompany, setSelectedCompany] = useState(() => persisted.selectedCompany || null);
   const [awardHistoryEntries, setAwardHistoryEntries] = useState(() => (
     normalizeLhAwardHistoryEntries(DEFAULT_LH_AWARD_HISTORY_ENTRIES)
   ));
@@ -631,9 +715,12 @@ function App() {
   const topSectionRef = useRef(null);
   const resultsScrollRef = useRef(null);
   const [animationKey, setAnimationKey] = useState(0);
-  const latestQueryRef = useRef({ criteria: null, fileType });
+  const latestQueryRef = useRef(persisted.latestQuery || { criteria: null, fileType });
   const lastRequestIdRef = useRef(0);
   const selectedCompanyKeyRef = useRef(selectedCompanyKey);
+  const latestStateRef = useRef(null);
+  const resultsScrollPositionRef = useRef(normalizeScrollPosition(persisted.resultsScrollPosition));
+  const resultsScrollRestoredRef = useRef(false);
   const lastAutoSearchRef = useRef({ fileType, sortKey, sortDir, onlyLatest, onlyLHQuality, onlyWomenOwned });
   const selectedBizNumber = React.useMemo(() => normalizeBizNumber(selectedCompany?.['사업자번호']), [selectedCompany]);
   const currentSmppResult = selectedBizNumber ? smppResults[selectedBizNumber] : null;
@@ -745,7 +832,7 @@ function App() {
     targetFileType,
     targetPage = 1,
     preserveSelection = false,
-    skipScrollIntoView: _skipScrollIntoView = false,
+    skipScrollIntoView = false,
     overrides = {},
   } = {}) => {
     const effectiveCriteria = criteria || buildSearchCriteria();
@@ -862,7 +949,7 @@ function App() {
       }
 
       setTimeout(() => {
-        if (resultsScrollRef.current) {
+        if (!skipScrollIntoView && resultsScrollRef.current) {
           resultsScrollRef.current.scrollTop = 0;
         }
       }, 50);
@@ -1367,34 +1454,99 @@ function App() {
     });
   }, [executeSearch, fileType, onlyLatest, onlyLHQuality, onlyWomenOwned, searchPerformed, sortDir, sortKey]);
 
-  useEffect(() => {
-    const sanitizedFilters = {
-      ...filters,
-      includeRegions: Array.isArray(filters.includeRegions) ? [...filters.includeRegions] : [],
-      excludeRegions: Array.isArray(filters.excludeRegions) ? [...filters.excludeRegions] : [],
-    };
-    const sanitizedRegions = Array.isArray(regions)
-      ? regions.filter((name) => typeof name === 'string')
-      : [];
-    const snapshot = {
-      filters: sanitizedFilters,
+  const pageState = React.useMemo(() => (
+    buildSearchPageState({
+      filters,
       fileType,
-      searchedFileType: fileType,
-      searchPerformed: false,
+      searchedFileType,
+      regions,
+      searchPerformed,
+      searchResults,
+      page,
+      totalCount,
+      totalPages,
       sortKey,
       sortDir,
       onlyLatest,
       onlyLHQuality,
       onlyWomenOwned,
-      selectedIndex: null,
-      selectedCompanyKey: '',
-      page: 1,
-      // legacy key retained for backwards compatibility in case old snapshots exist
-      selectedBizNo: '',
-      regions: sanitizedRegions.length > 0 ? sanitizedRegions : ['전체'],
+      selectedIndex,
+      selectedCompanyKey,
+      selectedCompany,
+      latestQuery: latestQueryRef.current,
+      resultsScrollPosition: resultsScrollPositionRef.current,
+    })
+  ), [
+    filters,
+    fileType,
+    searchedFileType,
+    regions,
+    searchPerformed,
+    searchResults,
+    page,
+    totalCount,
+    totalPages,
+    sortKey,
+    sortDir,
+    onlyLatest,
+    onlyLHQuality,
+    onlyWomenOwned,
+    selectedIndex,
+    selectedCompanyKey,
+    selectedCompany,
+  ]);
+
+  latestStateRef.current = pageState;
+
+  useEffect(() => {
+    rememberSearchPageState(pageState);
+  }, [pageState]);
+
+  useEffect(() => (
+    () => {
+      const resultsScroll = resultsScrollRef.current;
+      const resultsScrollPosition = resultsScroll
+        ? { top: resultsScroll.scrollTop, left: resultsScroll.scrollLeft }
+        : resultsScrollPositionRef.current;
+      if (latestStateRef.current) {
+        rememberSearchPageState({
+          ...latestStateRef.current,
+          latestQuery: latestQueryRef.current,
+          resultsScrollPosition,
+        });
+      }
+    }
+  ), []);
+
+  React.useLayoutEffect(() => {
+    if (resultsScrollRestoredRef.current) return;
+    const resultsScroll = resultsScrollRef.current;
+    if (!resultsScroll) return;
+    if (!searchResults.length) return;
+    resultsScrollRestoredRef.current = true;
+    const { top, left } = resultsScrollPositionRef.current;
+    window.requestAnimationFrame(() => {
+      resultsScroll.scrollTop = top;
+      resultsScroll.scrollLeft = left;
+    });
+  }, [searchResults.length, page]);
+
+  const handleResultsScroll = React.useCallback((event) => {
+    const target = event.currentTarget;
+    const resultsScrollPosition = {
+      top: target.scrollTop,
+      left: target.scrollLeft,
     };
-    savePersisted(SEARCH_STORAGE_KEY, snapshot);
-  }, [filters, fileType, sortKey, sortDir, onlyLatest, onlyLHQuality, onlyWomenOwned, regions]);
+    resultsScrollPositionRef.current = resultsScrollPosition;
+    if (latestStateRef.current) {
+      latestStateRef.current = {
+        ...latestStateRef.current,
+        latestQuery: latestQueryRef.current,
+        resultsScrollPosition,
+      };
+      searchPageStateCache = latestStateRef.current;
+    }
+  }, []);
 
   return (
     <div className="app-shell sidebar-wide search-web-app">
@@ -1582,7 +1734,7 @@ function App() {
                   </div>
                 </div>
               )}
-                  <div className="results-scroll" ref={resultsScrollRef}>
+                  <div className="results-scroll" ref={resultsScrollRef} onScroll={handleResultsScroll}>
                 {isLoading && <p>로딩 중...</p>}
                 {error && <p className="error-message">{error}</p>}
                 {!isLoading && !error && totalCount === 0 && (
@@ -1750,7 +1902,9 @@ function App() {
                                 }
                               }
                             }
-                          } catch (_) { }
+                          } catch (_) {
+                            // Ignore malformed duration cells and leave the badge unset.
+                          }
                           const isSmppSmallRow = /소기업/.test(key) || /중소기업/.test(key);
                           const isSmppWomenRow = /여성/.test(key);
                           const smppFeatureKey = isSmppSmallRow ? 'small' : (isSmppWomenRow ? 'women' : null);

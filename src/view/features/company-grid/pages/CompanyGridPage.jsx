@@ -683,6 +683,19 @@ export default function CompanyGridPage() {
       const effectiveExcludeRegions = normalizeRegionSelection(overrides.excludeRegions ?? excludeRegions);
       const preserveSelection = !!overrides.preserveSelection;
       const preserveVisibleCount = !!overrides.preserveVisibleCount;
+      rememberCompanyGridState({
+        ...latestStateRef.current,
+        fileType,
+        includeRegions: effectiveIncludeRegions,
+        excludeRegions: effectiveExcludeRegions,
+        filters,
+        sortKey,
+        sortDir,
+        onlyLatest: overrides.onlyLatest ?? onlyLatest,
+        onlyLHQuality: overrides.onlyLHQuality ?? onlyLHQuality,
+        onlyWomenOwned: overrides.onlyWomenOwned ?? onlyWomenOwned,
+        scrollPosition: scrollPositionRef.current,
+      });
       setLoading(true);
       setError('');
       setSearched(true);

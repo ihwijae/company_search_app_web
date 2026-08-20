@@ -98,7 +98,7 @@ export default function App() {
       return;
     }
     if (authState.authenticated && path === '/login') {
-      window.location.hash = '#/search';
+      window.location.hash = normalizeInitialRoute(loadPersisted(LAST_ROUTE_STORAGE_KEY, '#/search'));
     }
   }, [authState.checking, authState.authenticated, path]);
 
