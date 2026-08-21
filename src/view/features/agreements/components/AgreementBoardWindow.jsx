@@ -4051,7 +4051,7 @@ export default function AgreementBoardWindow({
     if (!candidate) return null;
     const ratio = calculatePossibleShareRatio(possibleShareBase, getCandidateSipyungAmount(candidate));
     const numeric = Number(ratio);
-    if (!Number.isFinite(numeric) || numeric <= 0 || numeric >= 100) return null;
+    if (!Number.isFinite(numeric) || numeric < 0 || numeric >= 100) return null;
     return numeric;
   }, [possibleShareBase, getCandidateSipyungAmount]);
 
