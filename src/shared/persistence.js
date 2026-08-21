@@ -6,17 +6,33 @@ const IDB_STORE = 'entries';
 let cachedLocalStorage = undefined;
 let idbPromise = null;
 
+const isQuotaExceededError = (err) => (
+  err
+  && (
+    err.name === 'QuotaExceededError'
+    || err.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+    || err.code === 22
+    || err.code === 1014
+  )
+);
+
 const resolveLocalStorage = () => {
   if (typeof window === 'undefined') return null;
   if (cachedLocalStorage !== undefined) return cachedLocalStorage;
+  let storage = null;
   try {
-    const storage = window.localStorage;
+    storage = window.localStorage;
     const probeKey = `${STORAGE_PREFIX}__probe__`;
     storage.setItem(probeKey, '1');
     storage.removeItem(probeKey);
     cachedLocalStorage = storage;
     return cachedLocalStorage;
   } catch (err) {
+    if (storage && isQuotaExceededError(err)) {
+      console.warn('[persistence] localStorage write probe exceeded quota; using read/delete fallback:', err);
+      cachedLocalStorage = storage;
+      return cachedLocalStorage;
+    }
     console.warn('[persistence] localStorage unavailable:', err);
     cachedLocalStorage = null;
     return null;
