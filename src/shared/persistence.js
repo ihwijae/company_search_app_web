@@ -1,10 +1,7 @@
 const STORAGE_PREFIX = 'company_search_app:';
 const MISSING_FLAG_KEY = '__companySearchStateMissing';
-const IDB_NAME = 'company-search-app-persistence';
-const IDB_STORE = 'entries';
 
 let cachedLocalStorage = undefined;
-let idbPromise = null;
 
 const isQuotaExceededError = (err) => (
   err
@@ -48,78 +45,6 @@ const electronAPI = () => {
 };
 
 const withPrefix = (key) => `${STORAGE_PREFIX}${key}`;
-
-const openPersistenceDb = () => {
-  if (typeof indexedDB === 'undefined') return Promise.resolve(null);
-  if (idbPromise) return idbPromise;
-  idbPromise = new Promise((resolve) => {
-    const request = indexedDB.open(IDB_NAME, 1);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(IDB_STORE)) {
-        db.createObjectStore(IDB_STORE, { keyPath: 'key' });
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => {
-      console.warn('[persistence] IndexedDB open failed:', request.error);
-      resolve(null);
-    };
-    request.onblocked = () => {
-      console.warn('[persistence] IndexedDB open blocked');
-      resolve(null);
-    };
-  });
-  return idbPromise;
-};
-
-const loadFromIndexedDb = async (fullKey) => {
-  const db = await openPersistenceDb();
-  if (!db) return undefined;
-  return new Promise((resolve) => {
-    const tx = db.transaction(IDB_STORE, 'readonly');
-    const store = tx.objectStore(IDB_STORE);
-    const request = store.get(fullKey);
-    request.onsuccess = () => {
-      const row = request.result;
-      resolve(row && Object.prototype.hasOwnProperty.call(row, 'value') ? row.value : undefined);
-    };
-    request.onerror = () => {
-      console.warn('[persistence] IndexedDB load failed:', request.error);
-      resolve(undefined);
-    };
-  });
-};
-
-const saveToIndexedDb = async (fullKey, value) => {
-  const db = await openPersistenceDb();
-  if (!db) return;
-  await new Promise((resolve) => {
-    const tx = db.transaction(IDB_STORE, 'readwrite');
-    const store = tx.objectStore(IDB_STORE);
-    const request = store.put({ key: fullKey, value, savedAt: Date.now() });
-    request.onsuccess = () => resolve();
-    request.onerror = () => {
-      console.warn('[persistence] IndexedDB save failed:', request.error);
-      resolve();
-    };
-  });
-};
-
-const removeFromIndexedDb = async (fullKey) => {
-  const db = await openPersistenceDb();
-  if (!db) return;
-  await new Promise((resolve) => {
-    const tx = db.transaction(IDB_STORE, 'readwrite');
-    const store = tx.objectStore(IDB_STORE);
-    const request = store.delete(fullKey);
-    request.onsuccess = () => resolve();
-    request.onerror = () => {
-      console.warn('[persistence] IndexedDB remove failed:', request.error);
-      resolve();
-    };
-  });
-};
 
 const loadFromElectron = (fullKey) => {
   const api = electronAPI();
@@ -206,27 +131,6 @@ export const loadPersisted = (key, fallback) => {
   return fallback;
 };
 
-export const loadPersistedAsync = async (key, fallback) => {
-  const localValue = loadPersisted(key, undefined);
-  if (localValue !== undefined) return localValue;
-
-  const fullKey = withPrefix(key);
-  const indexedDbValue = await loadFromIndexedDb(fullKey);
-  if (indexedDbValue !== undefined) {
-    const storage = resolveLocalStorage();
-    if (storage) {
-      try {
-        storage.setItem(fullKey, JSON.stringify(indexedDbValue));
-      } catch (err) {
-        console.warn('[persistence] IndexedDB cache restore failed:', err);
-      }
-    }
-    return indexedDbValue;
-  }
-
-  return fallback;
-};
-
 export const savePersisted = (key, value) => {
   const fullKey = withPrefix(key);
   const storage = resolveLocalStorage();
@@ -242,9 +146,6 @@ export const savePersisted = (key, value) => {
       }
     }
   }
-  saveToIndexedDb(fullKey, value).catch((err) => {
-    console.warn('[persistence] IndexedDB save dispatch failed:', err);
-  });
   saveToElectron(fullKey, value);
 };
 
@@ -258,9 +159,6 @@ export const removePersisted = (key) => {
       console.warn('[persistence] remove failed (localStorage):', err);
     }
   }
-  removeFromIndexedDb(fullKey).catch((err) => {
-    console.warn('[persistence] IndexedDB remove dispatch failed:', err);
-  });
   removeFromElectron(fullKey);
 };
 
