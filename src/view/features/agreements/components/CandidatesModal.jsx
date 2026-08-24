@@ -587,21 +587,44 @@ const industryToLabel = (type) => {
   const copyPlainText = useCallback(async (text) => {
     if (typeof window === 'undefined') return false;
     const payload = String(text ?? '');
+    const fallbackCopy = () => {
+      const doc = portalContainer?.ownerDocument || document;
+      const win = doc.defaultView || window;
+      const textarea = doc.createElement('textarea');
+      textarea.value = payload;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.top = '-1000px';
+      textarea.style.left = '-1000px';
+      doc.body.appendChild(textarea);
+      try {
+        if (typeof win.focus === 'function') win.focus();
+        textarea.focus();
+        textarea.select();
+        return doc.execCommand('copy');
+      } finally {
+        textarea.remove();
+      }
+    };
     try {
       if (window.electronAPI?.clipboardWriteText) {
         const result = await window.electronAPI.clipboardWriteText(payload);
         if (!result?.success) throw new Error(result?.message || 'copy failed');
       } else if (typeof navigator !== 'undefined' && navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(payload);
+        try {
+          await navigator.clipboard.writeText(payload);
+        } catch (error) {
+          if (!fallbackCopy()) throw error;
+        }
       } else {
-        throw new Error('clipboard unavailable');
+        if (!fallbackCopy()) throw new Error('clipboard unavailable');
       }
       return true;
     } catch (err) {
       console.error('[CandidatesModal] clipboard copy failed', err);
       return false;
     }
-  }, []);
+  }, [portalContainer]);
 
   const handleCopyAmountField = useCallback(async (candidate, resolvers, label) => {
     if (!candidate) return;
