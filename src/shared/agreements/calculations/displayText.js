@@ -11,6 +11,7 @@ export function buildBoardNameCellText({
   getCandidateSipyungAmount,
   parseAmountValue,
   possibleShareBase,
+  showPossibleShareLimit = true,
   toNumber,
 }) {
   const rawName = getCompanyName(candidate) || '';
@@ -20,8 +21,12 @@ export function buildBoardNameCellText({
 
   const sipyungAmountRaw = getCandidateSipyungAmount(candidate);
   const sipyungAmount = parseAmountValue(sipyungAmountRaw);
-  const possibleShareRatio = calculatePossibleShareRatio(possibleShareBase, sipyungAmount);
-  const possibleShareDisplay = formatPossibleShareValue(possibleShareRatio);
+  const possibleShareRatio = showPossibleShareLimit
+    ? calculatePossibleShareRatio(possibleShareBase, sipyungAmount)
+    : null;
+  const possibleShareDisplay = showPossibleShareLimit
+    ? formatPossibleShareValue(possibleShareRatio)
+    : '';
 
   const lines = [cleanName];
   if (possibleShareDisplay) {

@@ -29,6 +29,7 @@ export function buildBoardMemberMeta({
   getCandidateSummaryStatus,
   formatAmount,
   possibleShareBase,
+  showPossibleShareLimit = true,
   isSingleBidEligible,
   isWomenOwnedCompany,
   getCandidateManagerName,
@@ -92,9 +93,9 @@ export function buildBoardMemberMeta({
   const sipyungInput = hasSipyungOverride
     ? candidate._agreementSipyungInput
     : (sipyungAmount != null ? formatAmount(sipyungAmount) : '');
-  const possibleShareText = formatPossibleShareText(
-    calculatePossibleShareRatio(possibleShareBase, sipyungAmount)
-  );
+  const possibleShareText = showPossibleShareLimit
+    ? formatPossibleShareText(calculatePossibleShareRatio(possibleShareBase, sipyungAmount))
+    : '';
   const tags = [];
   if (candidate._is_temp_company || candidate.snapshot?._is_temp_company) {
     tags.push({ key: 'temp', label: '임시' });

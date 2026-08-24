@@ -178,6 +178,7 @@ export default function CandidatesModal({
   perfectPerformanceBasis = '',
   dutyRegions = [],
   ratioBaseAmount = '',
+  showPossibleShareLimit = true,
   defaultExcludeSingle = true,
   noticeNo = '',
   noticeTitle = '',
@@ -364,7 +365,7 @@ export default function CandidatesModal({
     return industryAverages[key] || null;
   }, [fileType]);
   const hasEntryLimit = entryMode !== 'none';
-  const showTenderFields = (isPpsOwner || isMoisShareRange);
+  const showTenderFields = showPossibleShareLimit && (isPpsOwner || isMoisShareRange);
   const showBizYearsMetrics = isPpsOwner || isLhOwner;
   const isMoisUnder30 = normalizedOwnerId === 'MOIS' && menuKey === 'mois-under30';
   const perfAmountValue = Number(perfectPerformanceAmount) > 0 ? String(perfectPerformanceAmount) : '';
@@ -396,9 +397,11 @@ const industryToLabel = (type) => {
     const initialBase = isMoisUnder30
       ? (perfAmountValue || estimatedAmount || entryAmount || '')
       : (baseAmount || '');
-    const defaultRatioSource = isPpsOwner ? (bidAmount || ratioBaseAmount || '') : (ratioBaseAmount || bidAmount || '');
-    const initialRatio = isMoisUnder30 ? '' : defaultRatioSource;
-    const initialBidAmount = isMoisUnder30 ? '' : (bidAmount || defaultRatioSource);
+    const defaultRatioSource = showPossibleShareLimit
+      ? (isPpsOwner ? (bidAmount || ratioBaseAmount || '') : (ratioBaseAmount || bidAmount || ''))
+      : '';
+    const initialRatio = (isMoisUnder30 || !showPossibleShareLimit) ? '' : defaultRatioSource;
+    const initialBidAmount = (isMoisUnder30 || !showPossibleShareLimit) ? '' : (bidAmount || defaultRatioSource);
     const normalizedBidRate = bidRate || '';
     const normalizedAdjustmentRate = adjustmentRate || '';
     return {
@@ -414,7 +417,7 @@ const industryToLabel = (type) => {
       excludeSingleBidEligible: defaultExcludeSingle,
       filterByRegion: true,
     };
-  }, [isMoisUnder30, perfAmountValue, estimatedAmount, entryAmount, baseAmount, dutyRegions, ratioBaseAmount, bidAmount, bidRate, adjustmentRate, defaultExcludeSingle, hasEntryLimit, isPpsOwner]);
+  }, [isMoisUnder30, showPossibleShareLimit, perfAmountValue, estimatedAmount, entryAmount, baseAmount, dutyRegions, ratioBaseAmount, bidAmount, bidRate, adjustmentRate, defaultExcludeSingle, hasEntryLimit, isPpsOwner]);
 
   const initKey = JSON.stringify({
     ownerId,
@@ -572,41 +575,6 @@ const industryToLabel = (type) => {
     return reasons;
   }, []);
 
-  const handleCopyCandidate = useCallback(async (candidate, pctValue) => {
-    if (typeof window === 'undefined' || !candidate) return;
-    const name = (() => {
-      const raw = String(candidate.name ?? '').trim();
-      let cleaned = raw.replace(/㈜|\(주\)/g, '');
-      cleaned = cleaned.replace(/^\s*주식회사\s*/i, '');
-      cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
-      return cleaned;
-    })();
-    const manager = String(candidate.manager ?? '').trim();
-    const share = (Number.isFinite(pctValue) && pctValue < 100)
-      ? pctValue.toFixed(2)
-      : '';
-    const lines = [name];
-    if (share) lines.push(share);
-    if (manager) lines.push(manager);
-    const block = lines.join('\n');
-    try {
-      if (window.electronAPI?.copyCsvColumn) {
-        const result = await window.electronAPI.copyCsvColumn([block]);
-        if (!result?.success) {
-          throw new Error(result?.message || 'copy failed');
-        }
-      } else if (typeof navigator !== 'undefined' && navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(block);
-      } else {
-        throw new Error('clipboard unavailable');
-      }
-      showToast('업체 정보가 클립보드에 복사되었습니다.', 'success');
-    } catch (err) {
-      console.error('[CandidatesModal] copy failed', err);
-      showToast('복사에 실패했습니다. 다시 시도해 주세요.', 'error');
-    }
-  }, [showToast]);
-
   function formatAmount(value) {
     if (value === null || value === undefined) return '-';
     const cleaned = String(value).replace(/[^0-9.\-]/g, '').trim();
@@ -651,6 +619,21 @@ const industryToLabel = (type) => {
     const ok = await copyPlainText(formatted);
     if (ok) {
       showToast(`${label}이(가) 복사되었습니다.`, 'success');
+    } else {
+      showToast('복사에 실패했습니다. 다시 시도해 주세요.', 'error');
+    }
+  }, [copyPlainText, showToast]);
+
+  const handleCopyCompanyName = useCallback(async (candidate) => {
+    if (!candidate) return;
+    const name = String(candidate.name ?? '').trim();
+    if (!name) {
+      showToast('업체명을 찾을 수 없습니다.', 'error');
+      return;
+    }
+    const ok = await copyPlainText(name);
+    if (ok) {
+      showToast('업체명이 복사되었습니다.', 'success');
     } else {
       showToast('복사에 실패했습니다. 다시 시도해 주세요.', 'error');
     }
@@ -934,7 +917,9 @@ const industryToLabel = (type) => {
   };
 
   const parseAmount = (s) => Number(String(s || '').replace(/[^0-9]/g, '')) || 0;
-  const ratioBase = useMemo(() => parseAmount(params.ratioBase), [params.ratioBase]);
+  const ratioBase = useMemo(() => (
+    showPossibleShareLimit ? parseAmount(params.ratioBase) : 0
+  ), [params.ratioBase, showPossibleShareLimit]);
 
   const computed = useMemo(() => {
     return (list || []).map((c) => {
@@ -1201,7 +1186,7 @@ const industryToLabel = (type) => {
             <label>{isMoisUnder30 ? '실적만점금액' : '기초금액'}</label>
             <AmountInput value={params.baseAmount} onChange={(v)=>setParams(p=>({ ...p, baseAmount: v }))} placeholder="숫자" />
           </div>
-          {!isMoisUnder30 && hasEntryLimit && (
+          {showPossibleShareLimit && !isMoisUnder30 && hasEntryLimit && (
             <div className="filter-item">
               <label>{ratioLabel}</label>
               <AmountInput
@@ -1244,7 +1229,7 @@ const industryToLabel = (type) => {
               />
             </div>
           )}
-          {!isMoisUnder30 && (
+          {showPossibleShareLimit && !isMoisUnder30 && (
             <div className="filter-item">
               <label>가능지분 필터(%)</label>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 8 }}>
@@ -1328,8 +1313,12 @@ const industryToLabel = (type) => {
                 : `총 ${summary.total}개 · 선택 ${summary.pinned} · 제외 ${summary.excluded}`}
             </div>
             <div style={{ display:'flex', gap: 6, alignItems:'center', flexWrap: 'wrap' }}>
-              <button className={`btn-sm ${isActiveSort('share','desc') ? 'primary' : 'btn-soft'}`} onClick={()=>applySort('share','desc')}>지분 높은순</button>
-              <button className={`btn-sm ${isActiveSort('share','asc') ? 'primary' : 'btn-soft'}`} onClick={()=>applySort('share','asc')}>지분 낮은순</button>
+              {showPossibleShareLimit && (
+                <>
+                  <button className={`btn-sm ${isActiveSort('share','desc') ? 'primary' : 'btn-soft'}`} onClick={()=>applySort('share','desc')}>지분 높은순</button>
+                  <button className={`btn-sm ${isActiveSort('share','asc') ? 'primary' : 'btn-soft'}`} onClick={()=>applySort('share','asc')}>지분 낮은순</button>
+                </>
+              )}
               <button className={`btn-sm ${isActiveSort('perf5y','desc') ? 'primary' : 'btn-soft'}`} onClick={()=>applySort('perf5y','desc')}>5년실적 높은순</button>
               <button className={`btn-sm ${isActiveSort('perf5y','asc') ? 'primary' : 'btn-soft'}`} onClick={()=>applySort('perf5y','asc')}>5년실적 낮은순</button>
               <button className={`btn-sm ${isActiveSort('sipyung','desc') ? 'primary' : 'btn-soft'}`} onClick={()=>applySort('sipyung','desc')}>시평액 높은순</button>
@@ -1354,7 +1343,7 @@ const industryToLabel = (type) => {
                   <th style={{ width: '9%' }}>지역</th>
                   <th style={{ width: '13%' }}>시평</th>
                   <th style={{ width: '13%' }}>5년실적</th>
-                  <th style={{ width: '11%' }}>가능지분(%)</th>
+                  {showPossibleShareLimit && <th style={{ width: '11%' }}>가능지분(%)</th>}
                   <th style={{ width: '20%', textAlign: 'left' }}>상태</th>
                 </tr>
               </thead>
@@ -1484,7 +1473,7 @@ const industryToLabel = (type) => {
                     <td>{c.region}</td>
                     <td>{c.rating ? c.rating.toLocaleString() : ''}</td>
                     <td>{c.perf5y ? c.perf5y.toLocaleString() : ''}</td>
-                    <td>{pct !== null ? pct.toFixed(2) : '-'}</td>
+                    {showPossibleShareLimit && <td>{pct !== null ? pct.toFixed(2) : '-'}</td>}
                     <td style={{ textAlign: 'left', fontSize: 13 }}>
                       <div className="details-actions" style={{ justifyContent: 'flex-start', gap: 4, rowGap: 4 }}>
                         <span className="pill" style={singleBidBadgeStyle}>{singleBidAllowed ? '단독가능' : '단독불가능'}</span>
@@ -1583,7 +1572,7 @@ const industryToLabel = (type) => {
                       <div className="details-actions" style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                         <button className="btn-sm btn-soft" onClick={()=>handleCopySipyungField(c)}>시평액 복사</button>
                         <button className="btn-sm btn-soft" onClick={()=>handleCopyPerf5yField(c)}>5년 실적 복사</button>
-                        <button className="btn-sm btn-soft" onClick={()=>handleCopyCandidate(c, pct)}>복사</button>
+                        <button className="btn-sm btn-soft" onClick={()=>handleCopyCompanyName(c)}>업체명 복사</button>
                         {!readOnlyMode && (
                           <>
                             <button className={pinnedView.has(c.id) ? 'btn-sm primary' : 'btn-sm btn-soft'} onClick={()=>onTogglePin(c.id)} disabled={isAuto}>{pinnedView.has(c.id) ? (isAuto ? '선택(자동)' : '선택 해제') : '선택'}</button>
@@ -1595,7 +1584,7 @@ const industryToLabel = (type) => {
                   </tr>
                 );})}
                 {(sorted || []).length === 0 && (
-                  <tr><td colSpan={7} style={{ textAlign:'center', color:'#6b7280', padding: 16 }}>{loading ? '로딩 중…' : '결과 없음'}</td></tr>
+                  <tr><td colSpan={showPossibleShareLimit ? 7 : 6} style={{ textAlign:'center', color:'#6b7280', padding: 16 }}>{loading ? '로딩 중…' : '결과 없음'}</td></tr>
                 )}
               </tbody>
             </table>

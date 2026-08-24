@@ -18,6 +18,7 @@ export function buildCandidateDrawerEntries({
   managementMax,
   managementScoreMax,
   possibleShareBase,
+  showPossibleShareLimit = true,
   toNumber,
   clampScore,
   hasRecentAwardHistory = () => false,
@@ -44,9 +45,9 @@ export function buildCandidateDrawerEntries({
       const creditGrade = getCandidateCreditGrade(candidate);
       const managementScore = clampScore(toNumber(getCandidateManagementScore(candidate)), perSlotMax);
       const sipyungAmount = getCandidateSipyungAmount(candidate);
-      const possibleShareText = formatPossibleShareText(
-        calculatePossibleShareRatio(possibleShareBase, sipyungAmount)
-      );
+      const possibleShareText = showPossibleShareLimit
+        ? formatPossibleShareText(calculatePossibleShareRatio(possibleShareBase, sipyungAmount))
+        : '';
       const searchText = [
         companyName,
         managerName,

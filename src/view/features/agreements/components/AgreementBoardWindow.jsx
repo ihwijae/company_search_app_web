@@ -1465,6 +1465,9 @@ export default function AgreementBoardWindow({
   const showsBidAmountField = !isLHOwner;
   const showAValueField = (isLHOwner && !isLh100To300) || showsBidAmountField;
   const hasAValueInput = String(aValue || '').trim() !== '';
+  const showPossibleShareLimit = isLHOwner
+    ? (isLhUnder50 || isLh50To100 || isLh100To300)
+    : usesBidAmountCriteria;
   const showAValueWarning = showsBidAmountField && !hasAValueInput;
   const showManagementBonus = !isLh100To300 && !isEx50To100;
   const showNetCostBonus = !isLh100To300;
@@ -2148,7 +2151,10 @@ export default function AgreementBoardWindow({
     perfectPerformanceAmount,
     perfectPerformanceBasis,
     dutyRegions,
-    ratioBaseAmount: isPpsUnder50 && usesBidAmountCriteria ? (bidAmount || ratioBaseAmount || '') : (ratioBaseAmount || ''),
+    ratioBaseAmount: showPossibleShareLimit
+      ? (isPpsUnder50 && usesBidAmountCriteria ? (bidAmount || ratioBaseAmount || '') : (ratioBaseAmount || ''))
+      : '',
+    showPossibleShareLimit,
     defaultExcludeSingle: true,
     readOnly: true,
   }), [
@@ -2175,6 +2181,7 @@ export default function AgreementBoardWindow({
     ratioBaseAmount,
     isPpsUnder50,
     usesBidAmountCriteria,
+    showPossibleShareLimit,
   ]);
 
   const handleOpenRegionSearch = React.useCallback(() => {
@@ -4048,12 +4055,12 @@ export default function AgreementBoardWindow({
   }, [groupAssignments, participantMap]);
 
   const getPossibleShareLimit = React.useCallback((candidate) => {
-    if (!candidate) return null;
+    if (!showPossibleShareLimit || !candidate) return null;
     const ratio = calculatePossibleShareRatio(possibleShareBase, getCandidateSipyungAmount(candidate));
     const numeric = Number(ratio);
     if (!Number.isFinite(numeric) || numeric < 0 || numeric >= 100) return null;
     return numeric;
-  }, [possibleShareBase, getCandidateSipyungAmount]);
+  }, [possibleShareBase, showPossibleShareLimit, getCandidateSipyungAmount]);
 
   const formatPossibleShareInputValue = React.useCallback((value) => {
     const formatted = formatPossibleShareValue(value);
@@ -4289,6 +4296,7 @@ export default function AgreementBoardWindow({
       managementMax,
       managementScoreMax: MANAGEMENT_SCORE_MAX,
       possibleShareBase,
+      showPossibleShareLimit,
       toNumber,
       clampScore,
       hasRecentAwardHistory: isRecentAwardHistoryCompany,
@@ -4303,6 +4311,7 @@ export default function AgreementBoardWindow({
     managementMax,
     isMois30To50,
     possibleShareBase,
+    showPossibleShareLimit,
     isDutyRegionCompany,
     getCandidatePerformanceAmountForCurrentRange,
     isRecentAwardHistoryCompany,
@@ -4498,8 +4507,7 @@ export default function AgreementBoardWindow({
       const possibleShareBase = ownerKeyUpper === 'LH'
         ? ratioBaseValue
         : (usesBidAmountCriteria && bidAmountValue != null ? bidAmountValue : null);
-      const includePossibleShare = usesBidAmountCriteria
-        || (ownerKeyUpper === 'LH' && (isLhUnder50 || isLh50To100 || isLh100To300));
+      const includePossibleShare = showPossibleShareLimit;
       const dutyRateNumber = parseNumeric(regionDutyRate);
       const dutySummaryText = buildExportDutySummary(dutyRegions, dutyRateNumber, safeParticipantLimit, {
         compact: isLh100To300,
@@ -4640,6 +4648,7 @@ export default function AgreementBoardWindow({
     isLHOwner,
     isPps50To100,
     usesBidAmountCriteria,
+    showPossibleShareLimit,
     rangeImplemented,
     technicianEnabled,
     selectedRangeOption?.key,
@@ -5822,6 +5831,7 @@ export default function AgreementBoardWindow({
       getCandidateSummaryStatus,
       formatAmount,
       possibleShareBase,
+      showPossibleShareLimit,
       isSingleBidEligible,
       isWomenOwnedCompany,
       getCandidateManagerName,
