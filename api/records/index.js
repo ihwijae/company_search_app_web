@@ -4,6 +4,29 @@ const { sendJson, allowMethods, readJsonBody } = require('../_lib/http');
 const { readRecordsDocument, writeRecordsDocument } = require('../_lib/records-store');
 const { ROOTS, resolveWithinRoot } = require('../_lib/local-storage');
 
+const CONTENT_TYPES = {
+  '.pdf': 'application/pdf',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.tif': 'image/tiff',
+  '.tiff': 'image/tiff',
+};
+
+function getContentType(filePath) {
+  return CONTENT_TYPES[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
+}
+
+function buildContentDisposition(fileName) {
+  const fallbackName = String(fileName || 'attachment')
+    .replace(/[^\x20-\x7E]/g, '_')
+    .replace(/["\\]/g, '_');
+  return `attachment; filename="${fallbackName}"; filename*=UTF-8''${encodeURIComponent(fileName || 'attachment')}`;
+}
+
 function getActionFromRequest(req) {
   const url = new URL(req.url, 'http://localhost');
   return String(url.searchParams.get('action') || '').trim().toLowerCase();
@@ -34,8 +57,9 @@ module.exports = async function handler(req, res) {
         }
 
         res.statusCode = 200;
-        res.setHeader('Content-Type', 'application/octet-stream');
-        res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(path.basename(filePath))}`);
+        const fileName = path.basename(filePath);
+        res.setHeader('Content-Type', getContentType(filePath));
+        res.setHeader('Content-Disposition', buildContentDisposition(fileName));
         res.setHeader('Content-Length', String(stat.size));
         fs.createReadStream(filePath).pipe(res);
         return;

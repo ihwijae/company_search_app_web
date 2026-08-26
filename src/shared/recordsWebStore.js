@@ -297,6 +297,11 @@ const createBrowserFile = (buffer, fileName, mimeType) => new File([buffer], fil
   type: mimeType || 'application/octet-stream',
 });
 
+const normalizeDownloadName = (attachment) => {
+  const name = normalizeText(attachment?.displayName || attachment?.fileName || 'attachment');
+  return name || 'attachment';
+};
+
 const filePathToParts = (value) => String(value || '')
   .split(/[\\/]+/)
   .map((part) => part.trim())
@@ -848,7 +853,19 @@ export const recordsWebStore = {
     if (!href) {
       throw new Error('첨부 파일을 찾을 수 없습니다.');
     }
-    window.open(href, '_blank', 'noopener,noreferrer');
+    const response = await fetch(href);
+    if (!response.ok) {
+      throw new Error('첨부 파일을 불러올 수 없습니다.');
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = normalizeDownloadName(target);
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     return true;
   },
 
