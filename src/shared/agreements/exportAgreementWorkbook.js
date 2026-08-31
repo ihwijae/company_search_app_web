@@ -57,6 +57,24 @@ const cloneCellStyle = (style) => {
   try { return JSON.parse(JSON.stringify(style)); } catch { return style; }
 };
 
+const cloneCellValueForRow = (value, sourceRowNumber, targetRowNumber) => {
+  if (!value || typeof value !== 'object') return value;
+  const cloned = cloneCellStyle(value);
+  if (cloned && typeof cloned.formula === 'string') {
+    cloned.formula = translateFormulaRowRefs(cloned.formula, sourceRowNumber, targetRowNumber);
+  }
+  return cloned;
+};
+
+const translateFormulaRowRefs = (formula, sourceRowNumber, targetRowNumber) => {
+  if (!formula || sourceRowNumber === targetRowNumber) return formula;
+  return String(formula).replace(/(\$?[A-Z]{1,3})(\$?)(\d+)/g, (match, column, rowLock, rowText) => {
+    const rowNumber = Number(rowText);
+    if (!Number.isFinite(rowNumber) || rowNumber !== sourceRowNumber || rowLock) return match;
+    return `${column}${rowLock}${targetRowNumber}`;
+  });
+};
+
 const normalizeWorksheetViews = (views) => {
   const sourceViews = cloneCellStyle(views);
   if (Array.isArray(sourceViews) && sourceViews.length > 0) {
@@ -75,6 +93,81 @@ const normalizeWorksheetViews = (views) => {
 const getWorksheetColumns = (sheet) => (
   Array.isArray(sheet?.columns) ? sheet.columns : []
 );
+
+const parseMergeRange = (range) => {
+  const match = String(range || '').match(/^(\$?[A-Z]{1,3})(\$?\d+):(\$?[A-Z]{1,3})(\$?\d+)$/);
+  if (!match) return null;
+  return {
+    startColumn: match[1].replace('$', ''),
+    startRow: Number(match[2].replace('$', '')),
+    endColumn: match[3].replace('$', ''),
+    endRow: Number(match[4].replace('$', '')),
+  };
+};
+
+const shiftMergeRange = (range, sourceRowNumber, targetRowNumber) => {
+  const parsed = parseMergeRange(range);
+  if (!parsed || parsed.startRow !== sourceRowNumber || parsed.endRow !== sourceRowNumber) return null;
+  return `${parsed.startColumn}${targetRowNumber}:${parsed.endColumn}${targetRowNumber}`;
+};
+
+const hasMergeRange = (sheet, range) => (
+  Array.isArray(sheet?.model?.merges) && sheet.model.merges.includes(range)
+);
+
+const copyRowPattern = (sheet, sourceRowNumber, targetRowNumber) => {
+  if (!sheet || !sourceRowNumber || !targetRowNumber || sourceRowNumber === targetRowNumber) return;
+  const sourceRow = sheet.getRow(sourceRowNumber);
+  const targetRow = sheet.getRow(targetRowNumber);
+  targetRow.height = sourceRow.height;
+  targetRow.hidden = sourceRow.hidden;
+  targetRow.style = cloneCellStyle(sourceRow.style);
+  const columnCount = Math.max(sheet.columnCount || 0, sourceRow.cellCount || 0);
+  for (let colNumber = 1; colNumber <= columnCount; colNumber += 1) {
+    const sourceCell = sourceRow.getCell(colNumber);
+    const targetCell = targetRow.getCell(colNumber);
+    targetCell.value = cloneCellValueForRow(sourceCell.value, sourceRowNumber, targetRowNumber);
+    targetCell.style = cloneCellStyle(sourceCell.style);
+    targetCell.numFmt = sourceCell.numFmt;
+    targetCell.alignment = cloneCellStyle(sourceCell.alignment);
+    targetCell.border = cloneCellStyle(sourceCell.border);
+    targetCell.font = cloneCellStyle(sourceCell.font);
+    targetCell.fill = cloneCellStyle(sourceCell.fill);
+    targetCell.protection = cloneCellStyle(sourceCell.protection);
+    targetCell.note = undefined;
+  }
+  const merges = Array.isArray(sheet.model?.merges) ? [...sheet.model.merges] : [];
+  merges.forEach((range) => {
+    const shiftedRange = shiftMergeRange(range, sourceRowNumber, targetRowNumber);
+    if (!shiftedRange || hasMergeRange(sheet, shiftedRange)) return;
+    try {
+      sheet.mergeCells(shiftedRange);
+    } catch {
+      // The target cells may already be part of a broader template merge.
+    }
+  });
+};
+
+const ensureWorksheetRows = (sheet, {
+  startRow,
+  rowStep,
+  qualityRowOffset,
+  templateEndRow,
+  requiredEndRow,
+}) => {
+  if (!sheet || !startRow || !requiredEndRow || requiredEndRow <= templateEndRow) return;
+  const step = rowStep > 0 ? rowStep : 1;
+  const blockHeight = Math.max(step, qualityRowOffset + 1, 1);
+  const lastTemplateBlockStart = Math.max(
+    startRow,
+    startRow + (Math.floor((templateEndRow - startRow - (blockHeight - 1)) / step) * step)
+  );
+  for (let rowNumber = templateEndRow + 1; rowNumber <= requiredEndRow; rowNumber += 1) {
+    const offset = ((rowNumber - startRow) % step + step) % step;
+    const sourceRowNumber = Math.min(lastTemplateBlockStart + offset, templateEndRow);
+    copyRowPattern(sheet, sourceRowNumber, rowNumber);
+  }
+};
 
 const resolveLhSimpleQualityPoints = (qualityScore) => {
   const score = Number(qualityScore);
@@ -359,13 +452,30 @@ async function exportAgreementExcel({
   const credibilityScaleExpr = config.credibilityScaleExpr || '';
   const credibilityMaxValue = config.credibilityMax ?? null;
 
-  const availableRows = config.maxRows
-    ? Math.floor((config.maxRows - config.startRow) / rowStep) + 1
-    : Infinity;
-  if (groups.length > availableRows) {
-    throw new Error(`템플릿이 지원하는 최대 협정 수(${availableRows}개)를 초과했습니다.`);
-  }
-  const endRow = config.maxRows || (config.startRow + (availableRows - 1) * rowStep);
+  const configuredEndRow = Number.isFinite(Number(config.maxRows))
+    ? Number(config.maxRows)
+    : 0;
+  const templateEndRow = Math.max(configuredEndRow, worksheet.rowCount || 0, config.startRow);
+  const groupEndRow = groups.length > 0
+    ? config.startRow + ((groups.length - 1) * rowStep) + qualityRowOffset
+    : config.startRow;
+  const candidateRowStep = rowStep > 0 ? rowStep : 1;
+  const candidateStartRow = groups.length > 0
+    ? (config.startRow + ((groups.length - 1) * rowStep) + (3 * candidateRowStep))
+    : (config.startRow + (3 * candidateRowStep));
+  const candidateEndRow = slotCount > 0 && Array.isArray(candidates) && candidates.length > 0
+    ? candidateStartRow
+      + (Math.floor((candidates.length - 1) / slotCount) * candidateRowStep)
+      + qualityRowOffset
+    : config.startRow;
+  const endRow = Math.max(templateEndRow, groupEndRow, candidateEndRow);
+  ensureWorksheetRows(worksheet, {
+    startRow: config.startRow,
+    rowStep,
+    qualityRowOffset,
+    templateEndRow,
+    requiredEndRow: endRow,
+  });
   for (let row = config.startRow; row <= endRow; row += 1) {
     const rowObj = worksheet.getRow(row);
     if (rowObj && rowObj.style) {
@@ -732,11 +842,6 @@ async function exportAgreementExcel({
   });
 
   if (slotCount > 0 && Array.isArray(candidates) && candidates.length > 0) {
-    const candidateRowStep = rowStep > 0 ? rowStep : 1;
-    const candidateStartRow = groups.length > 0
-      ? (config.startRow + ((groups.length - 1) * rowStep) + (3 * candidateRowStep))
-      : (config.startRow + (3 * candidateRowStep));
-
     candidates.forEach((candidate, index) => {
       if (!candidate || typeof candidate !== 'object') return;
       const rowIndex = candidateStartRow + (Math.floor(index / slotCount) * candidateRowStep);
