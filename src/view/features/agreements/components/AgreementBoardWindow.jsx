@@ -129,7 +129,7 @@ const CONSTRUCTION_EXPERIENCE_SCORE_MAX = 15;
 const KRAIL_TECHNICIAN_ABILITY_MAX = 5;
 const PERFORMANCE_DEFAULT_MAX = 13;
 const PERFORMANCE_MOIS_DEFAULT_MAX = 15;
-const PERFORMANCE_CAP_VERSION = 2;
+const PERFORMANCE_CAP_VERSION = 4;
 const MANAGEMENT_SCORE_VERSION = 5;
 const LH_QUALITY_DEFAULT_UNDER_100B = 85;
 const LH_QUALITY_DEFAULT_OVER_100B = 88;
@@ -2100,8 +2100,13 @@ export default function AgreementBoardWindow({
     if (ownerKeyUpper === 'KRAIL' && rangeKey === KRAIL_50_TO_100_KEY) {
       if (base <= 0) return { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
       const normalizedType = String(fileType || '').toLowerCase();
-      const multiplier = normalizedType === 'sobang' ? 3 : 2;
-      return { perfectPerformanceAmount: base * multiplier, perfectPerformanceBasis: `기초금액 × ${multiplier}배` };
+      if (normalizedType === 'sobang') {
+        return {
+          perfectPerformanceAmount: 50 * KOREAN_UNIT * 3,
+          perfectPerformanceBasis: '설계금액 50억 간주 × 3배',
+        };
+      }
+      return { perfectPerformanceAmount: base * 2, perfectPerformanceBasis: '기초금액 × 2배' };
     }
 
     if (ownerKeyUpper === 'EX') {

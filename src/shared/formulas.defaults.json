@@ -2712,8 +2712,8 @@
                       "sobang"
                     ]
                   },
-                  "formula": "((Math.round((perf5y / (baseAmount * 3)) * 100) / 100) * 10)",
-                  "maxScore": 10
+                  "formula": "((Math.round((perf5y / (5000000000 * 3)) * 100) / 100) * 15)",
+                  "maxScore": 15
                 }
               ]
             },
