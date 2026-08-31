@@ -114,6 +114,8 @@ export default function useTechnicianScoreWorkflow({
     if (!technicianModalOpen) return;
     const key = technicianEntriesTargetKeyRef.current || resolveTechnicianStorageKeyByTarget(technicianTarget);
     if (!key) return;
+    const hasExistingEntries = Object.prototype.hasOwnProperty.call(technicianEntriesByTargetRef.current, key);
+    if (!hasExistingEntries && technicianEntries.length === 0) return;
     const nextMap = { ...technicianEntriesByTargetRef.current, [key]: technicianEntries };
     technicianEntriesByTargetRef.current = nextMap;
     if (typeof onUpdateBoard === 'function') onUpdateBoard({ technicianEntriesByTarget: nextMap });
@@ -163,7 +165,7 @@ export default function useTechnicianScoreWorkflow({
         const key = resolveTechnicianStorageKeyBySlot(option.groupIndex, option.slotIndex);
         if (!key || !Object.prototype.hasOwnProperty.call(entriesByTarget, key)) return null;
         const entries = entriesByTarget[key];
-        if (!Array.isArray(entries)) return null;
+        if (!Array.isArray(entries) || entries.length === 0) return null;
         const resolved = roundTo(
           entries.reduce((sum, entry) => sum + computeTechnicianScore(entry), 0),
           2,
