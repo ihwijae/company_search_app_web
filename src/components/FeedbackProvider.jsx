@@ -14,6 +14,38 @@ export function useFeedback() {
   return React.useContext(FeedbackContext);
 }
 
+function ConfirmDialog({ confirmState }) {
+  const confirmButtonRef = React.useRef(null);
+
+  React.useEffect(() => {
+    confirmButtonRef.current?.focus();
+  }, []);
+
+  return (
+    <div className="confirm-overlay" role="presentation">
+      <div className="confirm-dialog" role="dialog" aria-modal="true">
+        <div className="confirm-dialog__body">
+          <strong>{confirmState.title}</strong>
+          {confirmState.message && <p>{confirmState.message}</p>}
+        </div>
+        <div className="confirm-dialog__actions">
+          <button type="button" className="btn-muted" onClick={() => confirmState.onResolve(false)}>
+            {confirmState.cancelText}
+          </button>
+          <button
+            ref={confirmButtonRef}
+            type="button"
+            className="btn-primary"
+            onClick={() => confirmState.onResolve(true)}
+          >
+            {confirmState.confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function FeedbackProvider({ children }) {
   const [toasts, setToasts] = React.useState([]);
   const [confirmState, setConfirmState] = React.useState(null);
@@ -129,24 +161,7 @@ export default function FeedbackProvider({ children }) {
         );
       })()}
       {confirmState && (() => {
-        const content = (
-          <div className="confirm-overlay" role="presentation">
-            <div className="confirm-dialog" role="dialog" aria-modal="true">
-              <div className="confirm-dialog__body">
-                <strong>{confirmState.title}</strong>
-                {confirmState.message && <p>{confirmState.message}</p>}
-              </div>
-              <div className="confirm-dialog__actions">
-                <button type="button" className="btn-muted" onClick={() => confirmState.onResolve(false)}>
-                  {confirmState.cancelText}
-                </button>
-                <button type="button" className="btn-primary" onClick={() => confirmState.onResolve(true)}>
-                  {confirmState.confirmText}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
+        const content = <ConfirmDialog confirmState={confirmState} />;
         if (confirmState.portalTarget && confirmState.portalTarget.isConnected) {
           return createPortal(content, confirmState.portalTarget);
         }

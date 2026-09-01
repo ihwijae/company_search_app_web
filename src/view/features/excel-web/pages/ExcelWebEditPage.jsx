@@ -1427,7 +1427,7 @@ export default function ExcelWebEditPage() {
                   사업자등록번호: {loadedData?.bizNo || form.bizNo || '-'}
                 </p>
                 <p className="muted">삭제하려면 아래 예 버튼을 눌러 진행하세요.</p>
-                <button type="button" className="danger" onClick={handleDeleteCompany} disabled={isBackendBusy}>예</button>
+                <button type="button" className="danger" onClick={handleDeleteCompany} disabled={isBackendBusy} autoFocus>예</button>
                 <button type="button" onClick={() => setIsDeleteConfirmOpen(false)} disabled={isBackendBusy}>아니오</button>
               </div>
             </div>
@@ -1439,7 +1439,7 @@ export default function ExcelWebEditPage() {
             <div className="excel-web-v2-modal">
               <div className="excel-web-v2-modal-head">
                 <h3>확인 필요</h3>
-                <button type="button" onClick={() => setIsMultiPageNoticeOpen(false)}>확인</button>
+                <button type="button" onClick={() => setIsMultiPageNoticeOpen(false)} autoFocus>확인</button>
               </div>
               <div className="excel-web-v2-modal-body">
                 <p className="muted">

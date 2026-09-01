@@ -731,7 +731,7 @@ export default function ScanArchivePage() {
                 <button type="button" onClick={() => setDeleteTarget(null)} disabled={deleteBusy}>
                   취소
                 </button>
-                <button type="button" className="danger" onClick={handleDeleteSelectedFile} disabled={deleteBusy}>
+                <button type="button" className="danger" onClick={handleDeleteSelectedFile} disabled={deleteBusy} autoFocus>
                   {deleteBusy ? '삭제 중...' : '삭제'}
                 </button>
               </div>
@@ -810,6 +810,7 @@ export default function ScanArchivePage() {
                   className="danger"
                   onClick={() => handleSubmitUpload({ overwrite: true })}
                   disabled={archiveBusy}
+                  autoFocus
                 >
                   {archiveBusy ? '덮어쓰는 중...' : '예'}
                 </button>
