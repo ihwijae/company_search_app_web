@@ -203,6 +203,58 @@ const sanitizeCandidatesList = (list) => (
     : list
 );
 
+const getCandidateBizNo = (candidate = {}) => normalizeBizNo(
+  candidate?.bizNo
+  || candidate?.biz_no
+  || candidate?.bizno
+  || candidate?.businessNumber
+  || candidate?.['사업자번호']
+  || candidate?.['사업자 번호']
+  || candidate?.['사업자등록번호']
+  || candidate?.snapshot?.bizNo
+  || candidate?.snapshot?.BizNo
+  || candidate?.snapshot?.businessNumber
+  || candidate?.snapshot?.['사업자번호']
+  || candidate?.snapshot?.['사업자 번호']
+  || candidate?.snapshot?.['사업자등록번호']
+  || ''
+);
+
+const buildCandidateIdentityKey = (candidate = {}) => {
+  const bizNo = getCandidateBizNo(candidate);
+  if (bizNo) return `biz:${bizNo}`;
+  const id = String(candidate?.id || '').trim();
+  if (id) return `id:${id}`;
+  const name = String(
+    candidate?.name
+    || candidate?.['검색된 회사']
+    || candidate?.['업체명']
+    || candidate?.snapshot?.['검색된 회사']
+    || candidate?.snapshot?.['업체명']
+    || ''
+  ).trim().toLowerCase();
+  return name ? `name:${name}` : '';
+};
+
+const ensureUniqueCandidateId = (candidate, existingIds, fallbackIndex) => {
+  if (!candidate || typeof candidate !== 'object') return;
+  const identityKey = buildCandidateIdentityKey(candidate) || `ad-hoc-${fallbackIndex}`;
+  if (!candidate.id) {
+    candidate.id = `added:${identityKey}`;
+  }
+  if (!existingIds.has(candidate.id)) return;
+  const existingBizNo = getCandidateBizNo(candidate);
+  if (!existingBizNo) return;
+
+  let nextId = `added:biz:${existingBizNo}`;
+  let count = 2;
+  while (existingIds.has(nextId)) {
+    nextId = `added:biz:${existingBizNo}-${count}`;
+    count += 1;
+  }
+  candidate.id = nextId;
+};
+
 const buildPersistedBoardState = (state) => ({
   ...initialState,
   ...state,
@@ -437,40 +489,54 @@ const appendCandidates = React.useCallback((entries = []) => {
     const existing = Array.isArray(prev.candidates) ? prev.candidates : [];
     const existingIds = new Set(existing.map((item) => item && item.id).filter(Boolean));
     const existingIndex = new Map(existing.map((item, index) => [item && item.id, index]).filter(([id]) => id));
+    const existingIdentityIndex = new Map();
+    existing.forEach((item, index) => {
+      const key = buildCandidateIdentityKey(item);
+      if (key && !existingIdentityIndex.has(key)) existingIdentityIndex.set(key, index);
+    });
     const normalized = entries
       .map((item) => (item && typeof item === 'object' ? stripCandidateComputedFields({ ...item }) : null))
       .filter((item) => item && (item.id || item.bizNo || item.name));
     if (normalized.length === 0) return prev;
     let next = [...existing];
     let changed = false;
-    normalized.forEach((item) => {
+    normalized.forEach((item, index) => {
       if (!item.id) {
-        const base = normalizeRuleEntry(item);
-        const key = normalizeBizNo(base.bizNo) || base.name || `ad-hoc-${next.length}`;
-        item.id = `added:${key}`;
+        const identityKeyForId = buildCandidateIdentityKey(item) || `ad-hoc-${next.length + index}`;
+        item.id = `added:${identityKeyForId}`;
       }
-      if (existingIds.has(item.id)) {
-        const replaceIndex = existingIndex.get(item.id);
-        if (replaceIndex !== undefined) {
-          const prevItem = next[replaceIndex];
-          const listedFlag = item[AGREEMENT_CANDIDATE_LISTED_FLAG] ?? prevItem?.[AGREEMENT_CANDIDATE_LISTED_FLAG];
-          const merged = {
-            ...item,
-            id: item.id || prevItem?.id,
-            [AGREEMENT_CANDIDATE_LISTED_FLAG]: listedFlag,
-            _agreementManagementScore: undefined,
-            _agreementManagementScoreVersion: undefined,
-            _agreementPerformanceScore: undefined,
-            _agreementPerformanceMax: undefined,
-            _agreementPerformanceCapVersion: undefined,
-          };
-          next[replaceIndex] = merged;
-          changed = true;
+      const identityKey = buildCandidateIdentityKey(item);
+      const sameIdIndex = existingIds.has(item.id) ? existingIndex.get(item.id) : undefined;
+      let replaceIndex = identityKey && existingIdentityIndex.has(identityKey)
+        ? existingIdentityIndex.get(identityKey)
+        : undefined;
+      if (replaceIndex === undefined && sameIdIndex !== undefined) {
+        const sameIdIdentityKey = buildCandidateIdentityKey(next[sameIdIndex]);
+        if (!identityKey || identityKey === sameIdIdentityKey) {
+          replaceIndex = sameIdIndex;
         }
+      }
+      if (replaceIndex !== undefined) {
+        const prevItem = next[replaceIndex];
+        const listedFlag = item[AGREEMENT_CANDIDATE_LISTED_FLAG] ?? prevItem?.[AGREEMENT_CANDIDATE_LISTED_FLAG];
+        const merged = {
+          ...item,
+          id: prevItem?.id || item.id,
+          [AGREEMENT_CANDIDATE_LISTED_FLAG]: listedFlag,
+          _agreementManagementScore: undefined,
+          _agreementManagementScoreVersion: undefined,
+          _agreementPerformanceScore: undefined,
+          _agreementPerformanceMax: undefined,
+          _agreementPerformanceCapVersion: undefined,
+        };
+        next[replaceIndex] = merged;
+        changed = true;
         return;
       }
+      ensureUniqueCandidateId(item, existingIds, next.length + index);
       existingIds.add(item.id);
       existingIndex.set(item.id, next.length);
+      if (identityKey) existingIdentityIndex.set(identityKey, next.length);
       next.push(item);
       changed = true;
     });

@@ -3140,12 +3140,13 @@ export default function AgreementBoardWindow({
     const nextCandidates = (candidates || []).map((item) => {
       if (!item || typeof item !== 'object') return item;
       let matched = false;
-      if (candidateId && item.id === candidateId) matched = true;
-      if (!matched && candidateBiz) {
+      if (candidateBiz) {
         const itemBiz = normalizeBizNo(getBizNo(item));
         if (itemBiz && itemBiz === candidateBiz) matched = true;
+      } else if (candidateId && item.id === candidateId) {
+        matched = true;
       }
-      if (!matched && candidateName) {
+      if (!matched && !candidateBiz && !candidateId && candidateName) {
         const itemName = String(getCompanyName(item) || '').trim();
         if (itemName && itemName === candidateName) matched = true;
       }
@@ -4139,10 +4140,6 @@ export default function AgreementBoardWindow({
     } = pending;
     let targetUid = null;
     for (const [uid, entry] of participantMap.entries()) {
-      if (candidateId && entry?.candidate?.id === candidateId) {
-        targetUid = uid;
-        break;
-      }
       if (!entry?.candidate) continue;
       if (!targetUid && matchBizNo) {
         const candidateBiz = normalizeBizNo(getBizNo(entry.candidate));
@@ -4151,7 +4148,11 @@ export default function AgreementBoardWindow({
           break;
         }
       }
-      if (!targetUid && matchNameKey) {
+      if (!matchBizNo && candidateId && entry.candidate.id === candidateId) {
+        targetUid = uid;
+        break;
+      }
+      if (!targetUid && !matchBizNo && !candidateId && matchNameKey) {
         const candidateNameKey = sanitizeCompanyName(getCompanyName(entry.candidate) || '').toLowerCase();
         if (candidateNameKey && candidateNameKey === matchNameKey) {
           targetUid = uid;
