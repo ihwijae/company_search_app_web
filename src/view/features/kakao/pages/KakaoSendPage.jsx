@@ -99,8 +99,12 @@ const buildCompanyOptionKey = (company) => {
 };
 
 const getConflictSelectionId = (entry, normalizedName) => {
-  const entryId = String(entry?.id || '').trim();
-  return entryId ? `entry:${entryId}` : `name:${normalizedName}`;
+  return `name:${normalizedName || normalizeCompanyName(entry?.companyName)}`;
+};
+
+const normalizeSelectionKeys = (value) => {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  return value ? [value] : [];
 };
 
 const buildNameVariants = (name) => {
@@ -304,8 +308,8 @@ export default function KakaoSendPage() {
       map.get(normalized).push(candidate);
     });
     console.log('[kakao-auto-match] mapped names:', Array.from(map.keys()));
-    const conflictEntries = [];
-    const nextEntries = entries.map((entry) => {
+    const conflictMap = new Map();
+    const nextEntries = entries.flatMap((entry) => {
       const normalizedName = normalizeCompanyName(entry.companyName);
       let list = map.get(normalizedName) || [];
       if (list.length === 0) {
@@ -329,25 +333,38 @@ export default function KakaoSendPage() {
       const pool = filtered.length > 0 ? filtered : list;
       if (pool.length > 1 && normalizedName) {
         const selectionId = getConflictSelectionId(entry, normalizedName);
-        const savedKey = selections?.[selectionId];
-        const picked = savedKey
-          ? pool.find((candidate) => buildCompanyOptionKey(candidate) === savedKey)
-          : null;
-        if (!picked) {
-          conflictEntries.push({
-            selectionId,
-            entryId: entry.id,
-            normalizedName,
-            displayName: entry.companyName || entry.company || normalizedName,
-            sourceText: entry.company || '',
-            options: pool,
-          });
-          return entry;
+        const savedKeys = normalizeSelectionKeys(selections?.[selectionId]);
+        const pickedList = savedKeys
+          .map((key) => pool.find((candidate) => buildCompanyOptionKey(candidate) === key))
+          .filter(Boolean);
+        if (pickedList.length === 0) {
+          if (!conflictMap.has(selectionId)) {
+            conflictMap.set(selectionId, {
+              selectionId,
+              normalizedName,
+              displayName: entry.companyName || entry.company || normalizedName,
+              sourceText: entry.company || '',
+              options: pool,
+            });
+          }
+          return [entry];
         }
-        const managers = extractManagerNames(picked);
-        const matchedId = managers.length > 0 ? (String(managers[0] || '').trim() || 'none') : 'none';
-        console.log('[kakao-auto-match] manager result:', entry.companyName, matchedId);
-        return matchedId === 'none' ? entry : { ...entry, managerId: matchedId };
+        const managerIds = [];
+        const seenManagers = new Set();
+        pickedList.forEach((picked) => {
+          const managers = extractManagerNames(picked);
+          const matchedId = managers.length > 0 ? (String(managers[0] || '').trim() || 'none') : 'none';
+          if (seenManagers.has(matchedId)) return;
+          seenManagers.add(matchedId);
+          managerIds.push(matchedId);
+        });
+        console.log('[kakao-auto-match] manager results:', entry.companyName, managerIds);
+        if (managerIds.length === 0) return [entry];
+        return managerIds.map((managerId, index) => ({
+          ...entry,
+          id: index === 0 ? entry.id : `${entry.id}__manager-${index}`,
+          managerId,
+        }));
       }
       let matchedId = 'none';
       for (const candidate of pool) {
@@ -358,17 +375,23 @@ export default function KakaoSendPage() {
         }
       }
       console.log('[kakao-auto-match] manager result:', entry.companyName, matchedId);
-      return matchedId === 'none' ? entry : { ...entry, managerId: matchedId };
+      return [matchedId === 'none' ? entry : { ...entry, managerId: matchedId }];
     });
     return {
       entries: nextEntries,
-      conflictEntries,
+      conflictEntries: Array.from(conflictMap.values()),
     };
   };
 
   const handleCompanyConflictPick = (selectionId, option) => {
     const key = buildCompanyOptionKey(option);
-    setCompanyConflictSelections((prev) => ({ ...prev, [selectionId]: key }));
+    setCompanyConflictSelections((prev) => {
+      const selectedKeys = normalizeSelectionKeys(prev[selectionId]);
+      const nextKeys = selectedKeys.includes(key)
+        ? selectedKeys.filter((item) => item !== key)
+        : [...selectedKeys, key];
+      return { ...prev, [selectionId]: nextKeys };
+    });
   };
 
   const handleCompanyConflictCancel = () => {
@@ -382,9 +405,9 @@ export default function KakaoSendPage() {
       return;
     }
     const unresolved = (companyConflictModal.entries || []).filter((entry) => {
-      const savedKey = companyConflictSelections?.[entry.selectionId];
-      if (!savedKey) return true;
-      return !entry.options.some((candidate) => buildCompanyOptionKey(candidate) === savedKey);
+      const savedKeys = normalizeSelectionKeys(companyConflictSelections?.[entry.selectionId]);
+      if (savedKeys.length === 0) return true;
+      return !savedKeys.some((key) => entry.options.some((candidate) => buildCompanyOptionKey(candidate) === key));
     });
     if (unresolved.length > 0) {
       notify({ type: 'info', message: '중복된 업체가 있습니다. 각 협정 항목에 맞는 업체를 선택해 주세요.' });
@@ -906,7 +929,7 @@ export default function KakaoSendPage() {
           <div className="excel-helper-modal" role="dialog" aria-modal="true">
             <header className="excel-helper-modal__header">
               <h3>중복된 업체 선택</h3>
-              <p>동일한 이름의 업체가 여러 건 조회되었습니다. 각 협정 항목에 맞는 자료를 선택해 주세요.</p>
+              <p>동일한 이름의 업체가 여러 건 조회되었습니다. 협정에 포함할 업체를 모두 선택해 주세요.</p>
             </header>
             <div className="excel-helper-modal__body">
               {(companyConflictModal.entries || []).map((entry) => (
@@ -920,8 +943,8 @@ export default function KakaoSendPage() {
                   <div className="excel-helper-modal__options">
                     {entry.options.map((option) => {
                       const optionKey = buildCompanyOptionKey(option);
-                      const selectedKey = companyConflictSelections?.[entry.selectionId];
-                      const isActive = selectedKey === optionKey;
+                      const selectedKeys = normalizeSelectionKeys(companyConflictSelections?.[entry.selectionId]);
+                      const isActive = selectedKeys.includes(optionKey);
                       const bizNo = pickCandidateValue(option, BIZ_FIELDS) || '-';
                       const representative = pickCandidateValue(option, REPRESENTATIVE_FIELDS) || '-';
                       const region = pickCandidateValue(option, REGION_FIELDS) || '-';
@@ -938,6 +961,7 @@ export default function KakaoSendPage() {
                           <div className="excel-helper-modal__option-name">
                             {pickCandidateValue(option, NAME_FIELDS) || entry.displayName}
                             {typeLabel && <span className={`file-type-badge-small file-type-${typeKey}`}>{typeLabel}</span>}
+                            {isActive && <span className="badge-person">선택됨</span>}
                           </div>
                           <div className="excel-helper-modal__option-meta">사업자번호 {bizNo}</div>
                           <div className="excel-helper-modal__option-meta">대표자 {representative} · 지역 {region}</div>
