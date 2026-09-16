@@ -79,6 +79,11 @@ const buildCompanyOptionKey = (company) => {
   return fallback ? `${typeToken}|row:${fallback}` : typeToken || Math.random().toString(36).slice(2);
 };
 
+const getConflictSelectionId = (entry, normalizedName) => {
+  const entryId = String(entry?.id || '').trim();
+  return entryId ? `entry:${entryId}` : `name:${normalizedName}`;
+};
+
 const buildNameVariants = (name) => {
   if (!name) return [];
   const base = String(name).trim();
@@ -280,7 +285,7 @@ export default function KakaoSendPage() {
       map.get(normalized).push(candidate);
     });
     console.log('[kakao-auto-match] mapped names:', Array.from(map.keys()));
-    const conflictMap = new Map();
+    const conflictEntries = [];
     const nextEntries = entries.map((entry) => {
       const normalizedName = normalizeCompanyName(entry.companyName);
       let list = map.get(normalizedName) || [];
@@ -304,18 +309,20 @@ export default function KakaoSendPage() {
         : list;
       const pool = filtered.length > 0 ? filtered : list;
       if (pool.length > 1 && normalizedName) {
-        const savedKey = selections?.[normalizedName];
+        const selectionId = getConflictSelectionId(entry, normalizedName);
+        const savedKey = selections?.[selectionId];
         const picked = savedKey
           ? pool.find((candidate) => buildCompanyOptionKey(candidate) === savedKey)
           : null;
         if (!picked) {
-          if (!conflictMap.has(normalizedName)) {
-            conflictMap.set(normalizedName, {
-              normalizedName,
-              displayName: entry.companyName || entry.company || normalizedName,
-              options: pool,
-            });
-          }
+          conflictEntries.push({
+            selectionId,
+            entryId: entry.id,
+            normalizedName,
+            displayName: entry.companyName || entry.company || normalizedName,
+            sourceText: entry.company || '',
+            options: pool,
+          });
           return entry;
         }
         const managers = extractManagerNames(picked);
@@ -336,13 +343,13 @@ export default function KakaoSendPage() {
     });
     return {
       entries: nextEntries,
-      conflictEntries: Array.from(conflictMap.values()),
+      conflictEntries,
     };
   };
 
-  const handleCompanyConflictPick = (normalizedName, option) => {
+  const handleCompanyConflictPick = (selectionId, option) => {
     const key = buildCompanyOptionKey(option);
-    setCompanyConflictSelections((prev) => ({ ...prev, [normalizedName]: key }));
+    setCompanyConflictSelections((prev) => ({ ...prev, [selectionId]: key }));
   };
 
   const handleCompanyConflictCancel = () => {
@@ -356,12 +363,12 @@ export default function KakaoSendPage() {
       return;
     }
     const unresolved = (companyConflictModal.entries || []).filter((entry) => {
-      const savedKey = companyConflictSelections?.[entry.normalizedName];
+      const savedKey = companyConflictSelections?.[entry.selectionId];
       if (!savedKey) return true;
       return !entry.options.some((candidate) => buildCompanyOptionKey(candidate) === savedKey);
     });
     if (unresolved.length > 0) {
-      notify({ type: 'info', message: '중복된 업체가 있습니다. 모든 항목을 선택해 주세요.' });
+      notify({ type: 'info', message: '중복된 업체가 있습니다. 각 협정 항목에 맞는 업체를 선택해 주세요.' });
       return;
     }
     setCompanyConflictModal((prev) => ({ ...prev, isResolving: true }));
@@ -880,16 +887,21 @@ export default function KakaoSendPage() {
           <div className="excel-helper-modal" role="dialog" aria-modal="true">
             <header className="excel-helper-modal__header">
               <h3>중복된 업체 선택</h3>
-              <p>동일한 이름의 업체가 여러 건 조회되었습니다. 각 업체에 맞는 자료를 선택해 주세요.</p>
+              <p>동일한 이름의 업체가 여러 건 조회되었습니다. 각 협정 항목에 맞는 자료를 선택해 주세요.</p>
             </header>
             <div className="excel-helper-modal__body">
               {(companyConflictModal.entries || []).map((entry) => (
-                <div key={entry.normalizedName} className="excel-helper-modal__conflict">
+                <div key={entry.selectionId} className="excel-helper-modal__conflict">
                   <div className="excel-helper-modal__conflict-title">{entry.displayName}</div>
+                  {entry.sourceText && (
+                    <div className="excel-helper-modal__option-meta" style={{ marginBottom: '8px' }}>
+                      협정 항목 {entry.sourceText}
+                    </div>
+                  )}
                   <div className="excel-helper-modal__options">
                     {entry.options.map((option) => {
                       const optionKey = buildCompanyOptionKey(option);
-                      const selectedKey = companyConflictSelections?.[entry.normalizedName];
+                      const selectedKey = companyConflictSelections?.[entry.selectionId];
                       const isActive = selectedKey === optionKey;
                       const bizNo = pickFirstValue(option, BIZ_FIELDS) || '-';
                       const representative = pickFirstValue(option, REPRESENTATIVE_FIELDS) || '-';
@@ -902,7 +914,7 @@ export default function KakaoSendPage() {
                           key={optionKey}
                           type="button"
                           className={isActive ? 'excel-helper-modal__option active' : 'excel-helper-modal__option'}
-                          onClick={() => handleCompanyConflictPick(entry.normalizedName, option)}
+                          onClick={() => handleCompanyConflictPick(entry.selectionId, option)}
                         >
                           <div className="excel-helper-modal__option-name">
                             {pickFirstValue(option, NAME_FIELDS) || entry.displayName}
