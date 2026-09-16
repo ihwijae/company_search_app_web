@@ -26,7 +26,19 @@ const MENU_ROUTES = {
 const TEAM_LEAD_BUCKET_ID = 'team-lead';
 const TEAM_LEAD_EXCLUDE_MANAGERS = ['윤명숙', '이동훈', '김희준', '김대열', '김기성', '박성균', '정송인'];
 const TEAM_LEAD_EXCLUDE_COMPANIES = ['아람이엔테크', '우진일렉트', '에코엠이엔씨', '지음쏠라테크'];
-const BIZ_FIELDS = ['사업자번호', 'bizNo', '사업자 번호'];
+const BIZ_FIELDS = [
+  '사업자번호',
+  '사업자 번호',
+  '사업자등록번호',
+  '사업자 등록번호',
+  'bizNo',
+  'biz_no',
+  'bizno',
+  'bizNumber',
+  'biznumber',
+  'businessNumber',
+  'businessNo',
+];
 const NAME_FIELDS = ['업체명', '회사명', 'name', '검색된 회사'];
 const REPRESENTATIVE_FIELDS = ['대표자', '대표자명'];
 const REGION_FIELDS = ['대표지역', '지역'];
@@ -68,12 +80,19 @@ const pickFirstValue = (obj, fields) => {
   return '';
 };
 
+const pickCandidateValue = (obj, fields) => {
+  if (!obj || typeof obj !== 'object') return '';
+  const direct = pickFirstValue(obj, fields);
+  if (direct) return direct;
+  return pickFirstValue(obj.snapshot, fields);
+};
+
 const buildCompanyOptionKey = (company) => {
   if (!company || typeof company !== 'object') return '';
   const typeToken = String(company?._file_type || '').trim().toLowerCase();
-  const biz = normalizeBizNumber(pickFirstValue(company, BIZ_FIELDS));
+  const biz = normalizeBizNumber(pickCandidateValue(company, BIZ_FIELDS));
   if (biz) return typeToken ? `${typeToken}|biz:${biz}` : `biz:${biz}`;
-  const name = String(pickFirstValue(company, NAME_FIELDS) || '').trim();
+  const name = String(pickCandidateValue(company, NAME_FIELDS) || '').trim();
   if (name) return typeToken ? `${typeToken}|name:${name}` : `name:${name}`;
   const fallback = String(company?.id || company?.rowIndex || company?.row || '');
   return fallback ? `${typeToken}|row:${fallback}` : typeToken || Math.random().toString(36).slice(2);
@@ -903,9 +922,9 @@ export default function KakaoSendPage() {
                       const optionKey = buildCompanyOptionKey(option);
                       const selectedKey = companyConflictSelections?.[entry.selectionId];
                       const isActive = selectedKey === optionKey;
-                      const bizNo = pickFirstValue(option, BIZ_FIELDS) || '-';
-                      const representative = pickFirstValue(option, REPRESENTATIVE_FIELDS) || '-';
-                      const region = pickFirstValue(option, REGION_FIELDS) || '-';
+                      const bizNo = pickCandidateValue(option, BIZ_FIELDS) || '-';
+                      const representative = pickCandidateValue(option, REPRESENTATIVE_FIELDS) || '-';
+                      const region = pickCandidateValue(option, REGION_FIELDS) || '-';
                       const typeKey = String(option?._file_type || '').toLowerCase();
                       const typeLabel = FILE_TYPE_BADGE_LABELS[typeKey] || '';
                       const managers = extractManagerNames(option);
@@ -917,7 +936,7 @@ export default function KakaoSendPage() {
                           onClick={() => handleCompanyConflictPick(entry.selectionId, option)}
                         >
                           <div className="excel-helper-modal__option-name">
-                            {pickFirstValue(option, NAME_FIELDS) || entry.displayName}
+                            {pickCandidateValue(option, NAME_FIELDS) || entry.displayName}
                             {typeLabel && <span className={`file-type-badge-small file-type-${typeKey}`}>{typeLabel}</span>}
                           </div>
                           <div className="excel-helper-modal__option-meta">사업자번호 {bizNo}</div>
