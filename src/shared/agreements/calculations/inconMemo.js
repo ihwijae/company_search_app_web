@@ -81,6 +81,7 @@ const TOP_AMOUNT_TARGETS = new Set([
   '비에이에너지',
   '케이너스',
   '아이디스',
+  '솔루윈',
 ]);
 
 const LOWER_SECTION_TARGETS = new Set([
