@@ -35,6 +35,7 @@ import { loadPersisted, savePersisted } from './shared/persistence.js';
 
 const LAST_ROUTE_STORAGE_KEY = 'last-route';
 const NON_RESTORABLE_LAST_ROUTE_PATHS = new Set([
+  '/kakao-send',
   '/agreement-board',
   '/agreements',
   '/region-search',
