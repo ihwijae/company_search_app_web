@@ -16,7 +16,6 @@ export default function AgreementLoadModal({
   error,
   onLoad,
   onSetSmsStatus,
-  smsUpdatingPaths = [],
   onDelete,
   onResetFilters,
   formatAmount,
@@ -28,6 +27,8 @@ export default function AgreementLoadModal({
   const userMovedRef = React.useRef(false);
   const [currentPage, setCurrentPage] = React.useState(1);
   const [position, setPosition] = React.useState({ x: 24, y: 24 });
+  const [smsUpdatingPaths, setSmsUpdatingPaths] = React.useState([]);
+  const smsUpdatingPathsRef = React.useRef(new Set());
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
   const pagedItems = React.useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -152,6 +153,18 @@ export default function AgreementLoadModal({
     };
     userMovedRef.current = true;
     document.body.classList.add('agreement-load-dragging');
+  };
+
+  const handleSetSmsStatus = async (path, nextStatus) => {
+    if (!path || smsUpdatingPathsRef.current.has(path)) return;
+    smsUpdatingPathsRef.current.add(path);
+    setSmsUpdatingPaths(Array.from(smsUpdatingPathsRef.current));
+    try {
+      await onSetSmsStatus(path, nextStatus);
+    } finally {
+      smsUpdatingPathsRef.current.delete(path);
+      setSmsUpdatingPaths(Array.from(smsUpdatingPathsRef.current));
+    }
   };
 
   return (
@@ -342,7 +355,7 @@ export default function AgreementLoadModal({
                     aria-label={isSmsSent ? '문자전송 완료 표시 해제' : '문자전송 완료로 표시'}
                     aria-pressed={isSmsSent}
                     disabled={isSmsUpdating}
-                    onClick={() => onSetSmsStatus(item.path, isSmsSent ? 'pending' : 'sent')}
+                    onClick={() => handleSetSmsStatus(item.path, isSmsSent ? 'pending' : 'sent')}
                   >
                     {isSmsUpdating ? '…' : (isSmsSent ? '✓' : '○')}
                   </button>

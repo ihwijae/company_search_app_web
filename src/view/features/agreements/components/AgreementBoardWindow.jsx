@@ -2429,7 +2429,6 @@ export default function AgreementBoardWindow({
     loadBusy,
     loadError,
     loadRootPath,
-    smsUpdatingPaths,
     dutyRegionOptions,
     setLoadFilters,
     openLoadModal,
@@ -8191,7 +8190,6 @@ export default function AgreementBoardWindow({
       error={loadError}
       onLoad={handleLoadAgreement}
       onSetSmsStatus={handleSetLoadItemSmsStatus}
-      smsUpdatingPaths={smsUpdatingPaths}
       onResetFilters={resetFilters}
       onDelete={(path) => handleDeleteAgreement(
         path,

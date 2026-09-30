@@ -36,6 +36,24 @@ export function removeCachedAgreementBoardMeta(path) {
   setCachedAgreementBoardList(current.filter((entry) => entry?.path !== path));
 }
 
+export function updateCachedAgreementBoardSmsStatus(path, meta = {}) {
+  if (!path) return;
+  const smsStatus = String(meta.smsStatus || '').trim().toLowerCase() === 'sent' ? 'sent' : 'pending';
+  const smsCompletedAt = meta.smsCompletedAt || '';
+  const current = getCachedAgreementBoardList();
+  setCachedAgreementBoardList(current.map((entry) => {
+    if (entry?.path !== path) return entry;
+    return {
+      ...entry,
+      meta: {
+        ...(entry.meta || {}),
+        smsStatus,
+        smsCompletedAt,
+      },
+    };
+  }));
+}
+
 export function getCachedAgreementBoardPayload(path, savedAt = '') {
   if (!path) return null;
   const payloadMap = loadPayloadMap();

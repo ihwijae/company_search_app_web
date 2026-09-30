@@ -3,6 +3,7 @@ import {
   setCachedAgreementBoardList,
   upsertCachedAgreementBoardMeta,
   removeCachedAgreementBoardMeta,
+  updateCachedAgreementBoardSmsStatus,
   getCachedAgreementBoardPayload,
   setCachedAgreementBoardPayload,
   removeCachedAgreementBoardPayload,
@@ -91,11 +92,10 @@ const agreementBoardClient = {
       body: JSON.stringify({ action: 'set-sms-status', path, status }),
     });
     if (result?.success) {
-      upsertCachedAgreementBoardMeta({
-        path: result?.data?.path || path,
-        meta: result?.data?.meta || {},
-      });
-      removeCachedAgreementBoardPayload(path);
+      updateCachedAgreementBoardSmsStatus(
+        result?.data?.path || path,
+        result?.data?.meta || { smsStatus: status },
+      );
     }
     return result;
   },

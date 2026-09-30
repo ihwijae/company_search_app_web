@@ -79,7 +79,6 @@ export default function useAgreementBoardStorage({
   const [loadError, setLoadError] = React.useState('');
   const [loadRootPath, setLoadRootPath] = React.useState('');
   const [activeAgreementPath, setActiveAgreementPath] = React.useState('');
-  const [smsUpdatingPaths, setSmsUpdatingPaths] = React.useState([]);
   const smsUpdatingPathsRef = React.useRef(new Set());
 
   const buildAgreementSnapshot = React.useCallback(() => {
@@ -283,7 +282,6 @@ export default function useAgreementBoardStorage({
     if (!targetPath || smsUpdatingPathsRef.current.has(targetPath)) return;
 
     smsUpdatingPathsRef.current.add(targetPath);
-    setSmsUpdatingPaths(Array.from(smsUpdatingPathsRef.current));
     try {
       const syncBoard = targetPath === String(activeAgreementPath || '').trim();
       const resolvedStatus = await persistSmsStatus(targetPath, nextStatus, syncBoard);
@@ -292,7 +290,6 @@ export default function useAgreementBoardStorage({
       showHeaderAlert(err?.message || '문자전송 상태 변경 실패');
     } finally {
       smsUpdatingPathsRef.current.delete(targetPath);
-      setSmsUpdatingPaths(Array.from(smsUpdatingPathsRef.current));
     }
   }, [activeAgreementPath, persistSmsStatus, showHeaderAlert]);
 
@@ -423,7 +420,13 @@ export default function useAgreementBoardStorage({
       });
       if (!result?.success) throw new Error(result?.message || '불러오기 실패');
       setActiveAgreementPath(path);
-      applyAgreementSnapshot(result.data || {});
+      const snapshot = result.data || {};
+      const selectedMeta = selectedItem?.meta || {};
+      applyAgreementSnapshot({
+        ...snapshot,
+        smsStatus: selectedMeta.smsStatus ?? snapshot.smsStatus,
+        smsCompletedAt: selectedMeta.smsCompletedAt ?? snapshot.smsCompletedAt,
+      });
       showHeaderAlert('협정 불러오기 완료');
       setLoadModalOpen(false);
     } catch (err) {
@@ -572,7 +575,6 @@ export default function useAgreementBoardStorage({
     loadBusy,
     loadError,
     loadRootPath,
-    smsUpdatingPaths,
     dutyRegionOptions,
     setLoadFilters,
     openLoadModal,
