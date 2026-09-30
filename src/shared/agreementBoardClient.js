@@ -85,11 +85,19 @@ const agreementBoardClient = {
   },
 
   async setSmsStatus(path, status) {
-    return requestJson('/api/agreement-board', {
+    const result = await requestJson('/api/agreement-board', {
       method: 'POST',
       headers: JSON_HEADERS,
       body: JSON.stringify({ action: 'set-sms-status', path, status }),
     });
+    if (result?.success) {
+      upsertCachedAgreementBoardMeta({
+        path: result?.data?.path || path,
+        meta: result?.data?.meta || {},
+      });
+      removeCachedAgreementBoardPayload(path);
+    }
+    return result;
   },
 
   async getRoot() {

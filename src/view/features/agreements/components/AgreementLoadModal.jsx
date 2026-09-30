@@ -15,6 +15,8 @@ export default function AgreementLoadModal({
   busy,
   error,
   onLoad,
+  onSetSmsStatus,
+  smsUpdatingPaths = [],
   onDelete,
   onResetFilters,
   formatAmount,
@@ -289,6 +291,7 @@ export default function AgreementLoadModal({
           {!busy && !error && pagedItems.map((item) => {
             const meta = item.meta || {};
             const isSmsSent = String(meta.smsStatus || '').trim().toLowerCase() === 'sent';
+            const isSmsUpdating = smsUpdatingPaths.includes(item.path);
             const noticeTitle = [meta.noticeNo, meta.noticeTitle].filter(Boolean).join('-');
             const dutyRegions = Array.isArray(meta.dutyRegions) ? meta.dutyRegions.filter(Boolean) : [];
             const amountLabel = meta.estimatedAmount != null
@@ -332,13 +335,17 @@ export default function AgreementLoadModal({
                   </div>
                 </div>
                 <div className="agreement-load-actions">
-                  <span
+                  <button
+                    type="button"
                     className={`agreement-load-sms-icon${isSmsSent ? ' is-sent' : ''}`}
-                    title={isSmsSent ? '문자전송 완료' : '문자전송 미완료'}
-                    aria-label={isSmsSent ? '문자전송 완료' : '문자전송 미완료'}
+                    title={isSmsSent ? '문자전송 완료 표시 해제' : '문자전송 완료로 표시'}
+                    aria-label={isSmsSent ? '문자전송 완료 표시 해제' : '문자전송 완료로 표시'}
+                    aria-pressed={isSmsSent}
+                    disabled={isSmsUpdating}
+                    onClick={() => onSetSmsStatus(item.path, isSmsSent ? 'pending' : 'sent')}
                   >
-                    {isSmsSent ? '✓' : '○'}
-                  </span>
+                    {isSmsUpdating ? '…' : (isSmsSent ? '✓' : '○')}
+                  </button>
                   <button type="button" className="excel-btn primary" onClick={() => onLoad(item.path)}>불러오기</button>
                   <button type="button" className="excel-btn" onClick={() => onDelete(item.path)}>삭제</button>
                 </div>

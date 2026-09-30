@@ -79,6 +79,8 @@ export default function useAgreementBoardStorage({
   const [loadError, setLoadError] = React.useState('');
   const [loadRootPath, setLoadRootPath] = React.useState('');
   const [activeAgreementPath, setActiveAgreementPath] = React.useState('');
+  const [smsUpdatingPaths, setSmsUpdatingPaths] = React.useState([]);
+  const smsUpdatingPathsRef = React.useRef(new Set());
 
   const buildAgreementSnapshot = React.useCallback(() => {
     const rangeId = selectedRangeOption?.key || '';
@@ -228,8 +230,36 @@ export default function useAgreementBoardStorage({
     }
   }, [buildAgreementSnapshot, showHeaderAlert]);
 
-  const handleSetSmsStatus = React.useCallback(async (nextStatus = 'sent') => {
+  const applySmsStatusResult = React.useCallback((targetPath, nextMeta, resolvedStatus, syncBoard) => {
+    if (syncBoard && typeof onUpdateBoard === 'function') {
+      onUpdateBoard({
+        smsStatus: nextMeta.smsStatus || resolvedStatus,
+        smsCompletedAt: nextMeta.smsCompletedAt || '',
+      });
+    }
+
+    setLoadItems((prev) => (Array.isArray(prev) ? prev.map((item) => {
+      if (!item || item.path !== targetPath) return item;
+      return {
+        ...item,
+        meta: {
+          ...(item.meta || {}),
+          smsStatus: nextMeta.smsStatus || resolvedStatus,
+          smsCompletedAt: nextMeta.smsCompletedAt || '',
+        },
+      };
+    }) : prev));
+  }, [onUpdateBoard]);
+
+  const persistSmsStatus = React.useCallback(async (targetPath, nextStatus, syncBoard = false) => {
     const resolvedStatus = String(nextStatus || '').trim().toLowerCase() === 'sent' ? 'sent' : 'pending';
+    const result = await agreementBoardClient.setSmsStatus(targetPath, resolvedStatus);
+    if (!result?.success) throw new Error(result?.message || '상태 변경 실패');
+    applySmsStatusResult(targetPath, result?.data?.meta || {}, resolvedStatus, syncBoard);
+    return resolvedStatus;
+  }, [applySmsStatusResult]);
+
+  const handleSetSmsStatus = React.useCallback(async (nextStatus = 'sent') => {
     try {
       let targetPath = String(activeAgreementPath || '').trim();
       if (!targetPath) {
@@ -241,34 +271,30 @@ export default function useAgreementBoardStorage({
         setActiveAgreementPath(targetPath);
       }
 
-      const result = await agreementBoardClient.setSmsStatus(targetPath, resolvedStatus);
-      if (!result?.success) throw new Error(result?.message || '상태 변경 실패');
-
-      const nextMeta = result?.data?.meta || {};
-      if (typeof onUpdateBoard === 'function') {
-        onUpdateBoard({
-          smsStatus: nextMeta.smsStatus || resolvedStatus,
-          smsCompletedAt: nextMeta.smsCompletedAt || '',
-        });
-      }
-
-      setLoadItems((prev) => (Array.isArray(prev) ? prev.map((item) => {
-        if (!item || item.path !== targetPath) return item;
-        return {
-          ...item,
-          meta: {
-            ...(item.meta || {}),
-            smsStatus: nextMeta.smsStatus || resolvedStatus,
-            smsCompletedAt: nextMeta.smsCompletedAt || '',
-          },
-        };
-      }) : prev));
-
+      const resolvedStatus = await persistSmsStatus(targetPath, nextStatus, true);
       showHeaderAlert(resolvedStatus === 'sent' ? '문자전송 완료로 표시했습니다.' : '문자전송 완료 표시를 해제했습니다.');
     } catch (err) {
       showHeaderAlert(err?.message || '문자전송 상태 변경 실패');
     }
-  }, [activeAgreementPath, buildAgreementSnapshot, onUpdateBoard, showHeaderAlert]);
+  }, [activeAgreementPath, buildAgreementSnapshot, persistSmsStatus, showHeaderAlert]);
+
+  const handleSetLoadItemSmsStatus = React.useCallback(async (path, nextStatus = 'sent') => {
+    const targetPath = String(path || '').trim();
+    if (!targetPath || smsUpdatingPathsRef.current.has(targetPath)) return;
+
+    smsUpdatingPathsRef.current.add(targetPath);
+    setSmsUpdatingPaths(Array.from(smsUpdatingPathsRef.current));
+    try {
+      const syncBoard = targetPath === String(activeAgreementPath || '').trim();
+      const resolvedStatus = await persistSmsStatus(targetPath, nextStatus, syncBoard);
+      showHeaderAlert(resolvedStatus === 'sent' ? '문자전송 완료로 표시했습니다.' : '문자전송 완료 표시를 해제했습니다.');
+    } catch (err) {
+      showHeaderAlert(err?.message || '문자전송 상태 변경 실패');
+    } finally {
+      smsUpdatingPathsRef.current.delete(targetPath);
+      setSmsUpdatingPaths(Array.from(smsUpdatingPathsRef.current));
+    }
+  }, [activeAgreementPath, persistSmsStatus, showHeaderAlert]);
 
   const refreshLoadList = React.useCallback(async () => {
     setLoadBusy(true);
@@ -546,6 +572,7 @@ export default function useAgreementBoardStorage({
     loadBusy,
     loadError,
     loadRootPath,
+    smsUpdatingPaths,
     dutyRegionOptions,
     setLoadFilters,
     openLoadModal,
@@ -555,6 +582,7 @@ export default function useAgreementBoardStorage({
     handleLoadAgreement,
     handleDeleteAgreement,
     handleSetSmsStatus,
+    handleSetLoadItemSmsStatus,
     handlePickRoot,
     refreshLoadList,
     resetFilters: () => setLoadFilters({ ...DEFAULT_FILTERS }),
