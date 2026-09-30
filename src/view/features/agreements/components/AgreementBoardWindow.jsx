@@ -5864,13 +5864,16 @@ export default function AgreementBoardWindow({
     });
   };
 
-  const renderNameCell = (meta) => {
+  const renderNameCell = (meta, dutyShareInsufficient = false) => {
     const isDropTarget = dropTarget && dropTarget.groupIndex === meta.groupIndex && dropTarget.slotIndex === meta.slotIndex;
     const searchKey = buildBoardSearchKey(meta.groupIndex, meta.slotIndex);
     const isBoardSearchMatch = boardSearchOpen && boardSearchMatchKeySet.has(searchKey);
     const isBoardSearchActive = boardSearchOpen && boardSearchActiveKey === searchKey;
     const cellClasses = ['excel-cell', 'excel-name-cell'];
     if (!meta.empty && meta.isDutyRegion) cellClasses.push('duty-region');
+    if (!meta.empty && meta.isDutyRegion && dutyShareInsufficient) {
+      cellClasses.push('duty-share-insufficient');
+    }
     if (isDropTarget) cellClasses.push('drop-target');
     return (
       <td
@@ -6627,7 +6630,7 @@ export default function AgreementBoardWindow({
         </td>
         {collapsedColumns.name
           ? renderCollapsedStubCell('name')
-          : slotMetasWithRemarks.map((meta) => renderNameCell(meta))}
+          : slotMetasWithRemarks.map((meta) => renderNameCell(meta, dutyShareInsufficient))}
         {collapsedColumns.share
           ? renderCollapsedStubCell('share')
           : slotMetasWithLimit.map(renderShareCell)}
