@@ -11,6 +11,7 @@ import searchClient from '../../../../shared/searchClient.js';
 import lhAwardHistoryClient from '../../../../shared/lhAwardHistoryClient.js';
 import CREDIT_GRADE_ORDER from '../../../../shared/creditGrades.json';
 import { isCreditScoreExpired } from '../../../../shared/agreements/calculations/managementScore.js';
+import { isConstructionSafetyExpired } from '../../../../shared/constructionSafety.js';
 import {
   DEFAULT_LH_AWARD_HISTORY_ENTRIES,
   getLhAwardHistoryMatchInfo,
@@ -1875,7 +1876,7 @@ function App() {
                           let ratioBadgeClass = '';
                           let durationBadgeText = null;
                           let durationBadgeClass = '';
-                          const wrappableKeys = ['신용평가', '품질평가', '비고'];
+                          const wrappableKeys = ['신용평가', '건설안전가점', '품질평가', '비고'];
                           const isWrappable = wrappableKeys.includes(key);
 
                           try {
@@ -1921,6 +1922,9 @@ function App() {
                           } catch (_) {
                             // Ignore malformed duration cells and leave the badge unset.
                           }
+                          if (key === '건설안전가점' && isConstructionSafetyExpired(value)) {
+                            extraClass = 'construction-safety-expired';
+                          }
                           const isSmppSmallRow = /소기업/.test(key) || /중소기업/.test(key);
                           const isSmppWomenRow = /여성/.test(key);
                           const smppFeatureKey = isSmppSmallRow ? 'small' : (isSmppWomenRow ? 'women' : null);
@@ -1939,7 +1943,7 @@ function App() {
                                   <div className="value-with-status">
                                     <div className="value-main">
                                       <span className={`status-dot ${getStatusClass(status)}`} title={status}></span>
-                                      <span className={`${extraClass}${key === '검색된 회사' && selectedActiveAwardHistory ? ' company-name-award-history' : ''}`.trim()}>{displayValue}</span>
+                                      <span className={`${extraClass}${key === '건설안전가점' ? ' construction-safety-value' : ''}${key === '검색된 회사' && selectedActiveAwardHistory ? ' company-name-award-history' : ''}`.trim()}>{displayValue}</span>
                                       {key === '검색된 회사' && selectedAwardHistoryMatches.map((match) => (
                                         <span
                                           key={`${match.ownerId}-${match.contractDateText}-${match.expiryDateText}`}

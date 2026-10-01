@@ -1534,7 +1534,7 @@ export default function ExcelWebEditPage() {
                     건설안전종류
                     <select name="constructionSafetyType" value={form.constructionSafetyType} onChange={handleInput}>
                       <option value="">종류를 선택하세요</option>
-                      <option value="ISO">ISO-4500</option>
+                      <option value="ISO">ISO-45001</option>
                       <option value="MS">KOSHA-MS</option>
                       <option value="없음">없음</option>
                     </select>
@@ -1759,7 +1759,7 @@ export default function ExcelWebEditPage() {
                       }))}
                     >
                       <option value="">종류를 선택하세요</option>
-                      <option value="ISO">ISO-4500</option>
+                      <option value="ISO">ISO-45001</option>
                       <option value="MS">KOSHA-MS</option>
                     </select>
                   </label>

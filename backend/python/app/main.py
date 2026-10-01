@@ -1279,7 +1279,7 @@ def _resolve_archive_file_type(file_type: str, form_data: dict) -> str:
         return "iso"
     if safety_type in {"MS", "KOSHA-MS"}:
         return "MS"
-    raise HTTPException(status_code=400, detail="증빙파일을 저장하려면 건설안전종류(ISO-4500 또는 KOSHA-MS)를 선택하세요.")
+    raise HTTPException(status_code=400, detail="증빙파일을 저장하려면 건설안전종류(ISO-45001 또는 KOSHA-MS)를 선택하세요.")
 
 
 def _archive_uploaded_files(files: list[UploadFile], company_name: str, file_type: str, region: str) -> list[dict]:

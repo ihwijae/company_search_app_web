@@ -4592,6 +4592,15 @@ body.agreement-load-dragging {
   word-break: break-word;
 }
 
+.details-table .construction-safety-value {
+  white-space: pre-line;
+}
+
+.details-table .construction-safety-expired {
+  color: #dc2626;
+  font-weight: 700;
+}
+
 /* --- Auto Agreement workspace --- */
 .auto-agreement-layout {
   grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);

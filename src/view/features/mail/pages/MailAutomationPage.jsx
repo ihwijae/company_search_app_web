@@ -264,7 +264,7 @@ const DEFAULT_MOIS_BODY_TEMPLATE = `
     {{owner}} "{{announcementNumber}} {{announcementName}}"의 입찰내역을 보내드립니다.
   </p>
   <p style="margin:0 0 12px;">
-    이메일에 첨부된 <span style="font-weight:bold;text-decoration:underline;">엑셀 파일</span> 1개만 입찰서에 첨부하셔서 투찰해 주시기 바랍니다.
+    이메일에 첨부된 <span style="font-weight:bold;text-decoration:underline;">BID 파일</span> 1개만 입찰서에 첨부하셔서 투찰해 주시기 바랍니다.
   </p>
   <p style="margin:0 0 18px;">좋은 결과 있으시기 바랍니다.</p>
   <hr style="border:none;border-top:1px solid #c9ced6;margin:16px 0;" />
