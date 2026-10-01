@@ -104,6 +104,8 @@ FILE_TYPE_TO_DB_KEY = {
     "소방경영상태": "소방",
 }
 
+ALL_INDUSTRY_FILE_TYPES = {"신용평가", "건설안전가점"}
+
 DB_ENV = {
     "전기": "EXCEL_EDIT_DB_PATH_ELECTRIC",
     "통신": "EXCEL_EDIT_DB_PATH_COMMUNICATION",
@@ -183,7 +185,7 @@ BOLD_FONT = Font(bold=True, size=12)
 
 
 class JobRequest(BaseModel):
-    fileType: Literal["전기경영상태", "통신경영상태", "소방경영상태", "신용평가"] | str = Field(default="전기경영상태")
+    fileType: Literal["전기경영상태", "통신경영상태", "소방경영상태", "신용평가", "건설안전가점"] | str = Field(default="전기경영상태")
     excelPath: str = Field(default="")
     dryRun: bool = Field(default=False)
 
@@ -544,7 +546,7 @@ def _validate_expected_version_for_save(
         if token_file_type_or_db != request.fileType:
             raise HTTPException(status_code=409, detail="조회 기준 자료종류가 변경되었습니다. 다시 조회 후 저장하세요.")
 
-        if request.fileType == "신용평가":
+        if request.fileType in ALL_INDUSTRY_FILE_TYPES:
             for _, path in db_paths.items():
                 if not path or not Path(path).exists():
                     continue
@@ -566,7 +568,7 @@ def _validate_expected_version_for_save(
 
     db_type = token_file_type_or_db
     expected_fp = parts[3]
-    if request.fileType != "신용평가":
+    if request.fileType not in ALL_INDUSTRY_FILE_TYPES:
         target_db = FILE_TYPE_TO_DB_KEY.get(request.fileType)
         if target_db and db_type != target_db:
             raise HTTPException(status_code=409, detail="조회한 자료종류가 변경되었습니다. 다시 조회 후 저장하세요.")
@@ -1213,6 +1215,71 @@ def _update_credit_data(
     return results
 
 
+def _build_construction_safety_text(form_data: dict) -> str:
+    safety_type = str(form_data.get("constructionSafetyType") or "").strip()
+    start = str(form_data.get("constructionSafetyStartDate") or "").strip()
+    end = str(form_data.get("constructionSafetyEndDate") or "").strip()
+    direct = str(form_data.get("constructionSafetyBonus") or "").strip()
+    if direct:
+        return direct
+    if not safety_type and not start and not end:
+        return ""
+    if not safety_type:
+        return f"{start or '?'}~{end or '?'}"
+    if not start and not end:
+        return safety_type
+    return f"{safety_type}\n({start or '?'}~{end or '?'})"
+
+
+def _update_construction_safety_data(
+    db_paths: dict[str, str],
+    biz_no: str,
+    construction_safety_text: str,
+) -> list[dict]:
+    results: list[dict] = []
+    for db_type, excel_path in db_paths.items():
+        if not Path(excel_path).exists():
+            continue
+
+        position = _find_company_position(excel_path, biz_no)
+        if not position:
+            results.append({"dbType": db_type, "updated": False, "reason": "not_found"})
+            continue
+
+        sheet_name, target_row, target_col = position
+        workbook = load_workbook(filename=excel_path)
+        try:
+            sheet = workbook[sheet_name]
+            update_row = target_row + RELATIVE_OFFSETS["건설안전가점"]
+            if not (1 <= update_row <= sheet.max_row and 1 <= target_col <= sheet.max_column):
+                results.append({"dbType": db_type, "updated": False, "reason": "invalid_cell"})
+                continue
+            if not _matches_renamed_row_label(sheet, update_row, "건설안전가점"):
+                results.append({"dbType": db_type, "updated": False, "reason": "invalid_label"})
+                continue
+
+            cell = _resolve_merged_cell(sheet, update_row, target_col)
+            cell.value = construction_safety_text
+            cell.fill = copy(GREEN_FILL)
+            workbook.save(excel_path)
+            results.append({"dbType": db_type, "updated": True, "sheetName": sheet_name})
+        finally:
+            workbook.close()
+    return results
+
+
+def _resolve_archive_file_type(file_type: str, form_data: dict) -> str:
+    if file_type != "건설안전가점":
+        return file_type
+
+    safety_type = str(form_data.get("constructionSafetyType") or "").strip().upper()
+    if safety_type in {"ISO", "ISO-4500", "ISO-45001"}:
+        return "iso"
+    if safety_type in {"MS", "KOSHA-MS"}:
+        return "MS"
+    raise HTTPException(status_code=400, detail="건설안전종류(ISO-4500 또는 KOSHA-MS)를 선택하세요.")
+
+
 def _archive_uploaded_files(files: list[UploadFile], company_name: str, file_type: str, region: str) -> list[dict]:
     archived: list[dict] = []
     normalized_region = _normalize_region_folder_name(region)
@@ -1301,7 +1368,7 @@ def _resolve_target_excel_paths_for_job(payload: JobRequest) -> list[tuple[str, 
     if payload.excelPath and Path(payload.excelPath).exists():
         return [("direct", payload.excelPath)]
 
-    if payload.fileType == "신용평가":
+    if payload.fileType in ALL_INDUSTRY_FILE_TYPES:
         return [(db_type, path) for db_type, path in db_paths.items() if Path(path).exists()]
 
     db_key = FILE_TYPE_TO_DB_KEY.get(payload.fileType)
@@ -1504,7 +1571,7 @@ def company_lookup(payload: LookupRequest) -> ApiResponse:
     if not db_paths:
         raise HTTPException(status_code=400, detail="DB 경로가 설정되지 않았습니다. 환경변수를 확인하세요.")
 
-    if payload.fileType == "신용평가":
+    if payload.fileType in ALL_INDUSTRY_FILE_TYPES:
         candidates = [(db_type, path) for db_type, path in db_paths.items() if Path(path).exists()]
     else:
         target_db_type = FILE_TYPE_TO_DB_KEY.get(payload.fileType)
@@ -1561,12 +1628,17 @@ async def save_excel_edit_data(
 
     updated: dict = {}
     request_data = dict(request.data or {})
-    if request.fileType != "신용평가":
+    if request.fileType not in ALL_INDUSTRY_FILE_TYPES:
         request_data["qualityEval"] = _normalize_quality_eval_value(request_data.get("qualityEval", ""))
     company_name = str(request_data.get("companyName") or "")
     region_name = str(request_data.get("region") or "")
     temp_files = [item for item in request.tempFiles if isinstance(item, dict) and item.get("uploadId")]
     has_archive_files = bool(files) or bool(temp_files)
+    archive_file_type = (
+        _resolve_archive_file_type(request.fileType, request_data)
+        if has_archive_files
+        else request.fileType
+    )
 
     try:
         if save_mode == "archive_only":
@@ -1599,9 +1671,9 @@ async def save_excel_edit_data(
 
             archived_files = []
             if temp_files:
-                archived_files.extend(_archive_temp_uploads(temp_files, company_name, request.fileType, region_name))
+                archived_files.extend(_archive_temp_uploads(temp_files, company_name, archive_file_type, region_name))
             if files:
-                archived_files.extend(_archive_uploaded_files(files, company_name, request.fileType, region_name))
+                archived_files.extend(_archive_uploaded_files(files, company_name, archive_file_type, region_name))
             return ApiResponse(
                 success=True,
                 message="파일 보관이 완료되었습니다.",
@@ -1619,15 +1691,21 @@ async def save_excel_edit_data(
         if not db_paths:
             raise HTTPException(status_code=400, detail="DB 경로가 설정되지 않았습니다. 환경변수를 확인하세요.")
 
-        if request.fileType == "신용평가":
+        if request.fileType in ALL_INDUSTRY_FILE_TYPES:
             target_paths = [path for _, path in db_paths.items() if path and Path(path).exists()]
             with _exclusive_excel_locks(target_paths):
                 _validate_expected_version_for_save(request, db_paths, expected_version)
-                credit_text = _build_credit_text(request_data)
-                results = _update_credit_data(db_paths, biz_no, credit_text)
+                if request.fileType == "신용평가":
+                    credit_text = _build_credit_text(request_data)
+                    results = _update_credit_data(db_paths, biz_no, credit_text)
+                    updated["credit"] = results
+                else:
+                    construction_safety_text = _build_construction_safety_text(request_data)
+                    results = _update_construction_safety_data(db_paths, biz_no, construction_safety_text)
+                    updated["constructionSafetyBonus"] = results
                 if not any(item.get("updated") for item in results):
-                    raise HTTPException(status_code=404, detail="신용평가 갱신 대상 업체를 찾지 못했습니다.")
-                updated["credit"] = results
+                    target_name = "신용평가" if request.fileType == "신용평가" else "건설안전가점"
+                    raise HTTPException(status_code=404, detail=f"{target_name} 갱신 대상 업체를 찾지 못했습니다.")
                 if not company_name or not region_name:
                     for db_type, path in db_paths.items():
                         if not path or not Path(path).exists():
@@ -1681,10 +1759,11 @@ async def save_excel_edit_data(
                     }
 
         archived_files = []
-        if temp_files:
-            archived_files.extend(_archive_temp_uploads(temp_files, company_name, request.fileType, region_name))
-        if files:
-            archived_files.extend(_archive_uploaded_files(files, company_name, request.fileType, region_name))
+        if has_archive_files:
+            if temp_files:
+                archived_files.extend(_archive_temp_uploads(temp_files, company_name, archive_file_type, region_name))
+            if files:
+                archived_files.extend(_archive_uploaded_files(files, company_name, archive_file_type, region_name))
 
         return ApiResponse(
             success=True,

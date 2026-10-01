@@ -4131,6 +4131,7 @@ body.agreement-load-dragging {
 
 .excel-web-v2-settings select,
 .excel-web-v2-settings input,
+.excel-web-v2-form select,
 .excel-web-v2-form input,
 .excel-web-v2-form textarea,
 .excel-web-v2-credit-readonly input,
@@ -4159,6 +4160,15 @@ body.agreement-load-dragging {
   row-gap: 5px;
   max-height: none;
   overflow: hidden;
+}
+
+.excel-web-v2-management-form {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .excel-web-v2-form .full-row {
@@ -4337,7 +4347,8 @@ body.agreement-load-dragging {
   color: #334155;
 }
 
-.excel-web-v2-modal-body input {
+.excel-web-v2-modal-body input,
+.excel-web-v2-modal-body select {
   border: 1px solid #cbd5e1;
   border-radius: 7px;
   padding: 7px 9px;

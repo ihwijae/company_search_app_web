@@ -41,6 +41,9 @@ const EMPTY_FORM = {
   creditGrade: '',
   creditStartDate: '',
   creditEndDate: '',
+  constructionSafetyType: '',
+  constructionSafetyStartDate: '',
+  constructionSafetyEndDate: '',
   womenOwned: '',
   jobBonus: '',
   constructionSafetyBonus: '',
@@ -63,9 +66,14 @@ function normalizeManagementForm(source = {}) {
 const EDITOR_MODE = {
   MANAGEMENT: 'management',
   CREDIT: 'credit',
+  JOB_BONUS: 'job-bonus',
+  CONSTRUCTION_SAFETY_BONUS: 'construction-safety-bonus',
 };
 
 const MANAGEMENT_FILE_TYPE_PLACEHOLDER = '';
+const CREDIT_FILE_TYPE = '신용평가';
+const CONSTRUCTION_SAFETY_FILE_TYPE = '건설안전가점';
+const ALL_INDUSTRY_FILE_TYPES = new Set([CREDIT_FILE_TYPE, CONSTRUCTION_SAFETY_FILE_TYPE]);
 const TIFF_EXTENSIONS = new Set(['.tif', '.tiff']);
 const MANAGEMENT_FILE_TYPES = ['전기경영상태', '통신경영상태', '소방경영상태'];
 const MANAGEMENT_FILE_TYPE_COLORS = {
@@ -89,6 +97,16 @@ function buildCreditText(form) {
   if (!grade) return `${start || '?'}~${end || '?'}`;
   if (!start && !end) return grade;
   return `${grade}\n(${start || '?'}~${end || '?'})`;
+}
+
+function buildConstructionSafetyText(form) {
+  const safetyType = String(form.constructionSafetyType || '').trim();
+  const start = String(form.constructionSafetyStartDate || '').trim();
+  const end = String(form.constructionSafetyEndDate || '').trim();
+  if (!safetyType && !start && !end) return '';
+  if (!safetyType) return `${start || '?'}~${end || '?'}`;
+  if (!start && !end) return safetyType;
+  return `${safetyType}\n(${start || '?'}~${end || '?'})`;
 }
 
 function getQualityEvalReferenceDateText(now = new Date()) {
@@ -163,6 +181,17 @@ function buildCreditLookupPreview(loadedData) {
   return [header, creditText].filter(Boolean).join('\n');
 }
 
+function buildConstructionSafetyLookupPreview(loadedData) {
+  if (!loadedData) return '';
+  const companyName = String(loadedData.companyName || '').trim();
+  const bizNo = String(loadedData.bizNo || '').trim();
+  const safetyText = String(loadedData.constructionSafetyBonus || '').trim();
+  const header = companyName
+    ? `${companyName}${bizNo ? ` [${bizNo}]` : ''}`
+    : (bizNo ? `[${bizNo}]` : '');
+  return [header, safetyText].filter(Boolean).join('\n');
+}
+
 function getFileExtension(fileName = '') {
   const match = String(fileName || '').toLowerCase().match(/(\.[^./\\]+)$/);
   return match ? match[1] : '';
@@ -201,7 +230,12 @@ export default function ExcelWebEditPage() {
   const [missingCompanyMode, setMissingCompanyMode] = React.useState('management');
   const [isCompanySetupModalOpen, setIsCompanySetupModalOpen] = React.useState(false);
   const [companySetupMode, setCompanySetupMode] = React.useState('register');
-  const [companySetupDraft, setCompanySetupDraft] = React.useState({ companyName: '', sheetName: '', region: '' });
+  const [companySetupDraft, setCompanySetupDraft] = React.useState({
+    companyName: '',
+    sheetName: '',
+    region: '',
+    constructionSafetyType: '',
+  });
   const lastPdfErrorRef = React.useRef('');
   const multiPageNoticedFileIdsRef = React.useRef(new Set());
   const didHydrateRef = React.useRef(false);
@@ -235,13 +269,26 @@ export default function ExcelWebEditPage() {
   const isTiff = TIFF_EXTENSIONS.has(getFileExtension(selectedFile?.name));
   const effectivePdfPageCount = isPdf ? backendPdfPageCount : 1;
   const finalCreditText = buildCreditText(form);
+  const finalConstructionSafetyText = buildConstructionSafetyText(form);
   const creditLookupPreview = React.useMemo(() => buildCreditLookupPreview(loadedData), [loadedData]);
+  const constructionSafetyLookupPreview = React.useMemo(
+    () => buildConstructionSafetyLookupPreview(loadedData),
+    [loadedData],
+  );
 
   const mergedAfterData = React.useMemo(() => {
     if (!loadedData) return null;
     const next = { ...loadedData };
     Object.keys(form).forEach((key) => {
-      if (['creditGrade', 'creditStartDate', 'creditEndDate', 'noteClear'].includes(key)) return;
+      if ([
+        'creditGrade',
+        'creditStartDate',
+        'creditEndDate',
+        'constructionSafetyType',
+        'constructionSafetyStartDate',
+        'constructionSafetyEndDate',
+        'noteClear',
+      ].includes(key)) return;
       const value = String(form[key] || '').trim();
       if (!value) return;
       if (['sipyung', 'perf3y', 'perf5y'].includes(key)) {
@@ -516,7 +563,12 @@ export default function ExcelWebEditPage() {
         return { ...prev, [name]: nextValue };
       });
       return;
-    } else if (['creditStartDate', 'creditEndDate'].includes(name)) {
+    } else if ([
+      'creditStartDate',
+      'creditEndDate',
+      'constructionSafetyStartDate',
+      'constructionSafetyEndDate',
+    ].includes(name)) {
       value = formatShortDotDateInput(value);
     } else if (name === 'bizYears') {
       value = formatDotDateInput(value);
@@ -647,7 +699,9 @@ export default function ExcelWebEditPage() {
         setLoadedData(null);
         setLoadedColorMap({});
         setLookupVersion(String(result?.data?.version || ''));
-        setMissingCompanyMode(editorMode === EDITOR_MODE.CREDIT ? 'credit' : 'management');
+        setMissingCompanyMode(
+          editorMode === EDITOR_MODE.MANAGEMENT ? 'management' : 'all-industry',
+        );
         setIsMissingCompanyModalOpen(true);
         return;
       }
@@ -679,12 +733,15 @@ export default function ExcelWebEditPage() {
   }, [handleLoadData, isBackendBusy]);
 
   React.useEffect(() => {
-    if (editorMode === EDITOR_MODE.CREDIT && fileType !== '신용평가') {
-      setFileType('신용평가');
+    const nextAllIndustryFileType = editorMode === EDITOR_MODE.CREDIT
+      ? CREDIT_FILE_TYPE
+      : (editorMode === EDITOR_MODE.CONSTRUCTION_SAFETY_BONUS ? CONSTRUCTION_SAFETY_FILE_TYPE : '');
+    if (nextAllIndustryFileType && fileType !== nextAllIndustryFileType) {
+      setFileType(nextAllIndustryFileType);
       setLookupVersion('');
       return;
     }
-    if (editorMode === EDITOR_MODE.MANAGEMENT && fileType === '신용평가') {
+    if (editorMode === EDITOR_MODE.MANAGEMENT && ALL_INDUSTRY_FILE_TYPES.has(fileType)) {
       setFileType(MANAGEMENT_FILE_TYPE_PLACEHOLDER);
       setLookupVersion('');
     }
@@ -748,7 +805,7 @@ export default function ExcelWebEditPage() {
     setLoadedData(null);
     setLoadedColorMap({});
     setLookupVersion('');
-    setFileType((prev) => (prev === '신용평가' ? prev : MANAGEMENT_FILE_TYPE_PLACEHOLDER));
+    setFileType((prev) => (ALL_INDUSTRY_FILE_TYPES.has(prev) ? prev : MANAGEMENT_FILE_TYPE_PLACEHOLDER));
     setForm(EMPTY_FORM);
     setPdfPageNumber(1);
     setPdfError('');
@@ -791,13 +848,16 @@ export default function ExcelWebEditPage() {
           companyName,
           region,
           creditText: finalCreditText,
+          constructionSafetyBonus: editorMode === EDITOR_MODE.CONSTRUCTION_SAFETY_BONUS
+            ? finalConstructionSafetyText
+            : form.constructionSafetyBonus,
           qualityEval: formatQualityEvalValue(form.qualityEval),
         },
       };
       const files = selectedFile?.file && !selectedFile?.uploadId ? [selectedFile.file] : [];
       const result = await excelEditBackendClient.saveData({ payload, files });
       setBackendStatusMessage('저장은 완료됐고, 검색용 데이터를 백그라운드로 갱신하는 중입니다.');
-      const refreshPromise = fileType === '신용평가'
+      const refreshPromise = ALL_INDUSTRY_FILE_TYPES.has(fileType)
         ? Promise.all([
           excelEditBackendClient.refreshUploadedDataset('전기경영상태'),
           excelEditBackendClient.refreshUploadedDataset('통신경영상태'),
@@ -852,11 +912,12 @@ export default function ExcelWebEditPage() {
       companyName: String(form.companyName || loadedData?.companyName || '').trim(),
       sheetName: mode === 'register' ? inferSheetNameFromRegion(region) : '',
       region,
+      constructionSafetyType: String(form.constructionSafetyType || '').trim(),
     });
     setIsCompanySetupModalOpen(true);
-  }, [form.companyName, form.region, loadedData?.companyName, loadedData?.region]);
+  }, [form.companyName, form.constructionSafetyType, form.region, loadedData?.companyName, loadedData?.region]);
 
-  const saveArchiveOnlyWithDraft = React.useCallback(async ({ companyName, region }) => {
+  const saveArchiveOnlyWithDraft = React.useCallback(async ({ companyName, region, constructionSafetyType }) => {
     if (!requireManagementFileType()) return false;
     if (!selectedFile?.file && !selectedFile?.uploadId) {
       notifyError('저장할 파일이 없습니다. 파일을 먼저 업로드하세요.');
@@ -876,7 +937,7 @@ export default function ExcelWebEditPage() {
           contentType: selectedFile.type,
           size: selectedFile.size || 0,
         }] : [],
-        data: { companyName, region },
+        data: { companyName, region, constructionSafetyType },
       };
       const result = await excelEditBackendClient.saveData({
         payload,
@@ -899,6 +960,7 @@ export default function ExcelWebEditPage() {
     const companyName = String(companySetupDraft.companyName || '').trim();
     const sheetName = String(companySetupDraft.sheetName || '').trim();
     const region = String(companySetupDraft.region || '').trim();
+    const constructionSafetyType = String(companySetupDraft.constructionSafetyType || '').trim();
     if (!companyName) {
       notifyError('업체명을 입력하세요.');
       return;
@@ -909,6 +971,14 @@ export default function ExcelWebEditPage() {
     }
     if (!region) {
       notifyError('지역을 입력하세요.');
+      return;
+    }
+    if (
+      companySetupMode === 'archive_only'
+      && fileType === CONSTRUCTION_SAFETY_FILE_TYPE
+      && !constructionSafetyType
+    ) {
+      notifyError('건설안전종류를 선택하세요.');
       return;
     }
 
@@ -924,11 +994,21 @@ export default function ExcelWebEditPage() {
       return;
     }
 
-    const archived = await saveArchiveOnlyWithDraft({ companyName, region });
+    const archived = await saveArchiveOnlyWithDraft({ companyName, region, constructionSafetyType });
     if (archived) {
       setIsCompanySetupModalOpen(false);
     }
-  }, [companySetupDraft.companyName, companySetupDraft.region, companySetupDraft.sheetName, companySetupMode, notifyError, notifyInfo, saveArchiveOnlyWithDraft]);
+  }, [
+    companySetupDraft.companyName,
+    companySetupDraft.constructionSafetyType,
+    companySetupDraft.region,
+    companySetupDraft.sheetName,
+    companySetupMode,
+    fileType,
+    notifyError,
+    notifyInfo,
+    saveArchiveOnlyWithDraft,
+  ]);
 
   const clearBackendPdfPreview = React.useCallback(() => {
     if (previewAbortControllerRef.current) {
@@ -1268,7 +1348,29 @@ export default function ExcelWebEditPage() {
               >
                 신용평가
               </button>
+              <button
+                type="button"
+                className={editorMode === EDITOR_MODE.JOB_BONUS ? 'active' : ''}
+                onClick={() => setEditorMode(EDITOR_MODE.JOB_BONUS)}
+              >
+                일자리가점
+              </button>
+              <button
+                type="button"
+                className={editorMode === EDITOR_MODE.CONSTRUCTION_SAFETY_BONUS ? 'active' : ''}
+                onClick={() => setEditorMode(EDITOR_MODE.CONSTRUCTION_SAFETY_BONUS)}
+              >
+                건설안전가점
+              </button>
             </div>
+
+            {editorMode === EDITOR_MODE.JOB_BONUS && (
+              <div className="excel-web-v2-settings">
+                <p className="muted">
+                  일자리가점 일괄 수정 기능은 다음 단계에서 연결합니다.
+                </p>
+              </div>
+            )}
 
             {editorMode === EDITOR_MODE.MANAGEMENT && (
               <>
@@ -1297,7 +1399,7 @@ export default function ExcelWebEditPage() {
                 </div>
 
                 <h2>4. 경영상태 수정 입력</h2>
-                <div className="excel-web-v2-form">
+                <div className="excel-web-v2-form excel-web-v2-management-form">
                   <label>상호<input name="companyName" value={form.companyName} onChange={handleInput} /></label>
                   <label>대표자<input name="managerName" value={form.managerName} onChange={handleInput} /></label>
                   <label>사업자등록번호<input name="bizNo" value={form.bizNo} onChange={handleInput} onKeyDown={handleBizNoKeyDown} /></label>
@@ -1374,6 +1476,54 @@ export default function ExcelWebEditPage() {
                   <label className="full-row">
                     최종 저장값 (신용평가)
                     <textarea value={finalCreditText} readOnly rows={3} />
+                  </label>
+                </div>
+
+                <h2>6. 실행</h2>
+                <div className="excel-web-v2-actions">
+                  <button type="button" onClick={handleLoadData} disabled={isBackendBusy}>불러오기</button>
+                  <button type="button" className="primary" onClick={handleSave} disabled={isBackendBusy}>확정 및 저장</button>
+                </div>
+                {backendStatusMessage && <p className="muted">{backendStatusMessage}</p>}
+              </>
+            )}
+
+            {editorMode === EDITOR_MODE.CONSTRUCTION_SAFETY_BONUS && (
+              <>
+                <h2>3. 업데이트 대상 설정</h2>
+                <div className="excel-web-v2-settings">
+                  <label>
+                    자료 종류
+                    <input value={CONSTRUCTION_SAFETY_FILE_TYPE} readOnly />
+                  </label>
+                </div>
+
+                <h2>4. 기존 건설안전가점 조회값</h2>
+                <div className="excel-web-v2-credit-readonly">
+                  <label className="full-row">
+                    기존 건설안전가점
+                    <textarea value={constructionSafetyLookupPreview} readOnly rows={4} />
+                  </label>
+                </div>
+
+                <h2>5. 건설안전가점 입력</h2>
+                <div className="excel-web-v2-form">
+                  <label>사업자등록번호<input name="bizNo" value={form.bizNo} onChange={handleInput} onKeyDown={handleBizNoKeyDown} /></label>
+                  <label>
+                    건설안전종류
+                    <select name="constructionSafetyType" value={form.constructionSafetyType} onChange={handleInput}>
+                      <option value="">종류를 선택하세요</option>
+                      <option value="ISO">ISO-4500</option>
+                      <option value="MS">KOSHA-MS</option>
+                    </select>
+                  </label>
+                  <div className="inline-dates">
+                    <label>시작일<input name="constructionSafetyStartDate" value={form.constructionSafetyStartDate} onChange={handleInput} placeholder="YY.MM.DD" /></label>
+                    <label>종료일<input name="constructionSafetyEndDate" value={form.constructionSafetyEndDate} onChange={handleInput} placeholder="YY.MM.DD" /></label>
+                  </div>
+                  <label className="full-row">
+                    최종 저장값 (건설안전가점)
+                    <textarea value={finalConstructionSafetyText} readOnly rows={3} />
                   </label>
                 </div>
 
@@ -1576,6 +1726,22 @@ export default function ExcelWebEditPage() {
                     {REGION_OPTIONS.map((region) => <option key={region} value={region} />)}
                   </datalist>
                 </label>
+                {companySetupMode === 'archive_only' && fileType === CONSTRUCTION_SAFETY_FILE_TYPE && (
+                  <label>
+                    건설안전종류
+                    <select
+                      value={companySetupDraft.constructionSafetyType}
+                      onChange={(event) => setCompanySetupDraft((prev) => ({
+                        ...prev,
+                        constructionSafetyType: event.target.value,
+                      }))}
+                    >
+                      <option value="">종류를 선택하세요</option>
+                      <option value="ISO">ISO-4500</option>
+                      <option value="MS">KOSHA-MS</option>
+                    </select>
+                  </label>
+                )}
                 <button type="button" onClick={handleConfirmCompanySetup} disabled={isBackendBusy}>
                   {companySetupMode === 'register' ? '확인' : '저장'}
                 </button>
