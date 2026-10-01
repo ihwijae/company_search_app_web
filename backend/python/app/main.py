@@ -52,8 +52,8 @@ RELATIVE_OFFSETS = {
     "영업기간공사업등록일": 7,
     "신용평가": 8,
     "여성기업": 9,
-    "중소기업": 10,
-    "일자리창출실적": 11,
+    "일자리가점": 10,
+    "건설안전가점": 11,
     "시공품질평가": 12,
     "비고": 13,
 }
@@ -71,8 +71,8 @@ COLUMN_MAP = {
     "영업기간": "영업기간공사업등록일",
     "신용평가": "신용평가",
     "여성기업": "여성기업",
-    "중소기업": "중소기업",
-    "일자리창출실적": "일자리창출실적",
+    "일자리가점": "일자리가점",
+    "건설안전가점": "건설안전가점",
     "시공품질평가": "시공품질평가",
     "비고": "비고",
 }
@@ -90,8 +90,8 @@ FORM_KEY_TO_KR = {
     "bizYears": "영업기간",
     "creditText": "신용평가",
     "womenOwned": "여성기업",
-    "smallBusiness": "중소기업",
-    "jobCreation": "일자리창출실적",
+    "jobBonus": "일자리가점",
+    "constructionSafetyBonus": "건설안전가점",
     "qualityEval": "시공품질평가",
     "note": "비고",
 }
@@ -614,6 +614,15 @@ def _find_company_position(excel_path: str, biz_no: str) -> tuple[str, int, int]
         workbook.close()
 
 
+def _matches_renamed_row_label(sheet, target_row: int, excel_label: str) -> bool:
+    if excel_label not in {"일자리가점", "건설안전가점"}:
+        return True
+    if not (1 <= target_row <= sheet.max_row):
+        return False
+    label_cell = _resolve_merged_cell(sheet, target_row, 1)
+    return _normalize_label(label_cell.value) == _normalize_label(excel_label)
+
+
 def _extract_company_data_from_workbook(workbook, sheet_name: str, row: int, col: int) -> dict:
     sheet = workbook[sheet_name]
     result: dict[str, object] = {}
@@ -622,7 +631,11 @@ def _extract_company_data_from_workbook(workbook, sheet_name: str, row: int, col
         if offset is None:
             continue
         target_row = row + offset
-        if 1 <= target_row <= sheet.max_row and 1 <= col <= sheet.max_column:
+        if (
+            1 <= target_row <= sheet.max_row
+            and 1 <= col <= sheet.max_column
+            and _matches_renamed_row_label(sheet, target_row, excel_label)
+        ):
             cell = _resolve_merged_cell(sheet, target_row, col)
             result[kr_key] = cell.value
         else:
@@ -674,7 +687,11 @@ def _extract_company_cells_from_workbook(workbook, sheet_name: str, row: int, co
         target_row = row + offset
         value = ""
         color = "#FFFFFF"
-        if 1 <= target_row <= sheet.max_row and 1 <= col <= sheet.max_column:
+        if (
+            1 <= target_row <= sheet.max_row
+            and 1 <= col <= sheet.max_column
+            and _matches_renamed_row_label(sheet, target_row, excel_label)
+        ):
             cell = _resolve_merged_cell(sheet, target_row, col)
             value = cell.value
             color = _resolve_fill_color_hex(cell)
@@ -990,8 +1007,8 @@ def _build_lookup_payload(raw: dict, db_type: str, excel_path: str, sheet_name: 
         "bizYears": str(raw.get("영업기간") or ""),
         "creditText": str(raw.get("신용평가") or ""),
         "womenOwned": str(raw.get("여성기업") or ""),
-        "smallBusiness": str(raw.get("중소기업") or ""),
-        "jobCreation": str(raw.get("일자리창출실적") or ""),
+        "jobBonus": str(raw.get("일자리가점") or ""),
+        "constructionSafetyBonus": str(raw.get("건설안전가점") or ""),
         "qualityEval": str(raw.get("시공품질평가") or ""),
         "note": str(raw.get("비고") or ""),
     }
@@ -1008,8 +1025,8 @@ def _build_lookup_payload(raw: dict, db_type: str, excel_path: str, sheet_name: 
         "currentRatio": company["currentRatio"],
         "bizYears": company["bizYears"],
         "womenOwned": company["womenOwned"],
-        "smallBusiness": company["smallBusiness"],
-        "jobCreation": company["jobCreation"],
+        "jobBonus": company["jobBonus"],
+        "constructionSafetyBonus": company["constructionSafetyBonus"],
         "qualityEval": company["qualityEval"],
         "note": company["note"],
     }
@@ -1059,6 +1076,8 @@ def _update_management_data_at_position(
 
             update_row = target_row + offset
             if not (1 <= update_row <= sheet.max_row and 1 <= target_col <= sheet.max_column):
+                continue
+            if not _matches_renamed_row_label(sheet, update_row, excel_label):
                 continue
 
             cell = _resolve_merged_cell(sheet, update_row, target_col)

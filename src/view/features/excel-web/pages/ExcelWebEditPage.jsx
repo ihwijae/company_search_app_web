@@ -21,8 +21,8 @@ const FIELD_LABELS = [
   ['bizYears', '영업기간'],
   ['creditText', '신용평가'],
   ['womenOwned', '여성기업'],
-  ['smallBusiness', '중소기업'],
-  ['jobCreation', '일자리창출실적'],
+  ['jobBonus', '일자리가점'],
+  ['constructionSafetyBonus', '건설안전가점'],
   ['qualityEval', '시공품질평가'],
   ['note', '비고'],
 ];
@@ -42,12 +42,23 @@ const EMPTY_FORM = {
   creditStartDate: '',
   creditEndDate: '',
   womenOwned: '',
-  smallBusiness: '',
-  jobCreation: '',
+  jobBonus: '',
+  constructionSafetyBonus: '',
   qualityEval: '',
   note: '',
   noteClear: false,
 };
+
+function discardLegacyManagementFields(source = {}) {
+  const currentFields = source && typeof source === 'object' ? { ...source } : {};
+  delete currentFields.smallBusiness;
+  delete currentFields.jobCreation;
+  return currentFields;
+}
+
+function normalizeManagementForm(source = {}) {
+  return { ...EMPTY_FORM, ...discardLegacyManagementFields(source) };
+}
 
 const EDITOR_MODE = {
   MANAGEMENT: 'management',
@@ -386,9 +397,9 @@ export default function ExcelWebEditPage() {
     if (!state) return;
     if (state.fileType) setFileType(state.fileType);
     if (state.editorMode) setEditorMode(state.editorMode);
-    if (state.form) setForm((prev) => ({ ...prev, ...state.form }));
-    if (state.loadedData) setLoadedData(state.loadedData);
-    if (state.loadedColorMap) setLoadedColorMap(state.loadedColorMap);
+    if (state.form) setForm(normalizeManagementForm(state.form));
+    if (state.loadedData) setLoadedData(discardLegacyManagementFields(state.loadedData));
+    if (state.loadedColorMap) setLoadedColorMap(discardLegacyManagementFields(state.loadedColorMap));
     if (state.lookupVersion) setLookupVersion(state.lookupVersion);
     if (typeof state.pdfPageNumber === 'number') setPdfPageNumber(Math.max(1, state.pdfPageNumber));
     if (typeof state.previewZoom === 'number') setPreviewZoom(Math.max(0.5, state.previewZoom));
@@ -1298,8 +1309,8 @@ export default function ExcelWebEditPage() {
                   <label>유동비율<input name="currentRatio" value={form.currentRatio} onChange={handleInput} /></label>
                   <label>영업기간<input name="bizYears" value={form.bizYears} onChange={handleInput} /></label>
                   <label>여성기업<input name="womenOwned" value={form.womenOwned} onChange={handleInput} /></label>
-                  <label>중소기업<input name="smallBusiness" value={form.smallBusiness} onChange={handleInput} /></label>
-                  <label>일자리창출실적<input name="jobCreation" value={form.jobCreation} onChange={handleInput} /></label>
+                  <label>일자리가점<input name="jobBonus" value={form.jobBonus} onChange={handleInput} /></label>
+                  <label>건설안전가점<input name="constructionSafetyBonus" value={form.constructionSafetyBonus} onChange={handleInput} /></label>
                   <label>시공품질평가<input name="qualityEval" value={form.qualityEval} onChange={handleInput} placeholder={`없음 또는 점수만 입력 (저장 시 ${getQualityEvalReferenceDateText()} 자동추가)`} /></label>
                   <label className="full-row excel-web-v2-note-field">
                     비고

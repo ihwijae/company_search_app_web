@@ -17,7 +17,7 @@ const normalizeDigits = (value) => String(value || '').replace(/\D/g, '');
 
 function createInitialDocument() {
   return {
-    version: 1,
+    version: 3,
     nextId: 1,
     updatedAt: null,
     companies: [],
@@ -43,8 +43,8 @@ function normalizeCompany(input = {}, fallbackId = 0) {
     bizYears: normalizeString(input.bizYears),
     creditGrade: normalizeString(input.creditGrade),
     womenOwned: normalizeString(input.womenOwned),
-    smallBusiness: normalizeString(input.smallBusiness),
-    jobCreation: normalizeString(input.jobCreation),
+    jobBonus: normalizeString(input.jobBonus),
+    constructionSafetyBonus: normalizeString(input.constructionSafetyBonus),
     qualityEval: normalizeString(input.qualityEval),
     notes: normalizeString(input.notes),
     createdAt: input.createdAt || new Date().toISOString(),
@@ -71,7 +71,7 @@ function normalizeDocument(input) {
   });
 
   return {
-    version: 1,
+    version: 3,
     nextId,
     updatedAt: source.updatedAt || null,
     companies: normalizedCompanies,
@@ -144,8 +144,8 @@ function toSearchCompany(company = {}) {
     영업기간: normalizeString(company.bizYears),
     신용평가: normalizeString(company.creditGrade),
     여성기업: normalizeString(company.womenOwned),
-    중소기업: normalizeString(company.smallBusiness),
-    일자리창출: normalizeString(company.jobCreation),
+    일자리가점: normalizeString(company.jobBonus),
+    건설안전가점: normalizeString(company.constructionSafetyBonus),
     품질평가: normalizeString(company.qualityEval),
     비고: notes,
     담당자명: normalizeString(company.managerName),
@@ -182,4 +182,3 @@ module.exports = {
   toSearchCompany,
   listTempCompanySearchRows,
 };
-

@@ -44,8 +44,8 @@ const GRID_ROWS = [
   { key: '영업기간', label: '영업기간', kind: 'text' },
   { key: '신용평가', label: '신용등급', kind: 'multiline' },
   { key: '여성기업', label: '여성기업', kind: 'text' },
-  { key: '중소기업', label: '중소기업', kind: 'text' },
-  { key: '일자리창출', label: '일자리창출평가', kind: 'text' },
+  { key: '일자리가점', label: '일자리가점', kind: 'text' },
+  { key: '건설안전가점', label: '건설안전가점', kind: 'text' },
   { key: '품질평가', label: '시공품질평가', kind: 'text' },
   { key: '비고', label: '비고', kind: 'multiline' },
 ];
@@ -63,8 +63,8 @@ const COPY_ORDER = [
   '영업기간',
   '신용평가',
   '여성기업',
-  '중소기업',
-  '일자리창출',
+  '일자리가점',
+  '건설안전가점',
   '품질평가',
   '비고',
 ];

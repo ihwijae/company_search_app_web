@@ -17,10 +17,32 @@ const RELATIVE_OFFSETS = {
   영업기간: 9,
   신용평가: 10,
   여성기업: 11,
-  중소기업: 12,
-  일자리창출: 13,
+  일자리가점: 12,
+  건설안전가점: 13,
   품질평가: 14,
   비고: 15,
+};
+
+const resolveRelativeOffsets = (readLabel) => {
+  const offsets = { ...RELATIVE_OFFSETS };
+  const jobBonusLabel = String(readLabel(12) || '').replace(/\s+/g, '');
+  const safetyBonusLabel = String(readLabel(13) || '').replace(/\s+/g, '');
+
+  if (jobBonusLabel === '중소기업') {
+    delete offsets.일자리가점;
+    offsets.중소기업 = 12;
+  } else if (jobBonusLabel !== '일자리가점') {
+    delete offsets.일자리가점;
+  }
+
+  if (/^일자리창출/.test(safetyBonusLabel)) {
+    delete offsets.건설안전가점;
+    offsets.일자리창출 = 13;
+  } else if (safetyBonusLabel !== '건설안전가점') {
+    delete offsets.건설안전가점;
+  }
+
+  return offsets;
 };
 
 const CREDIT_GRADE_ORDER = require('../../src/shared/creditGrades.json');
@@ -339,6 +361,7 @@ async function extractCompaniesWithExcelJs(buffer, fileType, fileName) {
     for (let rIdx = 1; rIdx <= maxRow; rIdx += 1) {
       const firstCellValue = sheet.getCell(rIdx, 1).value;
       if (typeof firstCellValue !== 'string' || !firstCellValue.trim().includes('회사명')) continue;
+      const relativeOffsets = resolveRelativeOffsets((offset) => normalizeCellText(sheet.getCell(rIdx + offset, 1).value));
 
       for (let cIdx = 2; cIdx <= maxCol; cIdx += 1) {
         const rawCompanyName = sheet.getCell(rIdx, cIdx).value;
@@ -348,8 +371,8 @@ async function extractCompaniesWithExcelJs(buffer, fileType, fileName) {
 
         const companyData = { '검색된 회사': companyName, 대표지역: trimmedSheetName, _file_type: fileType };
         const companyStatuses = {};
-        Object.keys(RELATIVE_OFFSETS).forEach((item) => {
-          const targetRow = rIdx + RELATIVE_OFFSETS[item];
+        Object.keys(relativeOffsets).forEach((item) => {
+          const targetRow = rIdx + relativeOffsets[item];
           if (targetRow > maxRow) {
             companyData[item] = 'N/A';
             companyStatuses[item] = 'N/A';
@@ -404,6 +427,10 @@ function extractCompaniesWithXlsx(buffer, fileType, fileName) {
       const headerCell = sheet[XLSX.utils.encode_cell({ r: row, c: 0 })];
       const headerValue = normalizeCellText((headerCell && (headerCell.v ?? headerCell.w)) || '');
       if (!headerValue.includes('회사명')) continue;
+      const relativeOffsets = resolveRelativeOffsets((offset) => {
+        const labelCell = sheet[XLSX.utils.encode_cell({ r: row + offset, c: 0 })];
+        return normalizeCellText((labelCell && (labelCell.v ?? labelCell.w)) || '');
+      });
 
       for (let col = 1; col <= range.e.c; col += 1) {
         const companyCell = sheet[XLSX.utils.encode_cell({ r: row, c: col })];
@@ -414,8 +441,8 @@ function extractCompaniesWithXlsx(buffer, fileType, fileName) {
 
         const companyData = { '검색된 회사': companyName, 대표지역: trimmedSheetName, _file_type: fileType };
         const companyStatuses = {};
-        Object.keys(RELATIVE_OFFSETS).forEach((item) => {
-          const targetRow = row + RELATIVE_OFFSETS[item];
+        Object.keys(relativeOffsets).forEach((item) => {
+          const targetRow = row + relativeOffsets[item];
           if (targetRow > range.e.r) {
             companyData[item] = 'N/A';
             companyStatuses[item] = 'N/A';

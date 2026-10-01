@@ -21,8 +21,8 @@ const EMPTY_FORM = {
   bizYears: '',
   creditGrade: '',
   womenOwned: '',
-  smallBusiness: '',
-  jobCreation: '',
+  jobBonus: '',
+  constructionSafetyBonus: '',
   qualityEval: '',
   notes: '',
 };
@@ -42,8 +42,8 @@ const FIELD_LAYOUT = [
   ['bizYears', '영업기간'],
   ['creditGrade', '신용평가'],
   ['womenOwned', '여성기업'],
-  ['smallBusiness', '중소기업'],
-  ['jobCreation', '일자리창출'],
+  ['jobBonus', '일자리가점'],
+  ['constructionSafetyBonus', '건설안전가점'],
   ['qualityEval', '품질평가'],
   ['notes', '비고'],
 ];

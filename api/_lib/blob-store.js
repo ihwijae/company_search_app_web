@@ -4,6 +4,7 @@ const { parseDatasetBuffer } = require('./dataset-parser');
 const { ROOTS, ensureDir, readJsonFile, writeJsonFile } = require('./local-storage');
 
 const DATASET_TYPES = ['eung', 'tongsin', 'sobang'];
+const DATASET_SCHEMA_VERSION = 4;
 const DEFAULT_DATASET_ROOT = ROOTS.datasets;
 const MANIFEST_PATH = 'manifest.json';
 const datasetCache = new Map();
@@ -78,6 +79,7 @@ async function uploadDataset({ fileType, fileName, buffer, contentType }) {
   await fs.promises.writeFile(originalPath, buffer);
   const parsedMeta = await storeParsedDataset(fileType, {
     ...parsedDataset,
+    schemaVersion: DATASET_SCHEMA_VERSION,
     updatedAt: new Date().toISOString(),
   });
 
@@ -93,14 +95,16 @@ async function uploadDataset({ fileType, fileName, buffer, contentType }) {
     parsedPathname: parsedMeta.pathname,
     parsedFilePath: parsedMeta.filePath,
     parsedContentType: parsedMeta.contentType,
+    parsedSchemaVersion: DATASET_SCHEMA_VERSION,
     companyCount: Array.isArray(parsedDataset.companies) ? parsedDataset.companies.length : 0,
     sheetCount: Array.isArray(parsedDataset.sheetNames) ? parsedDataset.sheetNames.length : 0,
   };
   const nextManifest = await writeManifest(manifest);
   datasetCache.set(fileType, {
-    version: nextManifest.datasets[fileType]?.uploadedAt || nextManifest.updatedAt || new Date().toISOString(),
+    version: getDatasetVersion(nextManifest.datasets[fileType]),
     dataset: {
       ...parsedDataset,
+      schemaVersion: DATASET_SCHEMA_VERSION,
       updatedAt: uploadedAt,
     },
   });
@@ -129,6 +133,7 @@ async function refreshDataset(fileType) {
   const parsedDataset = await parseDatasetBuffer(buffer, fileType, current.fileName || path.basename(sourcePath));
   const parsedMeta = await storeParsedDataset(fileType, {
     ...parsedDataset,
+    schemaVersion: DATASET_SCHEMA_VERSION,
     updatedAt: new Date().toISOString(),
   });
 
@@ -138,6 +143,7 @@ async function refreshDataset(fileType) {
     parsedPathname: parsedMeta.pathname,
     parsedFilePath: parsedMeta.filePath,
     parsedContentType: parsedMeta.contentType,
+    parsedSchemaVersion: DATASET_SCHEMA_VERSION,
     companyCount: Array.isArray(parsedDataset.companies) ? parsedDataset.companies.length : 0,
     sheetCount: Array.isArray(parsedDataset.sheetNames) ? parsedDataset.sheetNames.length : 0,
     uploadedAt: refreshedAt,
@@ -148,6 +154,7 @@ async function refreshDataset(fileType) {
     version: getDatasetVersion(nextManifest.datasets[fileType]),
     dataset: {
       ...parsedDataset,
+      schemaVersion: DATASET_SCHEMA_VERSION,
       updatedAt: refreshedAt,
     },
   });
@@ -179,14 +186,14 @@ async function parseSharedDataset(fileType) {
 
   const meta = await getDatasetMeta(fileType);
   if (!meta || !meta.pathname) return null;
-  const version = meta.uploadedAt || meta.parsedPathname || meta.pathname;
+  const version = getDatasetVersion(meta);
   const cached = datasetCache.get(fileType);
   if (cached && cached.version === version) return cached.dataset;
 
   if (meta.parsedPathname) {
     try {
       const parsed = await readJsonFile(toAbsolutePath(meta.parsedPathname));
-      if (parsed && typeof parsed === 'object') {
+      if (parsed && typeof parsed === 'object' && Number(parsed.schemaVersion) === DATASET_SCHEMA_VERSION) {
         datasetCache.set(fileType, {
           version,
           dataset: parsed,
@@ -201,9 +208,13 @@ async function parseSharedDataset(fileType) {
   try {
     const buffer = await fs.promises.readFile(toAbsolutePath(meta.pathname));
     const parsed = await parseDatasetBuffer(buffer, fileType, meta.fileName || meta.pathname);
+    const normalizedParsed = {
+      ...parsed,
+      schemaVersion: DATASET_SCHEMA_VERSION,
+    };
     try {
-      const parsedMeta = await storeParsedDataset(fileType, parsed);
-      if (!meta.parsedPathname || meta.parsedPathname !== parsedMeta.pathname) {
+      const parsedMeta = await storeParsedDataset(fileType, normalizedParsed);
+      if (!meta.parsedPathname || meta.parsedPathname !== parsedMeta.pathname || Number(meta.parsedSchemaVersion) !== DATASET_SCHEMA_VERSION) {
         const manifest = await readManifest();
         manifest.datasets[fileType] = {
           ...(manifest.datasets[fileType] || {}),
@@ -211,6 +222,7 @@ async function parseSharedDataset(fileType) {
           parsedPathname: parsedMeta.pathname,
           parsedFilePath: parsedMeta.filePath,
           parsedContentType: parsedMeta.contentType,
+          parsedSchemaVersion: DATASET_SCHEMA_VERSION,
           companyCount: Array.isArray(parsed.companies) ? parsed.companies.length : 0,
           sheetCount: Array.isArray(parsed.sheetNames) ? parsed.sheetNames.length : 0,
         };
@@ -219,8 +231,8 @@ async function parseSharedDataset(fileType) {
     } catch (persistError) {
       console.warn('[blob-store] failed to persist parsed dataset:', fileType, persistError && persistError.message ? persistError.message : persistError);
     }
-    datasetCache.set(fileType, { version, dataset: parsed });
-    return parsed;
+    datasetCache.set(fileType, { version, dataset: normalizedParsed });
+    return normalizedParsed;
   } catch (error) {
     console.error('[dataset-store] parseSharedDataset failed:', fileType, error);
     return null;
@@ -229,11 +241,13 @@ async function parseSharedDataset(fileType) {
 
 function getDatasetVersion(meta) {
   if (!meta || typeof meta !== 'object') return '';
-  return meta.uploadedAt || meta.parsedPathname || meta.pathname || '';
+  const sourceVersion = meta.uploadedAt || meta.parsedPathname || meta.pathname || '';
+  return sourceVersion ? `${DATASET_SCHEMA_VERSION}:${sourceVersion}` : '';
 }
 
 module.exports = {
   DATASET_TYPES,
+  DATASET_SCHEMA_VERSION,
   resolveToken: () => resolveDatasetRoot(),
   resolveDatasetRoot,
   readManifest,

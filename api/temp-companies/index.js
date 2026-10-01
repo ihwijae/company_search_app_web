@@ -29,8 +29,8 @@ function normalizePayload(payload = {}) {
     bizYears: String(source.bizYears || '').trim(),
     creditGrade: String(source.creditGrade || '').trim(),
     womenOwned: String(source.womenOwned || '').trim(),
-    smallBusiness: String(source.smallBusiness || '').trim(),
-    jobCreation: String(source.jobCreation || '').trim(),
+    jobBonus: String(source.jobBonus || '').trim(),
+    constructionSafetyBonus: String(source.constructionSafetyBonus || '').trim(),
     qualityEval: String(source.qualityEval || '').trim(),
     notes: String(source.notes || '').trim(),
   };
@@ -151,4 +151,3 @@ module.exports = async function handler(req, res) {
   allowMethods(res, ['GET', 'POST']);
   return sendJson(res, 405, { success: false, message: 'Method not allowed' });
 };
-

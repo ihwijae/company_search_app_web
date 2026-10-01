@@ -6,7 +6,7 @@ const { sanitizeXlsx } = require('../utils/sanitizeXlsx');
 const ROOT_DIR = path.resolve(__dirname, '..');
 const DB_DIR = path.join(ROOT_DIR, 'db');
 const OUTPUT_DIR = path.join(ROOT_DIR, 'public', 'datasets');
-const DATASET_SCHEMA_VERSION = '2';
+const DATASET_SCHEMA_VERSION = '4';
 
 const DATASET_RULES = [
   { type: 'eung', matcher: /전기/ },
@@ -26,10 +26,32 @@ const RELATIVE_OFFSETS = {
   영업기간: 9,
   신용평가: 10,
   여성기업: 11,
-  중소기업: 12,
-  일자리창출: 13,
+  일자리가점: 12,
+  건설안전가점: 13,
   품질평가: 14,
   비고: 15,
+};
+
+const resolveRelativeOffsets = (readLabel) => {
+  const offsets = { ...RELATIVE_OFFSETS };
+  const jobBonusLabel = String(readLabel(12) || '').replace(/\s+/g, '');
+  const safetyBonusLabel = String(readLabel(13) || '').replace(/\s+/g, '');
+
+  if (jobBonusLabel === '중소기업') {
+    delete offsets.일자리가점;
+    offsets.중소기업 = 12;
+  } else if (jobBonusLabel !== '일자리가점') {
+    delete offsets.일자리가점;
+  }
+
+  if (/^일자리창출/.test(safetyBonusLabel)) {
+    delete offsets.건설안전가점;
+    offsets.일자리창출 = 13;
+  } else if (safetyBonusLabel !== '건설안전가점') {
+    delete offsets.건설안전가점;
+  }
+
+  return offsets;
 };
 
 const normalizeCellText = (value) => {
@@ -148,6 +170,7 @@ const extractCompaniesFromWorkbook = async (filePath, type, meta) => {
     for (let row = 1; row <= maxRow; row += 1) {
       const firstCellValue = sheet.getCell(row, 1).value;
       if (typeof firstCellValue !== 'string' || !firstCellValue.trim().includes('회사명')) continue;
+      const relativeOffsets = resolveRelativeOffsets((offset) => normalizeCellText(sheet.getCell(row + offset, 1).value));
 
       for (let col = 2; col <= maxCol; col += 1) {
         const rawCompanyName = sheet.getCell(row, col).value;
@@ -161,8 +184,8 @@ const extractCompaniesFromWorkbook = async (filePath, type, meta) => {
           _file_type: type,
         };
         const companyStatuses = {};
-        Object.keys(RELATIVE_OFFSETS).forEach((key) => {
-          const targetRow = row + RELATIVE_OFFSETS[key];
+        Object.keys(relativeOffsets).forEach((key) => {
+          const targetRow = row + relativeOffsets[key];
           if (targetRow > maxRow) {
             companyData[key] = 'N/A';
             companyStatuses[key] = 'N/A';
@@ -225,6 +248,10 @@ const extractCompaniesWithXlsxFallback = (filePath, type, meta) => {
       const headerCell = sheet[XLSX.utils.encode_cell({ r: row, c: 0 })];
       const headerValue = normalizeCellText(headerCell?.v ?? headerCell?.w ?? '');
       if (!headerValue.includes('회사명')) continue;
+      const relativeOffsets = resolveRelativeOffsets((offset) => {
+        const labelCell = sheet[XLSX.utils.encode_cell({ r: row + offset, c: 0 })];
+        return normalizeCellText(labelCell?.v ?? labelCell?.w ?? '');
+      });
 
       for (let col = 1; col <= range.e.c; col += 1) {
         const companyCell = sheet[XLSX.utils.encode_cell({ r: row, c: col })];
@@ -239,8 +266,8 @@ const extractCompaniesWithXlsxFallback = (filePath, type, meta) => {
           _file_type: type,
         };
         const companyStatuses = {};
-        Object.keys(RELATIVE_OFFSETS).forEach((key) => {
-          const targetRow = row + RELATIVE_OFFSETS[key];
+        Object.keys(relativeOffsets).forEach((key) => {
+          const targetRow = row + relativeOffsets[key];
           if (targetRow > range.e.r) {
             companyData[key] = 'N/A';
             companyStatuses[key] = 'N/A';

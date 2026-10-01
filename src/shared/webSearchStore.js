@@ -14,15 +14,43 @@ const RELATIVE_OFFSETS = {
   영업기간: 9,
   신용평가: 10,
   여성기업: 11,
-  중소기업: 12,
-  일자리창출: 13,
+  일자리가점: 12,
+  건설안전가점: 13,
   품질평가: 14,
   비고: 15,
+};
+
+const resolveRelativeOffsets = (readLabel) => {
+  const offsets = { ...RELATIVE_OFFSETS };
+  const jobBonusLabel = String(readLabel(12) || '').replace(/\s+/g, '');
+  const safetyBonusLabel = String(readLabel(13) || '').replace(/\s+/g, '');
+
+  if (jobBonusLabel === '중소기업') {
+    delete offsets.일자리가점;
+    offsets.중소기업 = 12;
+  } else if (jobBonusLabel !== '일자리가점') {
+    delete offsets.일자리가점;
+  }
+
+  if (/^일자리창출/.test(safetyBonusLabel)) {
+    delete offsets.건설안전가점;
+    offsets.일자리창출 = 13;
+  } else if (safetyBonusLabel !== '건설안전가점') {
+    delete offsets.건설안전가점;
+  }
+
+  return offsets;
 };
 
 const DB_NAME = 'company-search-web';
 const STORE_NAME = 'search-datasets';
 const DATASET_TYPES = ['eung', 'tongsin', 'sobang'];
+const getSharedDatasetVersion = (meta) => {
+  const sourceVersion = String(meta?.uploadedAt || meta?.parsedPathname || meta?.pathname || '');
+  if (!sourceVersion) return '';
+  const schemaVersion = String(meta?.schemaVersion || '1');
+  return `${schemaVersion}:${sourceVersion}`;
+};
 
 const datasets = new Map();
 const listeners = new Set();
@@ -265,8 +293,8 @@ const normalizeTempCompanyToSearchRow = (company = {}) => {
     영업기간: String(company.bizYears || '').trim(),
     신용평가: credit,
     여성기업: String(company.womenOwned || '').trim(),
-    중소기업: String(company.smallBusiness || '').trim(),
-    일자리창출: String(company.jobCreation || '').trim(),
+    일자리가점: String(company.jobBonus || '').trim(),
+    건설안전가점: String(company.constructionSafetyBonus || '').trim(),
     품질평가: String(company.qualityEval || '').trim(),
     비고: mergedNotes,
     담당자명: manager,
@@ -537,6 +565,7 @@ const extractCompaniesFromWorkbook = async (arrayBuffer, fileType, fileName) => 
     for (let rIdx = 1; rIdx <= maxRow; rIdx += 1) {
       const firstCellValue = sheet.getCell(rIdx, 1).value;
       if (typeof firstCellValue !== 'string' || !firstCellValue.trim().includes('회사명')) continue;
+      const relativeOffsets = resolveRelativeOffsets((offset) => normalizeCellText(sheet.getCell(rIdx + offset, 1).value));
 
       for (let cIdx = 2; cIdx <= maxCol; cIdx += 1) {
         const rawCompanyName = sheet.getCell(rIdx, cIdx).value;
@@ -552,8 +581,8 @@ const extractCompaniesFromWorkbook = async (arrayBuffer, fileType, fileName) => 
         };
         const companyStatuses = {};
 
-        Object.keys(RELATIVE_OFFSETS).forEach((item) => {
-          const targetRow = rIdx + RELATIVE_OFFSETS[item];
+        Object.keys(relativeOffsets).forEach((item) => {
+          const targetRow = rIdx + relativeOffsets[item];
           if (targetRow > maxRow) {
             companyData[item] = 'N/A';
             companyStatuses[item] = 'N/A';
@@ -619,6 +648,10 @@ const extractCompaniesWithXlsxFallback = (arrayBuffer, fileType, fileName) => {
       const headerCell = sheet[XLSX.utils.encode_cell({ r: row, c: 0 })];
       const headerValue = normalizeCellText(headerCell?.v ?? headerCell?.w ?? '');
       if (!headerValue.includes('회사명')) continue;
+      const relativeOffsets = resolveRelativeOffsets((offset) => {
+        const labelCell = sheet[XLSX.utils.encode_cell({ r: row + offset, c: 0 })];
+        return normalizeCellText(labelCell?.v ?? labelCell?.w ?? '');
+      });
 
       for (let col = 1; col <= range.e.c; col += 1) {
         const companyCell = sheet[XLSX.utils.encode_cell({ r: row, c: col })];
@@ -635,8 +668,8 @@ const extractCompaniesWithXlsxFallback = (arrayBuffer, fileType, fileName) => {
         };
         const companyStatuses = {};
 
-        Object.keys(RELATIVE_OFFSETS).forEach((item) => {
-          const targetRow = row + RELATIVE_OFFSETS[item];
+        Object.keys(relativeOffsets).forEach((item) => {
+          const targetRow = row + relativeOffsets[item];
           if (targetRow > range.e.r) {
             companyData[item] = 'N/A';
             companyStatuses[item] = 'N/A';
@@ -765,7 +798,7 @@ export const webSearchStore = {
     await this.ensureLoaded();
 
     const current = datasets.get(fileType);
-    const targetVersion = String(meta?.uploadedAt || meta?.parsedPathname || meta?.pathname || '');
+    const targetVersion = getSharedDatasetVersion(meta);
     if (current?.companies?.length && current.version && targetVersion && current.version === targetVersion) {
       return { updated: false, dataset: current };
     }

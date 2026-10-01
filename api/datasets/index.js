@@ -8,6 +8,7 @@ const {
   parseSharedDataset,
   getDatasetMeta,
   getDatasetVersion,
+  DATASET_SCHEMA_VERSION,
   uploadDataset,
   refreshDataset,
   resolveDatasetRoot,
@@ -31,7 +32,10 @@ module.exports = async function handler(req, res) {
           meta: {
             configured: true,
             updatedAt: manifest.updatedAt || null,
-            datasets: manifest.datasets || {},
+            datasets: Object.fromEntries(Object.entries(manifest.datasets || {}).map(([type, meta]) => [type, {
+              ...meta,
+              schemaVersion: DATASET_SCHEMA_VERSION,
+            }])),
           },
         });
       } catch (error) {
