@@ -103,6 +103,7 @@ function buildConstructionSafetyText(form) {
   const safetyType = String(form.constructionSafetyType || '').trim();
   const start = String(form.constructionSafetyStartDate || '').trim();
   const end = String(form.constructionSafetyEndDate || '').trim();
+  if (safetyType === '없음') return '없음';
   if (!safetyType && !start && !end) return '';
   if (!safetyType) return `${start || '?'}~${end || '?'}`;
   if (!start && !end) return safetyType;
@@ -324,6 +325,14 @@ export default function ExcelWebEditPage() {
   const handleSourceUpload = async (event) => {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
+    if (
+      editorMode === EDITOR_MODE.CONSTRUCTION_SAFETY_BONUS
+      && form.constructionSafetyType === '없음'
+    ) {
+      notifyError('건설안전종류가 없음인 경우에는 증빙파일을 첨부할 수 없습니다.');
+      event.target.value = '';
+      return;
+    }
     try {
       setIsBackendBusy(true);
       setBackendStatusMessage('스캔본을 서버 임시폴더에 업로드하는 중입니다.');
@@ -562,6 +571,16 @@ export default function ExcelWebEditPage() {
 
         return { ...prev, [name]: nextValue };
       });
+      return;
+    } else if (name === 'constructionSafetyType' && value === '없음') {
+      sourceFiles.forEach((file) => removeSourceFile(file.id));
+      setForm((prev) => ({
+        ...prev,
+        constructionSafetyType: '없음',
+        constructionSafetyStartDate: '',
+        constructionSafetyEndDate: '',
+      }));
+      if (sourceFiles.length) notifyInfo('없음으로 선택하여 첨부한 증빙파일을 제거했습니다.');
       return;
     } else if ([
       'creditStartDate',
@@ -912,7 +931,9 @@ export default function ExcelWebEditPage() {
       companyName: String(form.companyName || loadedData?.companyName || '').trim(),
       sheetName: mode === 'register' ? inferSheetNameFromRegion(region) : '',
       region,
-      constructionSafetyType: String(form.constructionSafetyType || '').trim(),
+      constructionSafetyType: form.constructionSafetyType === '없음'
+        ? ''
+        : String(form.constructionSafetyType || '').trim(),
     });
     setIsCompanySetupModalOpen(true);
   }, [form.companyName, form.constructionSafetyType, form.region, loadedData?.companyName, loadedData?.region]);
@@ -1515,11 +1536,12 @@ export default function ExcelWebEditPage() {
                       <option value="">종류를 선택하세요</option>
                       <option value="ISO">ISO-4500</option>
                       <option value="MS">KOSHA-MS</option>
+                      <option value="없음">없음</option>
                     </select>
                   </label>
                   <div className="inline-dates">
-                    <label>시작일<input name="constructionSafetyStartDate" value={form.constructionSafetyStartDate} onChange={handleInput} placeholder="YY.MM.DD" /></label>
-                    <label>종료일<input name="constructionSafetyEndDate" value={form.constructionSafetyEndDate} onChange={handleInput} placeholder="YY.MM.DD" /></label>
+                    <label>시작일<input name="constructionSafetyStartDate" value={form.constructionSafetyStartDate} onChange={handleInput} placeholder="YY.MM.DD" disabled={form.constructionSafetyType === '없음'} /></label>
+                    <label>종료일<input name="constructionSafetyEndDate" value={form.constructionSafetyEndDate} onChange={handleInput} placeholder="YY.MM.DD" disabled={form.constructionSafetyType === '없음'} /></label>
                   </div>
                   <label className="full-row">
                     최종 저장값 (건설안전가점)
