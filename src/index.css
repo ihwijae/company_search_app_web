@@ -1743,6 +1743,20 @@ body {
   font-size: 14px;
 }
 
+.records-grid__elapsed-notice {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 9px;
+  border: 1px solid #fdba74;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
 .records-grid__cell--actions {
   gap: 12px;
 }

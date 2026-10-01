@@ -93,7 +93,6 @@ const highlightSanitizedHtml = (html, keyword) => {
 
 const ITEMS_PER_PAGE = 3;
 const PAGE_WINDOW_SIZE = 20;
-const TEN_YEARS_MS = 10 * 365 * 24 * 60 * 60 * 1000;
 
 const formatDateToken = (value) => {
   if (!value) return '';
@@ -124,6 +123,24 @@ const toDate = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return date;
+};
+
+const hasElapsedYears = (targetDate, baseDate, years) => {
+  if (!(baseDate instanceof Date) || Number.isNaN(baseDate.getTime())) return false;
+  const parsedTarget = toDate(targetDate);
+  if (!parsedTarget) return false;
+
+  const anniversary = new Date(
+    parsedTarget.getFullYear() + years,
+    parsedTarget.getMonth(),
+    parsedTarget.getDate(),
+  );
+  const normalizedBase = new Date(
+    baseDate.getFullYear(),
+    baseDate.getMonth(),
+    baseDate.getDate(),
+  );
+  return anniversary.getTime() <= normalizedBase.getTime();
 };
 
 const formatElapsedPeriod = (targetDate, baseDate) => {
@@ -877,15 +894,9 @@ export default function RecordsPage() {
                       const hasAttachment = attachments.length > 0;
                       const sanitizedNotes = sanitizeHtml(project.scopeNotes);
                       const highlightedNotes = highlightSanitizedHtml(sanitizedNotes, keyword);
-                      let isExpired = false;
                       const expirySource = project.endDate || project.startDate;
-                      const expiryDate = toDate(expirySource);
-                      if (expiryDate) {
-                        const diff = baseDateRef.current.getTime() - expiryDate.getTime();
-                        if (diff >= TEN_YEARS_MS) {
-                          isExpired = true;
-                        }
-                      }
+                      const isTenYearsPassed = hasElapsedYears(expirySource, baseDateRef.current, 10);
+                      const isExpired = hasElapsedYears(expirySource, baseDateRef.current, 20);
                       const elapsedText = formatElapsedPeriod(project.endDate || project.startDate, baseDateRef.current);
                       const categoriesText = project.categories && project.categories.length > 0
                         ? project.categories.map((category) => category.name).join(' · ')
@@ -930,6 +941,9 @@ export default function RecordsPage() {
                           </div>
                           <div className="records-grid__cell records-grid__cell--elapsed">
                             <div className="records-grid__elapsed">{elapsedText || '—'}</div>
+                            {isTenYearsPassed && (
+                              <div className="records-grid__elapsed-notice">10년지남</div>
+                            )}
                           </div>
                           <div className="records-grid__cell records-grid__cell--actions">
                             <div className="records-grid__attachment-summary">
