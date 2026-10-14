@@ -4690,6 +4690,8 @@ export default function AgreementBoardWindow({
     ]);
     const items = groupAssignments
       .map((memberIds, groupIndex) => {
+        if (selectedGroups.size > 0 && !selectedGroups.has(groupIndex)) return null;
+
         const slottedMembers = memberIds
           .map((uid, slotIndex) => ({
             slotIndex,
@@ -4743,14 +4745,19 @@ export default function AgreementBoardWindow({
       return;
     }
 
+    if (selectedGroups.size === 0) {
+      const ok = await confirm({
+        title: '전체 협정 문자를 생성하시겠습니까?',
+        confirmText: '예',
+        cancelText: '아니오',
+        portalTarget: portalContainer || null,
+      });
+      if (!ok) return;
+    }
+
     try {
       const text = generateMany(items);
-      const api = typeof window !== 'undefined' ? window.electronAPI : null;
-      if (api?.clipboardWriteText) {
-        const result = await api.clipboardWriteText(text);
-        if (!result?.success) throw new Error(result?.message || 'Clipboard write failed');
-        showHeaderAlert('협정 문자 내용이 클립보드에 복사되었습니다.');
-      } else if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(text);
         showHeaderAlert('협정 문자 내용이 클립보드에 복사되었습니다.');
       } else {
@@ -4760,7 +4767,7 @@ export default function AgreementBoardWindow({
       console.error('Failed to copy text: ', err);
       showHeaderAlert('클립보드 복사에 실패했습니다.');
     }
-  }, [groupAssignments, participantMap, groupShares, groupApprovals, ownerId, noticeNo, noticeTitle, isSplitAssignedSlot, splitIndustryLabel, getCompanyName, getBizNo, normalizeBizNo]);
+  }, [groupAssignments, selectedGroups, participantMap, groupShares, groupApprovals, ownerId, noticeNo, noticeTitle, isSplitAssignedSlot, splitIndustryLabel, getCompanyName, getBizNo, normalizeBizNo, confirm, portalContainer, showHeaderAlert]);
 
   React.useEffect(() => {
     if (skipAssignmentSyncRef.current) {
@@ -7204,7 +7211,12 @@ export default function AgreementBoardWindow({
                   className="excel-btn"
                   disabled={exporting}
                 >엑셀로 내보내기</button>
-                <button type="button" className="excel-btn" onClick={handleGenerateText}>협정 문자 생성</button>
+                <button
+                  type="button"
+                  className="excel-btn"
+                  onClick={handleGenerateText}
+                  title={selectedGroups.size > 0 ? '선택한 협정만 문자를 생성합니다.' : '확인 후 전체 협정 문자를 생성합니다.'}
+                >협정 문자 생성</button>
                 <button
                   type="button"
                   className="excel-btn"
