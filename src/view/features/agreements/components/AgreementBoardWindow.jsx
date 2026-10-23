@@ -2,6 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import CompanySearchModal from '../../../../components/CompanySearchModal.jsx';
 import AgreementLoadModal from './AgreementLoadModal.jsx';
+import BoardSearchPopup from './BoardSearchPopup.jsx';
 import TechnicianScoreWindow from './TechnicianScoreWindow.jsx';
 import AgreementCandidateWindow from './AgreementCandidateWindow.jsx';
 import LhAwardHistoryWindow from './LhAwardHistoryWindow.jsx';
@@ -4094,6 +4095,7 @@ export default function AgreementBoardWindow({
     openBoardSearchPopup,
     closeBoardSearchPopup,
     moveBoardSearchMatch,
+    selectBoardSearchMatch,
     registerBoardSearchCardRef,
   } = useBoardSearch({
     groupAssignments,
@@ -7614,46 +7616,19 @@ export default function AgreementBoardWindow({
         </div>
       </div>
       {boardSearchOpen && (
-        <div className="excel-board-search-overlay" onClick={closeBoardSearchPopup}>
-          <div className="excel-board-search-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="excel-board-search-modal-header">
-              <strong>찾기</strong>
-              <button type="button" className="excel-board-search-close" onClick={closeBoardSearchPopup}>닫기</button>
-            </div>
-            <div className="excel-board-search-box">
-              <select
-                className="input"
-                value={boardSearchField}
-                onChange={(event) => setBoardSearchField(event.target.value === 'manager' ? 'manager' : 'name')}
-              >
-                <option value="name">업체명</option>
-                <option value="manager">담당자명</option>
-              </select>
-              <input
-                ref={boardSearchInputRef}
-                className="input"
-                value={boardSearchQuery}
-                onChange={(event) => setBoardSearchQuery(event.target.value)}
-                placeholder="검색어 입력 (Ctrl+F)"
-              />
-              <span className="excel-board-search-status">
-                {boardSearchCurrentLabel}
-              </span>
-              <button
-                type="button"
-                className="excel-btn"
-                onClick={() => moveBoardSearchMatch(-1)}
-                disabled={boardSearchMatches.length === 0}
-              >이전</button>
-              <button
-                type="button"
-                className="excel-btn"
-                onClick={() => moveBoardSearchMatch(1)}
-                disabled={boardSearchMatches.length === 0}
-              >다음</button>
-            </div>
-          </div>
-        </div>
+        <BoardSearchPopup
+          field={boardSearchField}
+          onFieldChange={setBoardSearchField}
+          query={boardSearchQuery}
+          onQueryChange={setBoardSearchQuery}
+          matches={boardSearchMatches}
+          activeKey={boardSearchActiveKey}
+          currentLabel={boardSearchCurrentLabel}
+          inputRef={boardSearchInputRef}
+          onClose={closeBoardSearchPopup}
+          onMove={moveBoardSearchMatch}
+          onSelect={selectBoardSearchMatch}
+        />
       )}
       {representativeSearchOpen && (
         <CompanySearchModal

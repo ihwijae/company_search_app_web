@@ -2384,6 +2384,8 @@ body.agreement-load-dragging {
 }
 .excel-board-search-modal {
   width: min(940px, calc(100% - 24px));
+  max-height: calc(100% - 124px);
+  overflow-y: auto;
   background: #ffffff;
   border: 1px solid #cbd5e1;
   border-radius: 14px;
@@ -2406,6 +2408,57 @@ body.agreement-load-dragging {
   font-size: 12px;
   cursor: pointer;
 }
+.excel-board-search-results {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+}
+.excel-board-search-results li + li {
+  border-top: 1px solid #e2e8f0;
+}
+.excel-board-search-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 16px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: #ffffff;
+  color: #0f172a;
+  text-align: left;
+  cursor: pointer;
+}
+.excel-board-search-result:hover {
+  background: #f1f5f9;
+}
+.excel-board-search-result.active {
+  background: #dbeafe;
+  box-shadow: inset 3px 0 #2563eb;
+}
+.excel-board-search-result:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+.excel-board-search-result-company {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.excel-board-search-result-manager,
+.excel-board-search-empty {
+  font-size: 13px;
+  color: #475569;
+  overflow-wrap: anywhere;
+}
+.excel-board-search-empty {
+  margin: 16px 0 4px;
+  text-align: center;
+}
 @media (max-width: 900px) {
   .excel-toolbar { flex-direction: column; align-items: flex-start; }
   .excel-toolbar-actions { width: 100%; }
@@ -2413,6 +2466,7 @@ body.agreement-load-dragging {
   .excel-board-search-box { width: 100%; }
   .excel-board-search-box .input { min-width: 0; flex: 1; }
   .excel-board-search-overlay { padding-top: 80px; }
+  .excel-board-search-modal { max-height: calc(100% - 94px); }
   .agreement-load-modal { max-height: calc(100vh - 24px); }
 }
 

@@ -109,6 +109,19 @@ export default function useBoardSearch({
     setBoardSearchOpen(false);
   }, []);
 
+  const selectBoardSearchMatch = React.useCallback((index) => {
+    const match = boardSearchMatches[index];
+    if (!match) return;
+    boardSearchNavigationRef.current = false;
+    setBoardSearchActiveIndex(index);
+    // Re-selecting the active result should also return to its board position.
+    if (index === boardSearchActiveIndex) {
+      boardSearchCardRefs.current.get(match.key)?.scrollIntoView({
+        block: 'center', inline: 'nearest', behavior: 'smooth',
+      });
+    }
+  }, [boardSearchMatches, boardSearchActiveIndex]);
+
   React.useEffect(() => {
     if (!boardSearchOpen) return;
     const timer = window.setTimeout(() => {
@@ -176,6 +189,7 @@ export default function useBoardSearch({
     openBoardSearchPopup,
     closeBoardSearchPopup,
     moveBoardSearchMatch,
+    selectBoardSearchMatch,
     registerBoardSearchCardRef,
   };
 }
