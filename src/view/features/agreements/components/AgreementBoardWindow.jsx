@@ -57,6 +57,7 @@ import {
   computeGroupSummaries,
 } from '../../../../shared/agreements/calculations/groupSummary.js';
 import { buildInconMemoText } from '../../../../shared/agreements/calculations/inconMemo.js';
+import { calculateLhSimpleMiscScore } from '../../../../shared/agreements/calculations/lhSimpleMiscScore.js';
 import { calculateMinimumPerformanceAmount } from '../../../../shared/agreements/calculations/minimumPerformanceAmount.js';
 import {
   calculateMinimumSipyungAmountForRatio,
@@ -6460,7 +6461,11 @@ export default function AgreementBoardWindow({
       ? resolveConstructionExperienceScore(cappedPerformanceScoreForTotal, qualityPoints)
       : null;
     const performanceScoreForTotal = cappedPerformanceScoreForTotal;
-    const miscScore = showMiscScore ? 17 : null;
+    const miscScore = showMiscScore
+      ? calculateLhSimpleMiscScore(slotMetasWithLimit
+        .filter((meta) => !meta.empty && !isSplitAssignedSlot(meta.slotIndex))
+        .map((meta) => toNumber(meta.shareForCalc)))
+      : null;
     const lhSimpleTotalScore = showMiscScore
       ? (
         (toNumber(summaryInfo?.managementScore) || 0)
@@ -6562,7 +6567,7 @@ export default function AgreementBoardWindow({
       ? (summaryInfo?.materialScore != null ? formatScore(summaryInfo.materialScore, resolveSummaryDigits('material')) : '-')
       : null;
     const bidScoreDisplay = summaryInfo?.bidScore != null ? formatScore(summaryInfo.bidScore, resolveSummaryDigits('bid')) : '-';
-    const miscScoreDisplay = showMiscScore ? formatScore(miscScore, 0) : null;
+    const miscScoreDisplay = showMiscScore ? formatScore(miscScore, 3) : null;
     const netCostBonusDisplay = showNetCostBonus && summaryInfo?.netCostBonusScore != null
       ? formatScore(summaryInfo.netCostBonusScore, resolveSummaryDigits('netCost'))
       : (showNetCostBonus ? '0' : null);
