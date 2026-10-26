@@ -185,6 +185,7 @@ const COLUMN_WIDTHS = {
   credibilityCell: 45,
   credibility: 40,
   bid: 32,
+  miscScore: 64,
   subcontract: 55,
   material: 55,
   netCostBonus: 55,
@@ -2741,6 +2742,7 @@ export default function AgreementBoardWindow({
         : 0)
       + (isLh50To100 ? (subcontractColWidth + materialColWidth) : 0)
       + (showBidScore ? COLUMN_WIDTHS.bid : 0)
+      + (showMiscScore ? COLUMN_WIDTHS.miscScore : 0)
       + (showNetCostBonus ? netCostBonusColWidth : 0)
       + COLUMN_WIDTHS.total
       + COLUMN_WIDTHS.sipyungSummary;
@@ -2761,6 +2763,7 @@ export default function AgreementBoardWindow({
     isLHOwner,
     showManagementBonus,
     showBidScore,
+    showMiscScore,
     showConstructionExperience,
     showNetCostBonus,
     isLh100To300,
@@ -6572,7 +6575,9 @@ export default function AgreementBoardWindow({
       ? formatScore(summaryInfo.netCostBonusScore, resolveSummaryDigits('netCost'))
       : (showNetCostBonus ? '0' : null);
     const totalScoreDisplay = totalScore != null
-      ? formatScore(totalScore, resolveSummaryDigits('total'))
+      ? (isLh100To300
+        ? formatScore(truncateScore(totalScore, 3), 3)
+        : formatScore(totalScore, resolveSummaryDigits('total')))
       : '-';
     const entryDisabled = entryModeResolved === 'none';
     const sipyungValue = entryModeResolved === 'sum'
@@ -7383,7 +7388,7 @@ export default function AgreementBoardWindow({
               {showCredibilityAfterQuality && (
                 <col className="col-credibility" style={{ width: `${COLUMN_WIDTHS.credibility}px` }} />
               )}
-              {showMiscScore && <col className="col-misc-score" style={{ width: `${COLUMN_WIDTHS.bid}px` }} />}
+              {showMiscScore && <col className="col-misc-score" style={{ width: `${COLUMN_WIDTHS.miscScore}px` }} />}
               {(isLh50To100 || isMois50To100) && <col className="col-subcontract" style={{ width: `${subcontractColWidth}px` }} />}
               {(isLh50To100 || isMois50To100) && <col className="col-material" style={{ width: `${materialColWidth}px` }} />}
               {(isMois30To50 || isEx50To100 || isKrail50To100) && (
