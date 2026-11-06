@@ -9,8 +9,11 @@ const esbuild = require('esbuild');
 const hookPath = path.resolve(__dirname, '../src/view/features/agreements/hooks/useBoardCompanyImport.js');
 const compiled = esbuild.buildSync({ entryPoints: [hookPath], bundle: true, platform: 'node', format: 'cjs', packages: 'external', write: false });
 const emptyRow = () => Array(5).fill(null);
+const undoHookPath = path.resolve(__dirname, '../src/view/features/agreements/hooks/useBoardImportUndo.js');
+const compiledUndo = esbuild.buildSync({ entryPoints: [undoHookPath], bundle: true, platform: 'node', format: 'cjs', packages: 'external', write: false });
 
-function createBoard(companies, rows) {
+function createBoard(companies, rows, enableUndo = false) {
+  let undoResult;
   const slots = [];
   let cursor = 0;
   let effects = [];
@@ -50,6 +53,11 @@ function createBoard(companies, rows) {
   module.require = (name) => name === 'react' ? react : Module.prototype.require.call(module, name);
   module._compile(compiled.outputFiles[0].text, hookPath);
   const hook = module.exports.default;
+  const undoModule = new Module(undoHookPath);
+  undoModule.paths = module.paths;
+  undoModule.require = module.require;
+  undoModule._compile(compiledUndo.outputFiles[0].text, undoHookPath);
+  const undoHook = undoModule.exports.default;
   const board = {
     context: { ownerId: 'MOIS', menuKey: 'mois-30to50', fileType: 'eung', dutyRegions: ['서울'] },
     open: true, candidates: companies, excluded: [], groupAssignments: rows, safeGroupSize: 5,
@@ -59,6 +67,17 @@ function createBoard(companies, rows) {
     setGroupAssignments: (next) => { board.groupAssignments = next; dirty = true; },
     onUpdateBoard: (next) => { Object.assign(board, next); updateParticipants(); dirty = true; },
   };
+  if (enableUndo) {
+    board.resetKey = 'current-board';
+    board.markSkipAssignmentSync = () => {};
+    board.onUndoApplied = () => {};
+    board.setters = {};
+    for (const field of ['groupShares', 'groupShareRawInputs', 'groupCredibility', 'groupTechnicianScores', 'groupQualityScores', 'groupApprovals', 'groupManagementBonus']) {
+      board[field] = field === 'groupApprovals' ? rows.map(() => '')
+        : field === 'groupManagementBonus' ? rows.map(() => false) : rows.map(() => Array(5).fill(''));
+      board.setters[field] = (value) => { board[field] = value; dirty = true; };
+    }
+  }
   function updateParticipants() {
     board.participantMap = new Map(board.candidates.map((candidate) => [`region-${candidate.id}`, { uid: `region-${candidate.id}`, candidate }]));
   }
@@ -66,13 +85,17 @@ function createBoard(companies, rows) {
   function flush() {
     for (let pass = 0; pass < 20; pass += 1) {
       cursor = 0; effects = []; dirty = false;
+      if (enableUndo) {
+        undoResult = undoHook(board);
+        board.onImportApplied = undoResult.recordImport;
+      }
       result = hook(board);
       effects.forEach((effect) => effect());
       if (!dirty) return result;
     }
     throw new Error('Import hook did not settle');
   }
-  return { board, notices, flush, get result() { return result; } };
+  return { board, notices, flush, get result() { return result; }, get undo() { return undoResult; } };
 }
 
 (async () => {
@@ -157,5 +180,28 @@ function createBoard(companies, rows) {
   first.flush(); await first.result.importCompanies(); first.flush();
   assert.equal(first.result.loading, false);
   assert.match(first.notices.at(-1).message, /서버 연결 실패/);
+  const history = createBoard([], [emptyRow()], true);
+  history.board.loadCompanies = async () => seven.slice(0, 2);
+  history.flush(); await history.result.importCompanies(); history.flush();
+  assert.equal(history.undo.count, 1);
+  assert.equal(history.board.groupAssignments.length, 2);
+  await history.result.importCompanies(); history.flush();
+  assert.equal(history.undo.count, 1, 'no history entry for duplicate-only imports');
+  history.board.loadCompanies = async () => seven.slice(2, 3);
+  history.flush(); await history.result.importCompanies(); history.flush();
+  assert.equal(history.undo.count, 2);
+  history.undo.undo(); history.flush();
+  assert.equal(history.undo.count, 1);
+  assert.equal(history.board.candidates.length, 2);
+  assert.equal(history.board.groupAssignments.length, 2);
+  history.undo.undo(); history.flush();
+  assert.equal(history.undo.count, 0);
+  assert.equal(history.board.candidates.length, 0);
+  assert.deepEqual(history.board.groupAssignments, [emptyRow()]);
+  await history.result.importCompanies(); history.flush();
+  assert.equal(history.undo.count, 1);
+  history.board.resetKey = 'loaded-another-board'; history.flush();
+  assert.equal(history.undo.count, 0, 'clear history across board contexts');
+  console.log('PASS: undo history integration, multiple imports reversed in order, restored candidates/rows, no duplicate history, board-context reset');
   console.log('PASS: own corporations always in leader slots (including local companies), fixed local/member and nonlocal/leader roles, region aliases, multiple duty regions, shared board import, 7 companies / 5 rows, member-only placement, duplicates, existing data and ID preservation, occupied rows, stale results, close cancellation, errors');
 })().catch((error) => { console.error(error); process.exitCode = 1; });

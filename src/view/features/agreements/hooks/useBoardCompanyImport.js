@@ -10,11 +10,12 @@ const placeMemberEntries = (assignments, entries, groupSize) => placeRegionEntri
 export default function useBoardCompanyImport({
   open, buildRegionSearchPayload, candidates, excluded, participantMap,
   groupAssignments, setGroupAssignments, safeGroupSize, onUpdateBoard,
-  notify, portalContainer, loadCompanies, validateImport, title, placeEntries = placeMemberEntries,
+  notify, portalContainer, loadCompanies, validateImport, title, placeEntries = placeMemberEntries, onImportApplied,
 }) {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [pendingKeys, setPendingKeys] = React.useState(null);
+  const pendingUndoRef = React.useRef(null);
   const busyRef = React.useRef(false);
   const requestIdRef = React.useRef(0);
   const latestRef = React.useRef(null);
@@ -28,6 +29,7 @@ export default function useBoardCompanyImport({
     requestIdRef.current += 1;
     setDialogOpen(false);
     setPendingKeys(null);
+    pendingUndoRef.current = null;
     busyRef.current = false;
     setLoading(false);
   }, [open]);
@@ -43,12 +45,20 @@ export default function useBoardCompanyImport({
     if (pendingKeys.some((key) => !byKey.has(key))) return;
     const entries = pendingKeys.map((key) => byKey.get(key));
     const result = placeEntries(groupAssignments, entries, safeGroupSize, latestRef.current.payload);
+    if (result.placedCount > 0 && pendingUndoRef.current) {
+      onImportApplied?.({
+        ...pendingUndoRef.current,
+        beforeAssignments: groupAssignments.map((row) => row.slice()),
+        afterAssignments: result.assignments.map((row) => row.slice()),
+      });
+    }
+    pendingUndoRef.current = null;
     setGroupAssignments(result.assignments);
     setPendingKeys(null);
     busyRef.current = false;
     setLoading(false);
     announce(`${result.placedCount}개 업체를 배치했습니다.${result.addedRows ? ` 빈 행 ${result.addedRows}개를 추가했습니다.` : ''}`);
-  }, [open, pendingKeys, participantMap, groupAssignments, safeGroupSize, setGroupAssignments, announce, placeEntries]);
+  }, [open, pendingKeys, participantMap, groupAssignments, safeGroupSize, setGroupAssignments, announce, placeEntries, onImportApplied]);
 
   const importCompanies = async (onlyLatest) => {
     if (busyRef.current) return;
@@ -96,10 +106,19 @@ export default function useBoardCompanyImport({
         setLoading(false);
         return;
       }
+      const nextExcluded = current.excluded.filter((id) => !importedIds.has(id));
+      pendingUndoRef.current = {
+        title,
+        beforeCandidates: current.candidates.map((candidate) => ({ ...candidate })),
+        afterCandidates: nextCandidates.map((candidate) => ({ ...candidate })),
+        beforeExcluded: current.excluded.slice(),
+        afterExcluded: nextExcluded.slice(),
+      };
       setPendingKeys(keys);
-      onUpdateBoard({ candidates: nextCandidates, excluded: current.excluded.filter((id) => !importedIds.has(id)) });
+      onUpdateBoard({ candidates: nextCandidates, excluded: nextExcluded });
     } catch (error) {
       if (requestId !== requestIdRef.current) return;
+      pendingUndoRef.current = null;
       busyRef.current = false;
       setLoading(false);
       announce(error.message || '업체를 불러오지 못했습니다.', 'error');

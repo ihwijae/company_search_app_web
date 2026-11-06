@@ -9,6 +9,7 @@ import RegionCompanyImportDialog from './RegionCompanyImportDialog.jsx';
 import useRegionCompanyImport from '../hooks/useRegionCompanyImport.js';
 import useFixedCompanyImport from '../hooks/useFixedCompanyImport.js';
 import useOwnCorporationImport from '../hooks/useOwnCorporationImport.js';
+import useBoardImportUndo from '../hooks/useBoardImportUndo.js';
 import { REGION_IMPORTED_FLAG } from '../../../../shared/agreements/placement/regionImport.js';
 import LhAwardHistoryWindow from './LhAwardHistoryWindow.jsx';
 import useAgreementBoardStorage from '../hooks/useAgreementBoardStorage.js';
@@ -4290,22 +4291,46 @@ export default function AgreementBoardWindow({
     });
   }, [open, representativeEntries, regionEntries, safeGroupSize, buildInitialAssignments]);
 
+  const importUndo = useBoardImportUndo({
+    open,
+    resetKey: JSON.stringify([ownerId, selectedRangeKey, fileType, noticeNo, noticeTitle, dutyRegions, safeGroupSize]),
+    candidates, excluded, participantMap, groupAssignments,
+    groupShares, groupShareRawInputs, groupCredibility, groupTechnicianScores,
+    groupQualityScores, groupApprovals, groupManagementBonus,
+    setGroupAssignments, markSkipAssignmentSync, onUpdateBoard, notify, portalContainer,
+    setters: {
+      groupShares: setGroupShares,
+      groupShareRawInputs: setGroupShareRawInputs,
+      groupCredibility: setGroupCredibility,
+      groupTechnicianScores: setGroupTechnicianScores,
+      groupQualityScores: setGroupQualityScores,
+      groupApprovals: setGroupApprovals,
+      groupManagementBonus: setGroupManagementBonus,
+    },
+    onUndoApplied: (result) => {
+      setSelectedCandidateUid(null);
+      setPendingMoveSource(null);
+      setDropTarget(null);
+      setSelectedGroups((prev) => new Set([...prev].filter((index) => index < result.groupAssignments.length)));
+    },
+  });
+
   const regionImport = useRegionCompanyImport({
     open, buildRegionSearchPayload, candidates, excluded, participantMap,
     groupAssignments, setGroupAssignments, safeGroupSize, onUpdateBoard,
-    notify, portalContainer,
+    notify, portalContainer, onImportApplied: importUndo.recordImport,
   });
 
   const fixedImport = useFixedCompanyImport({
     open, buildRegionSearchPayload, candidates, excluded, participantMap,
     groupAssignments, setGroupAssignments, safeGroupSize, onUpdateBoard,
-    notify, portalContainer,
+    notify, portalContainer, onImportApplied: importUndo.recordImport,
   });
 
   const ownCorporationImport = useOwnCorporationImport({
     open, buildRegionSearchPayload, candidates, excluded, participantMap,
     groupAssignments, setGroupAssignments, safeGroupSize, onUpdateBoard,
-    notify, portalContainer,
+    notify, portalContainer, onImportApplied: importUndo.recordImport,
   });
 
   const assignedIds = React.useMemo(() => {
@@ -5360,6 +5385,7 @@ export default function AgreementBoardWindow({
       portalTarget: portalContainer || null,
     });
     if (!ok) return;
+    importUndo.clear();
     setGroupAssignments(buildInitialAssignments());
     setDropTarget(null);
     setGroupShares([]);
@@ -5485,6 +5511,7 @@ export default function AgreementBoardWindow({
     });
     if (!ok) return;
     const selected = new Set(selectedGroups);
+    importUndo.clear();
     setGroupAssignments((prev) => prev.filter((_, idx) => !selected.has(idx)));
     // Shares/credibility/technician are slot-index arrays.
     // If we filter them here before `groupAssignments` sync runs, old/new indices can desync.
@@ -7249,6 +7276,15 @@ export default function AgreementBoardWindow({
                 >
                   {ownCorporationImport.loading ? '우리법인 불러오는 중...' : '우리법인 불러오기'}
                 </button>
+                <button
+                  type="button"
+                  className="excel-btn"
+                  onClick={importUndo.undo}
+                  title={importUndo.count ? `최근 ${importUndo.lastTitle} 취소 (${importUndo.count}회 되돌리기 가능)` : '되돌릴 불러오기 작업이 없습니다.'}
+                  disabled={!importUndo.count || candidateRefreshing || regionImport.loading || fixedImport.loading || ownCorporationImport.loading}
+                >
+                  불러오기 되돌리기
+                </button>
                 {isLh100To300 && (
                   <button
                     type="button"
@@ -8241,7 +8277,10 @@ export default function AgreementBoardWindow({
       items={filteredLoadItems}
       busy={loadBusy}
       error={loadError}
-      onLoad={handleLoadAgreement}
+      onLoad={async (path) => {
+        await handleLoadAgreement(path);
+        importUndo.clear();
+      }}
       onSetSmsStatus={handleSetLoadItemSmsStatus}
       onResetFilters={resetFilters}
       onDelete={(path) => handleDeleteAgreement(
