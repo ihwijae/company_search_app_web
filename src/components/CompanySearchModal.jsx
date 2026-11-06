@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { openTempCompaniesWindow as openTempCompaniesPopup } from '../utils/tempCompaniesWindow.js';
 import searchClient from '../shared/searchClient.js';
 import {
   isWomenOwnedCompany,
@@ -60,16 +59,6 @@ export default function CompanySearchModal({
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState([]);
   const [error, setError] = useState('');
-  const openTempCompaniesWindow = () => {
-    try {
-      const normalizedType = normalizeFileType(fileType);
-      openTempCompaniesPopup({
-        industry: normalizedType && normalizedType !== 'all' ? normalizedType : '',
-      });
-    } catch (e) {
-      setError(String(e?.message || e));
-    }
-  };
 
   useEffect(() => {
     if (open) {
@@ -194,11 +183,6 @@ export default function CompanySearchModal({
                             {typeLabel}
                           </span>
                         )}
-                        {c._is_temp_company && (
-                          <span className="badge-quality badge-inline" style={{ background: '#fff7ed', borderColor: '#fdba74', color: '#9a3412' }}>
-                            임시
-                          </span>
-                        )}
                         {femaleOwned && <span className="badge-female badge-inline">女</span>}
                         {qualityBadge && <span className="badge-quality badge-inline">품질평가 {qualityBadge}</span>}
                         </div>
@@ -246,7 +230,6 @@ export default function CompanySearchModal({
           </table>
         </div>
         <div className="company-search-footer">
-          <button className="btn-soft" onClick={openTempCompaniesWindow}>업체추가</button>
           <button className="btn-muted" onClick={onClose}>닫기</button>
         </div>
       </div>

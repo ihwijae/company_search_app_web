@@ -11,7 +11,7 @@ export function openKakaoSendWindow() {
   const top = Math.max(32, dualScreenTop + Math.max(0, (window.innerHeight - height) / 3));
   const features = `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`;
   const baseHref = String(window.location.href || '').split('#')[0];
-  const child = window.open(`${baseHref}#/kakao-send`, 'company-search-kakao-send', features);
+  const child = window.open(`${baseHref}#/kakao-send?popup=1`, 'company-search-kakao-send', features);
   if (!child) {
     throw new Error('카카오톡 전송 창을 열지 못했습니다.');
   }

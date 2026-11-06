@@ -158,6 +158,10 @@ const getCandidateFileType = (candidate) => {
 const normalizeMessageText = (value) => String(value || '').replace(/\r\n/g, '\n').trim();
 
 export default function KakaoSendPage() {
+  const isPopup = typeof window !== 'undefined' && (
+    window.name === 'company-search-kakao-send'
+    || new URLSearchParams(window.location.hash.split('?')[1] || '').get('popup') === '1'
+  );
   const initialUiState = React.useMemo(() => {
     const stored = loadPersisted(KAKAO_UI_STORAGE_KEY, null);
     if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return null;
@@ -671,10 +675,10 @@ export default function KakaoSendPage() {
 
   return (
     <div className="app-shell">
-      <Sidebar active="kakao-send" onSelect={handleMenuSelect} collapsed={true} />
+      {!isPopup && <Sidebar active="kakao-send" onSelect={handleMenuSelect} collapsed={true} />}
       <div className="main">
-        <div className="title-drag" />
-        <div className="topbar" />
+        {!isPopup && <div className="title-drag" />}
+        {!isPopup && <div className="topbar" />}
         <div className="stage">
           <div className="content">
             <div className="panel" style={{ gridColumn: '1 / -1' }}>

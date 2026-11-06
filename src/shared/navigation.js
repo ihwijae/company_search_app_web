@@ -7,6 +7,7 @@ export const BASE_ROUTES = {
   autoAgreement: '#/auto-agreement',
   bidResult: '#/bid-result',
   companyNotes: '#/company-notes',
+  fixedCompanies: '#/fixed-companies',
   excelWebEdit: '#/excel-web-edit',
 };
 

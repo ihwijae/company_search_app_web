@@ -6,7 +6,6 @@ import autoIcon from '../assets/auto.png';
 import exchangeIcon from '../assets/교환.png';
 import kakaoIcon from '../assets/kakao.png';
 import notesIcon from '../assets/특이사항아이콘.png';
-import { openTempCompaniesWindow } from '../utils/tempCompaniesWindow.js';
 import { openKakaoSendWindow } from '../utils/kakaoSendWindow.js';
 
 export default function Sidebar({ active, onSelect, fileStatuses, collapsed = true }) {
@@ -72,13 +71,9 @@ export default function Sidebar({ active, onSelect, fileStatuses, collapsed = tr
         return;
       }
     }
-    if (key === 'temp-companies' && typeof window !== 'undefined') {
-      try {
-        openTempCompaniesWindow();
-        return;
-      } catch (error) {
-        void error;
-      }
+    if (key === 'fixed-companies' && typeof window !== 'undefined') {
+      window.location.hash = '#/fixed-companies';
+      return;
     }
     if (onSelect) onSelect(key);
   };
@@ -170,7 +165,7 @@ export default function Sidebar({ active, onSelect, fileStatuses, collapsed = tr
         />
       ),
     },
-    { key: 'temp-companies', label: '임시업체', icon: '🏢' },
+    { key: 'fixed-companies', label: '고정업체 설정', icon: '📌' },
     { key: 'upload', label: '업로드', icon: '📂' },
     { key: 'scan-archive', label: '스캔본', icon: '🗂️' },
     { key: 'settings', label: '설정', icon: '⚙️' },

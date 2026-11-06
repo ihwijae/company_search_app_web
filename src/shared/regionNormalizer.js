@@ -18,6 +18,8 @@ const REGION_ALIAS_RULES = [
   { key: '제주', aliases: ['제주특별자치도', '제주도', '제주'] },
 ];
 
+export const STANDARD_REGION_NAMES = REGION_ALIAS_RULES.map((rule) => rule.key);
+
 export const normalizeRegionName = (value) => {
   const raw = String(value || '').replace(/\s+/g, '').trim();
   if (!raw || raw === '전체') return '';

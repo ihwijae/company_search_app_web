@@ -26,7 +26,7 @@ import BidResultPage from './view/features/bid-helper/pages/BidResultPage.jsx';
 import RegionSearchWindowHost from './view/features/agreements/components/RegionSearchWindowHost.jsx';
 import FeedbackProvider from './components/FeedbackProvider.jsx';
 import CompanyNotesPage from './view/features/notes/pages/CompanyNotesPage.jsx';
-import TempCompaniesPage from './view/features/temp-companies/pages/TempCompaniesPage.jsx';
+import FixedCompaniesPage from './view/features/fixed-companies/pages/FixedCompaniesPage.jsx';
 import LoginPage from './view/features/auth/pages/LoginPage.jsx';
 import ExcelWebEditPage from './view/features/excel-web/pages/ExcelWebEditPage.jsx';
 import ScanArchivePage from './view/features/scan-archive/pages/ScanArchivePage.jsx';
@@ -39,6 +39,7 @@ const NON_RESTORABLE_LAST_ROUTE_PATHS = new Set([
   '/agreement-board',
   '/agreements',
   '/region-search',
+  '/temp-companies',
   '/lh/under50',
   '/lh/50to100',
   '/pps/under50',
@@ -216,8 +217,8 @@ export default function App() {
     case '/kakao-send':
       Screen = KakaoSendPage;
       break;
-    case '/temp-companies':
-      Screen = TempCompaniesPage;
+    case '/fixed-companies':
+      Screen = FixedCompaniesPage;
       break;
     case '/excel-web-edit':
       Screen = ExcelWebEditPage;
