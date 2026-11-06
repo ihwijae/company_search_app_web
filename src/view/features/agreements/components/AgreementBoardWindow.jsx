@@ -7330,7 +7330,7 @@ export default function AgreementBoardWindow({
                 <button type="button" className="excel-btn" onClick={handleDeleteGroups}>선택 삭제</button>
                 <button type="button" className="excel-btn" onClick={handleResetGroups}>초기화</button>
                 <button type="button" className="excel-btn" onClick={handleConfirmSaveAgreement}>저장</button>
-                <button type="button" className="excel-btn" onClick={openLoadModal}>불러오기</button>
+                <button type="button" className="excel-btn excel-btn-load" onClick={openLoadModal}>불러오기</button>
                 <button
                   type="button"
                   className={`excel-btn memo-btn${memoHasContent ? ' active' : ''}`}

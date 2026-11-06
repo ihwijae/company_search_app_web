@@ -2491,6 +2491,24 @@ body.agreement-load-dragging {
   cursor: not-allowed;
 }
 
+.excel-btn.excel-btn-load {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 2px 5px rgba(37, 99, 235, 0.2);
+}
+
+.excel-btn.excel-btn-load:hover {
+  background: #1d4ed8;
+  border-color: #1e40af;
+}
+
+.excel-btn.excel-btn-load:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 3px;
+}
+
 .excel-btn-region {
   background: linear-gradient(135deg, #0ea5e9, #22c55e);
   color: #fff;
