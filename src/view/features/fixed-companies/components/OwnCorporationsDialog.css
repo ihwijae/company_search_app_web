@@ -1,0 +1,26 @@
+.dialog-overlay.own-corporations-overlay { z-index: 2000; padding: 20px; background: rgba(15, 23, 42, 0.45); }
+.dialog-box.own-corporations-dialog { min-width: 0; padding: 26px; border: 1px solid #e2e8f0; border-radius: 20px; color: #17243b; font-family: inherit; box-shadow: 0 30px 70px rgba(15, 23, 42, 0.25); }
+.own-corporations-badge { display: inline-block; margin-bottom: 8px; padding: 3px 9px; border: 1px solid #dce8ff; border-radius: 6px; background: #eff6ff; color: #2563eb; font-size: 11px; font-weight: 600; }
+.own-corporations-header h2 { margin: 0; font-size: 23px; line-height: 1.4; letter-spacing: -0.5px; }
+.own-corporations-header p { margin: 8px 0 22px; color: #64748b; font-size: 13px; font-weight: 400; line-height: 1.7; word-break: keep-all; }
+.own-corporations-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 22px; }
+.own-corporations-toolbar .fixed-companies-segments { width: 280px; max-width: 100%; }
+.dialog-box.own-corporations-dialog .fixed-companies-segments button { min-height: 36px; padding: 7px 14px; font: inherit; font-size: 13px; }
+.dialog-box.own-corporations-dialog .own-corporations-add { min-height: 40px; padding: 9px 16px; border: 1px solid #dce3ed; border-radius: 9px; background: white; color: #475569; font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.own-corporations-summary { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.own-corporations-summary strong { font-size: 15px; }
+.own-corporations-summary strong > span { margin-left: 5px; color: #2563eb; font-size: 13px; }
+.own-corporations-summary > span { color: #94a3b8; font-size: 12px; }
+.own-corporations-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 230px; padding: 30px 16px; border: 1px solid #e8edf5; border-radius: 12px; background: #fbfcff; text-align: center; }
+.own-corporations-empty h3 { margin: 0; color: #475569; font-size: 15px; }
+.own-corporations-empty p { margin: 10px 0 20px; color: #94a3b8; font-size: 13px; font-weight: 400; line-height: 1.7; }
+.own-corporations-dialog .own-corporations-hint { margin: 16px 0 0; color: #94a3b8; font-size: 12px; font-weight: 400; line-height: 1.7; }
+.dialog-box.own-corporations-dialog button:disabled { opacity: 0.5; cursor: not-allowed; }
+.dialog-box.own-corporations-dialog .fixed-company-remove { padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: #94a3b8; font-size: 12px; }
+.dialog-box.own-corporations-dialog .fixed-company-remove:hover { color: #e11d48; background: #fff1f2; }
+.own-corporations-search .company-search-backdrop { z-index: 2100; }
+@media (max-width: 600px) {
+  .dialog-box.own-corporations-dialog { padding: 20px; }
+  .own-corporations-toolbar { align-items: stretch; flex-direction: column; gap: 12px; }
+  .own-corporations-toolbar .fixed-companies-segments { width: 100%; }
+}

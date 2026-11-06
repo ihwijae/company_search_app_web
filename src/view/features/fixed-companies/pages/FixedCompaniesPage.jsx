@@ -8,6 +8,7 @@ import { useFeedback } from '../../../../components/FeedbackProvider.jsx';
 import { FIXED_COMPANY_INDUSTRIES, FIXED_COMPANY_RANGES, FIXED_COMPANY_REGIONS } from '../../../../shared/fixedCompanies.js';
 import useFixedCompanies from '../hooks/useFixedCompanies.js';
 import FixedCompanyTable from '../components/FixedCompanyTable.jsx';
+import OwnCorporationsDialog from '../components/OwnCorporationsDialog.jsx';
 
 function PinIcon() {
   return (
@@ -20,6 +21,7 @@ function PinIcon() {
 
 export default function FixedCompaniesPage() {
   const { notify, confirm } = useFeedback();
+  const [ownCorporationsOpen, setOwnCorporationsOpen] = React.useState(false);
   const state = useFixedCompanies({ notify, confirm });
   const { scope, setScope, loading, saving, error, companies } = state;
   const disabled = loading || saving || Boolean(error);
@@ -50,9 +52,12 @@ export default function FixedCompaniesPage() {
                   <p className="fixed-companies-subtitle">공종과 금액대에 맞는 지역별 고정업체를 한곳에서 관리하세요.</p>
                 </div>
               </div>
-              <button type="button" className="fixed-companies-button fixed-companies-button--secondary" onClick={state.reload} disabled={loading || saving}>
-                <span aria-hidden="true">↻</span> 다시 불러오기
-              </button>
+              <div className="fixed-companies-header-actions">
+                <button type="button" className="fixed-companies-button fixed-companies-button--secondary" onClick={state.reload} disabled={loading || saving}>
+                  <span aria-hidden="true">↻</span> 다시 불러오기
+                </button>
+                <button type="button" className="fixed-companies-button fixed-companies-button--primary" onClick={() => setOwnCorporationsOpen(true)} disabled={saving}>우리 법인</button>
+              </div>
             </header>
 
             <section className="fixed-companies-filters" aria-label="고정업체 설정 조건">
@@ -118,7 +123,7 @@ export default function FixedCompaniesPage() {
                 ) : loading ? (
                   <div className="fixed-companies-empty"><span className="fixed-companies-empty__icon"><PinIcon /></span><p>고정업체 설정을 불러오고 있습니다.</p></div>
                 ) : companies.length ? (
-                  <FixedCompanyTable companies={companies} disabled={saving} onNoteChange={state.updateNote} onRemove={state.removeCompany} />
+                  <FixedCompanyTable companies={companies} selectedRegion={scope.region} disabled={saving} onNoteChange={state.updateNote} onRemove={state.removeCompany} />
                 ) : (
                   <div className="fixed-companies-empty">
                     <span className="fixed-companies-empty__icon"><PinIcon /></span>
@@ -133,6 +138,7 @@ export default function FixedCompaniesPage() {
           </div>
         </main>
       </div>
+      {ownCorporationsOpen && <OwnCorporationsDialog initialIndustry={scope.industry} onClose={() => setOwnCorporationsOpen(false)} />}
       <CompanySearchModal open={state.pickerOpen} fileType={scope.industry} allowAll={false} forceWebSearch dedupeResults onClose={() => state.setPickerOpen(false)} onPick={state.pickCompany} />
     </div>
   );

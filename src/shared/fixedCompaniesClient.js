@@ -12,4 +12,9 @@ export default {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ scope, companies, revision }),
   }),
+  saveOwnCorporations: (industry, companies, revision) => request({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind: 'own-corporations', industry, companies, revision }),
+  }),
 };

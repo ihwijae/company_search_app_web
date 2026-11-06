@@ -7,6 +7,8 @@ import TechnicianScoreWindow from './TechnicianScoreWindow.jsx';
 import AgreementCandidateWindow from './AgreementCandidateWindow.jsx';
 import RegionCompanyImportDialog from './RegionCompanyImportDialog.jsx';
 import useRegionCompanyImport from '../hooks/useRegionCompanyImport.js';
+import useFixedCompanyImport from '../hooks/useFixedCompanyImport.js';
+import useOwnCorporationImport from '../hooks/useOwnCorporationImport.js';
 import { REGION_IMPORTED_FLAG } from '../../../../shared/agreements/placement/regionImport.js';
 import LhAwardHistoryWindow from './LhAwardHistoryWindow.jsx';
 import useAgreementBoardStorage from '../hooks/useAgreementBoardStorage.js';
@@ -4294,6 +4296,18 @@ export default function AgreementBoardWindow({
     notify, portalContainer,
   });
 
+  const fixedImport = useFixedCompanyImport({
+    open, buildRegionSearchPayload, candidates, excluded, participantMap,
+    groupAssignments, setGroupAssignments, safeGroupSize, onUpdateBoard,
+    notify, portalContainer,
+  });
+
+  const ownCorporationImport = useOwnCorporationImport({
+    open, buildRegionSearchPayload, candidates, excluded, participantMap,
+    groupAssignments, setGroupAssignments, safeGroupSize, onUpdateBoard,
+    notify, portalContainer,
+  });
+
   const assignedIds = React.useMemo(() => {
     const set = new Set();
     groupAssignments.forEach((group) => group.forEach((id) => { if (id) set.add(id); }));
@@ -7207,7 +7221,7 @@ export default function AgreementBoardWindow({
                   type="button"
                   className="excel-btn"
                   onClick={handleRefreshCandidateInfo}
-                  disabled={candidateRefreshing || regionImport.loading}
+                  disabled={candidateRefreshing || regionImport.loading || fixedImport.loading || ownCorporationImport.loading}
                 >
                   {candidateRefreshing ? '업체정보갱신 중...' : '업체정보갱신'}
                 </button>
@@ -7215,9 +7229,25 @@ export default function AgreementBoardWindow({
                   type="button"
                   className="excel-btn"
                   onClick={() => regionImport.setDialogOpen(true)}
-                  disabled={candidateRefreshing || regionImport.loading}
+                  disabled={candidateRefreshing || regionImport.loading || fixedImport.loading || ownCorporationImport.loading}
                 >
                   {regionImport.loading ? '지역사 불러오는 중...' : '지역사불러오기'}
+                </button>
+                <button
+                  type="button"
+                  className="excel-btn"
+                  onClick={() => fixedImport.importCompanies()}
+                  disabled={candidateRefreshing || regionImport.loading || fixedImport.loading || ownCorporationImport.loading}
+                >
+                  {fixedImport.loading ? '고정업체 불러오는 중...' : '고정업체 불러오기'}
+                </button>
+                <button
+                  type="button"
+                  className="excel-btn"
+                  onClick={() => ownCorporationImport.importCompanies()}
+                  disabled={candidateRefreshing || regionImport.loading || fixedImport.loading || ownCorporationImport.loading}
+                >
+                  {ownCorporationImport.loading ? '우리법인 불러오는 중...' : '우리법인 불러오기'}
                 </button>
                 {isLh100To300 && (
                   <button

@@ -12,6 +12,14 @@ export const FIXED_COMPANY_RANGES = [
 ];
 export const FIXED_COMPANY_REGIONS = STANDARD_REGION_NAMES;
 
+export function normalizeCompanyIndustry(value) {
+  const industry = String(value || '').toLowerCase();
+  if (!FIXED_COMPANY_INDUSTRIES.some((item) => item.value === industry)) {
+    throw new Error('공종을 올바르게 선택해 주세요.');
+  }
+  return industry;
+}
+
 export function normalizeFixedCompanyScope(scope = {}) {
   const industry = String(scope.industry || '');
   const range = String(scope.range || '');

@@ -3,16 +3,18 @@ import fixedCompaniesClient from '../../../../shared/fixedCompaniesClient.js';
 import { getFixedCompanyScopeKey, getFixedCompanyKey, normalizeFixedCompany } from '../../../../shared/fixedCompanies.js';
 import { extractManagerNames } from '../../../../utils/companyIndicators.js';
 
-export default function useFixedCompanies({ notify, confirm }) {
+export default function useFixedCompanies({ notify, confirm, kind = 'fixed', initialIndustry = 'eung' }) {
+  const isOwn = kind === 'own-corporations';
+  const label = isOwn ? '우리 법인' : '고정업체';
   const loadRequestRef = React.useRef(0);
-  const [scope, setScope] = React.useState({ industry: 'eung', range: 'under50', region: '서울' });
+  const [scope, setScope] = React.useState({ industry: initialIndustry, range: 'under50', region: '서울' });
   const [groups, setGroups] = React.useState({});
   const [drafts, setDrafts] = React.useState({});
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState('');
   const [pickerOpen, setPickerOpen] = React.useState(false);
-  const key = getFixedCompanyScopeKey(scope);
+  const key = isOwn ? scope.industry : getFixedCompanyScopeKey(scope);
   const companies = drafts[key] || groups[key]?.companies || [];
   const dirtyKeys = Object.keys(drafts).filter((draftKey) => JSON.stringify(drafts[draftKey]) !== JSON.stringify(groups[draftKey]?.companies || []));
   const dirty = dirtyKeys.includes(key);
@@ -24,14 +26,14 @@ export default function useFixedCompanies({ notify, confirm }) {
     try {
       const doc = await fixedCompaniesClient.load();
       if (requestId !== loadRequestRef.current) return;
-      setGroups(doc.groups);
+      setGroups(isOwn ? (doc.ownCorporations || {}) : doc.groups);
       setDrafts({});
     } catch (loadError) {
       if (requestId === loadRequestRef.current) setError(loadError.message);
     } finally {
       if (requestId === loadRequestRef.current) setLoading(false);
     }
-  }, []);
+  }, [isOwn]);
   React.useEffect(() => {
     load();
     return () => { loadRequestRef.current += 1; };
@@ -63,7 +65,7 @@ export default function useFixedCompanies({ notify, confirm }) {
     setPickerOpen(false);
   };
   const removeCompany = async (company) => {
-    if (!await confirm({ title: '고정업체를 삭제할까요?', message: `${company.name} 업체를 현재 조건의 목록에서 삭제합니다.`, confirmText: '삭제' })) return;
+    if (!await confirm({ title: `${label} 등록을 삭제할까요?`, message: `${company.name} 업체를 현재 ${isOwn ? '공종' : '조건'}의 목록에서 삭제합니다.`, confirmText: '삭제' })) return;
     updateCompanies(companies.filter((item) => getFixedCompanyKey(item) !== getFixedCompanyKey(company)));
   };
   const updateNote = (companyKey, note) => updateCompanies(companies.map((item) => (
@@ -73,14 +75,16 @@ export default function useFixedCompanies({ notify, confirm }) {
     if (saving || !dirty) return;
     setSaving(true);
     try {
-      const result = await fixedCompaniesClient.saveGroup(scope, companies, groups[key]?.revision || 0);
+      const result = isOwn
+        ? await fixedCompaniesClient.saveOwnCorporations(scope.industry, companies, groups[key]?.revision || 0)
+        : await fixedCompaniesClient.saveGroup(scope, companies, groups[key]?.revision || 0);
       setGroups((prev) => ({ ...prev, [result.key]: result.group }));
       setDrafts((prev) => {
         const next = { ...prev };
         delete next[result.key];
         return next;
       });
-      notify({ type: 'success', message: `${scope.region} 고정업체 설정을 저장했습니다.` });
+      notify({ type: 'success', message: `${isOwn ? '우리 법인' : scope.region + ' 고정업체'} 설정을 저장했습니다.` });
     } catch (saveError) {
       notify({ type: 'error', message: saveError.message });
     } finally {

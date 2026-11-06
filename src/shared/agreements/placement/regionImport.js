@@ -9,17 +9,18 @@ export function getRegionCompanyKey(candidate) {
   return name ? `name:${name}` : `id:${candidate.id}`;
 }
 
-// One regional company per empty agreement row; leave the leader position free.
-export function placeRegionEntries(assignments, entries, groupSize) {
+// One company per empty agreement row. Regional imports default to a member slot.
+export function placeRegionEntries(assignments, entries, groupSize, resolveSlotIndex = () => 1) {
   if (groupSize < 2) throw new Error('지역사를 배치할 구성사 자리가 없습니다.');
   const next = assignments.map((row) => row.slice());
   const used = new Set(next.flat().filter(Boolean));
-  const slotIndex = 1;
   let rowIndex = 0;
   let placedCount = 0;
   const previousCount = next.length;
   for (const entry of entries) {
     if (used.has(entry.uid)) continue;
+    const slotIndex = resolveSlotIndex(entry);
+    if (slotIndex !== 0 && slotIndex !== 1) throw new Error('업체 배치 위치가 올바르지 않습니다.');
     while (rowIndex < next.length && next[rowIndex].some(Boolean)) rowIndex += 1;
     if (rowIndex === next.length) next.push(Array(groupSize).fill(null));
     next[rowIndex][slotIndex] = entry.uid;

@@ -17,23 +17,30 @@ async function loadFixedCompanies() {
   if (!doc || doc.version !== 1 || !doc.groups || typeof doc.groups !== 'object' || Array.isArray(doc.groups)) {
     throw new Error('고정업체 설정 파일의 형식이 올바르지 않습니다.');
   }
-  return doc;
+  if (doc.ownCorporations !== undefined
+    && (!doc.ownCorporations || typeof doc.ownCorporations !== 'object' || Array.isArray(doc.ownCorporations))) {
+    throw new Error('우리 법인 설정 파일의 형식이 올바르지 않습니다.');
+  }
+  return { ...doc, ownCorporations: doc.ownCorporations || {} };
 }
 
 function saveFixedCompanyGroup(payload = {}) {
   const task = writeQueue.then(async () => {
-    const { normalizeFixedCompanyScope, getFixedCompanyScopeKey, normalizeFixedCompanyList } = await loadSharedModule();
+    const { normalizeFixedCompanyScope, getFixedCompanyScopeKey, normalizeFixedCompanyList, normalizeCompanyIndustry } = await loadSharedModule();
+    const isOwn = payload.kind === 'own-corporations';
+    const collection = isOwn ? 'ownCorporations' : 'groups';
     let scope;
     try {
-      scope = normalizeFixedCompanyScope(payload.scope);
+      if (payload.kind && !['fixed', 'own-corporations'].includes(payload.kind)) throw new Error('설정 구분이 올바르지 않습니다.');
+      scope = isOwn ? { industry: normalizeCompanyIndustry(payload.industry) } : normalizeFixedCompanyScope(payload.scope);
       if (!Array.isArray(payload.companies)) throw new Error('업체 목록이 올바르지 않습니다.');
     } catch (error) {
       error.status = 400;
       throw error;
     }
-    const key = getFixedCompanyScopeKey(scope);
+    const key = isOwn ? scope.industry : getFixedCompanyScopeKey(scope);
     const doc = await loadFixedCompanies();
-    const current = doc.groups[key];
+    const current = doc[collection][key];
     const revision = Number(current?.revision || 0);
     if (Number(payload.revision || 0) !== revision) {
       const error = new Error('다른 화면에서 이 설정을 변경했습니다. 최신 설정을 다시 불러온 뒤 수정해 주세요.');
@@ -46,7 +53,7 @@ function saveFixedCompanyGroup(payload = {}) {
       revision: revision + 1,
       updatedAt: new Date().toISOString(),
     };
-    const next = { version: 1, groups: { ...doc.groups, [key]: group } };
+    const next = { ...doc, [collection]: { ...doc[collection], [key]: group } };
     await writeJsonFile(DOCUMENT_PATH, next);
     return { key, group };
   });
