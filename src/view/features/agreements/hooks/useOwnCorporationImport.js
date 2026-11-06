@@ -1,8 +1,7 @@
 import useBoardCompanyImport from './useBoardCompanyImport.js';
 import fixedCompaniesClient from '../../../../shared/fixedCompaniesClient.js';
 import { normalizeCompanyIndustry } from '../../../../shared/fixedCompanies.js';
-import { selectOwnCorporationsForBoard } from '../../../../shared/agreements/ownCorporationImport.js';
-import { placeFixedCompanyEntries } from '../../../../shared/agreements/fixedCompanyImport.js';
+import { selectOwnCorporationsForBoard, placeOwnCorporationEntries } from '../../../../shared/agreements/ownCorporationImport.js';
 
 const validateImport = (context) => {
   try {
@@ -16,5 +15,5 @@ const loadCompanies = async (context) => selectOwnCorporationsForBoard(await fix
 
 export default function useOwnCorporationImport(options) {
   return useBoardCompanyImport({ ...options, loadCompanies, validateImport,
-    placeEntries: placeFixedCompanyEntries, title: '우리법인 불러오기' });
+    placeEntries: placeOwnCorporationEntries, title: '우리법인 불러오기' });
 }

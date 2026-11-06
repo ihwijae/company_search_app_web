@@ -97,6 +97,17 @@ function createBoard(companies, rows) {
   await fixed.result.importCompanies(); fixed.flush();
   assert.equal(fixed.board.groupAssignments.length, 2, 'fixed import remains idempotent across both roles');
 
+  const { placeOwnCorporationEntries } = await import(pathToFileURL(path.resolve(__dirname, '../src/shared/agreements/ownCorporationImport.js')).href);
+  const own = createBoard([], [emptyRow()]);
+  own.board.context = { ...own.board.context, ...fixedContext };
+  own.board.loadCompanies = fixed.board.loadCompanies;
+  own.board.placeEntries = placeOwnCorporationEntries;
+  own.flush(); await own.result.importCompanies(); own.flush();
+  assert.deepEqual(own.board.groupAssignments[0], ['region-local', null, null, null, null], 'own local corporation belongs in leader slot');
+  assert.deepEqual(own.board.groupAssignments[1], ['region-leader', null, null, null, null], 'own nonlocal corporation belongs in leader slot');
+  await own.result.importCompanies(); own.flush();
+  assert.equal(own.board.groupAssignments.length, 2, 'repeat own import adds no duplicates');
+
   const seven = Array.from({ length: 7 }, (_, index) => ({ id: `fixed-${index}`, bizNo: String(1000000000 + index), name: `검증업체 ${index}` }));
   const first = createBoard([], Array.from({ length: 5 }, emptyRow));
   first.board.loadCompanies = async () => seven;
@@ -146,5 +157,5 @@ function createBoard(companies, rows) {
   first.flush(); await first.result.importCompanies(); first.flush();
   assert.equal(first.result.loading, false);
   assert.match(first.notices.at(-1).message, /서버 연결 실패/);
-  console.log('PASS: fixed local/member and nonlocal/leader roles, region aliases, multiple duty regions, shared board import, 7 companies / 5 rows, member-only placement, duplicates, existing data and ID preservation, occupied rows, stale results, close cancellation, errors');
+  console.log('PASS: own corporations always in leader slots (including local companies), fixed local/member and nonlocal/leader roles, region aliases, multiple duty regions, shared board import, 7 companies / 5 rows, member-only placement, duplicates, existing data and ID preservation, occupied rows, stale results, close cancellation, errors');
 })().catch((error) => { console.error(error); process.exitCode = 1; });
