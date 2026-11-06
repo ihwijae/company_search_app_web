@@ -1,5 +1,6 @@
 import React from 'react';
 import Modal from '../../../../components/Modal.jsx';
+import './RegionCompanyImportDialog.css';
 
 export default function RegionCompanyImportDialog({ open, onClose, onImport }) {
   const [onlyLatest, setOnlyLatest] = React.useState(true);
@@ -37,26 +38,57 @@ export default function RegionCompanyImportDialog({ open, onClose, onImport }) {
   return (
     <Modal
       open={open}
-      title="지역사불러오기"
       ariaLabel="지역사 불러오기 조건 선택"
       size="sm"
+      overlayClassName="region-company-import-overlay"
+      boxClassName="region-company-import-dialog"
       initialFocusRef={latestRef}
       onClose={onClose}
       onSave={() => onImport(onlyLatest)}
       confirmLabel="불러오기"
     >
-      <p>현재 공고정보를 기준으로 단독입찰이 불가능한 지역사를 불러옵니다.</p>
-      <div style={{ display: 'grid', gap: 12 }}>
-        <label>
-          <input ref={latestRef} type="radio" name="region-import-scope" checked={onlyLatest} onChange={() => setOnlyLatest(true)} /> 최신업체만 불러오기
+      <header className="region-company-import__header">
+        <h2>지역사 불러오기</h2>
+        <p className="region-company-import__intro">
+          현재 공고에서 단독입찰이 불가능한 지역사를 불러옵니다.
+        </p>
+      </header>
+      <fieldset className="region-company-import__options">
+        <legend>불러올 자료 선택</legend>
+        <label className={`region-company-import__option${onlyLatest ? ' is-selected' : ''}`}>
+          <input
+            ref={latestRef}
+            type="radio"
+            name="region-import-scope"
+            checked={onlyLatest}
+            onChange={() => setOnlyLatest(true)}
+          />
+          <span className="region-company-import__option-content">
+            <span className="region-company-import__option-title">최신업체만 불러오기</span>
+            <span className="region-company-import__option-description">자료 상태가 ‘최신’인 업체만 불러옵니다.</span>
+          </span>
         </label>
-        <label>
-          <input type="radio" name="region-import-scope" checked={!onlyLatest} onChange={() => setOnlyLatest(false)} /> 모두 불러오기
+        <label className={`region-company-import__option${!onlyLatest ? ' is-selected' : ''}`}>
+          <input
+            type="radio"
+            name="region-import-scope"
+            checked={!onlyLatest}
+            onChange={() => setOnlyLatest(false)}
+          />
+          <span className="region-company-import__option-content">
+            <span className="region-company-import__option-title">모두 불러오기</span>
+            <span className="region-company-import__option-description">자료의 최신 여부와 관계없이 불러옵니다.</span>
+          </span>
         </label>
+      </fieldset>
+      <div className="region-company-import__notice">
+        <strong>배치 안내</strong>
+        <ul>
+          <li>기존 배치는 유지하고, 이미 배치된 업체는 제외합니다.</li>
+          <li>빈 행의 첫 번째 구성사 자리에 한 곳씩 배치합니다.</li>
+          <li>대표사 자리는 비워두고, 부족한 행은 자동 추가합니다.</li>
+        </ul>
       </div>
-      <p style={{ color: '#64748b', marginBottom: 0 }}>
-        이미 배치된 업체는 제외하고, 빈 행의 첫 번째 구성사 자리에 지역사 한 곳씩 배치합니다. 대표사 자리는 비워둡니다. 부족한 행은 자동으로 추가합니다.
-      </p>
     </Modal>
   );
 }
