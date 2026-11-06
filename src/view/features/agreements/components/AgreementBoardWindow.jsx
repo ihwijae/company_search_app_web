@@ -5,6 +5,9 @@ import AgreementLoadModal from './AgreementLoadModal.jsx';
 import BoardSearchPopup from './BoardSearchPopup.jsx';
 import TechnicianScoreWindow from './TechnicianScoreWindow.jsx';
 import AgreementCandidateWindow from './AgreementCandidateWindow.jsx';
+import RegionCompanyImportDialog from './RegionCompanyImportDialog.jsx';
+import useRegionCompanyImport from '../hooks/useRegionCompanyImport.js';
+import { REGION_IMPORTED_FLAG } from '../../../../shared/agreements/placement/regionImport.js';
 import LhAwardHistoryWindow from './LhAwardHistoryWindow.jsx';
 import useAgreementBoardStorage from '../hooks/useAgreementBoardStorage.js';
 import useBoardSearch from '../hooks/useBoardSearch.js';
@@ -1107,6 +1110,7 @@ const CANDIDATE_POOL_FLAG = '_agreementCandidateListed';
 const CANDIDATE_REFRESH_PRESERVE_KEYS = new Set([
   'id',
   CANDIDATE_POOL_FLAG,
+  REGION_IMPORTED_FLAG,
   'regionSelected',
   'isRegionSelected',
   '_regionSelected',
@@ -3758,10 +3762,10 @@ export default function AgreementBoardWindow({
 
   const selectedRegionCandidates = React.useMemo(() => {
     const pinnedMatches = regionCandidates.filter((candidate) => pinnedSet.has(candidate?.id));
-    if (pinnedMatches.length > 0) return pinnedMatches;
     const explicit = regionCandidates.filter((candidate) => isRegionExplicitlySelected(candidate));
-    if (explicit.length > 0) return explicit;
-    return regionCandidates;
+    const selected = pinnedMatches.length > 0 ? pinnedMatches : (explicit.length > 0 ? explicit : regionCandidates);
+    const selectedSet = new Set(selected);
+    return regionCandidates.filter((candidate) => selectedSet.has(candidate) || candidate[REGION_IMPORTED_FLAG]);
   }, [regionCandidates, pinnedSet]);
 
   const regionEntries = React.useMemo(() => {
@@ -4283,6 +4287,12 @@ export default function AgreementBoardWindow({
       return cleaned;
     });
   }, [open, representativeEntries, regionEntries, safeGroupSize, buildInitialAssignments]);
+
+  const regionImport = useRegionCompanyImport({
+    open, buildRegionSearchPayload, candidates, excluded, participantMap,
+    groupAssignments, setGroupAssignments, safeGroupSize, onUpdateBoard,
+    notify, portalContainer,
+  });
 
   const assignedIds = React.useMemo(() => {
     const set = new Set();
@@ -6876,6 +6886,11 @@ export default function AgreementBoardWindow({
 
   const boardMarkup = (
     <>
+      <RegionCompanyImportDialog
+        open={regionImport.dialogOpen}
+        onClose={() => regionImport.setDialogOpen(false)}
+        onImport={regionImport.importCompanies}
+      />
       <div className={`agreement-board-root${headerCollapsed ? ' header-collapsed' : ''}`} ref={rootRef}>
         <div className="excel-board-shell">
           <div className="excel-board-header">
@@ -7192,9 +7207,17 @@ export default function AgreementBoardWindow({
                   type="button"
                   className="excel-btn"
                   onClick={handleRefreshCandidateInfo}
-                  disabled={candidateRefreshing}
+                  disabled={candidateRefreshing || regionImport.loading}
                 >
                   {candidateRefreshing ? '업체정보갱신 중...' : '업체정보갱신'}
+                </button>
+                <button
+                  type="button"
+                  className="excel-btn"
+                  onClick={() => regionImport.setDialogOpen(true)}
+                  disabled={candidateRefreshing || regionImport.loading}
+                >
+                  {regionImport.loading ? '지역사 불러오는 중...' : '지역사불러오기'}
                 </button>
                 {isLh100To300 && (
                   <button
