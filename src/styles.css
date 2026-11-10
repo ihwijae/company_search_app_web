@@ -2191,6 +2191,10 @@ body.agreement-load-dragging {
   align-items: center;
   flex-wrap: wrap;
 }
+.agreement-load-item.is-sent {
+  background: #dcfce7;
+  border-color: #86efac;
+}
 .agreement-load-sms-icon {
   width: 28px;
   height: 28px;
@@ -2268,8 +2272,13 @@ body.agreement-load-dragging {
 .agreement-load-title .agreement-badge--eung { background: #fef9c3; color: #92400e; }
 .agreement-load-title .agreement-badge--tongsin { background: #e0f2fe; color: #075985; }
 .agreement-load-title .agreement-badge--sobang { background: #fee2e2; color: #991b1b; }
-.agreement-load-title .agreement-badge--saved-by { background: #e2e8f0; color: #0f172a; border: 1px solid #cbd5e1; }
-.agreement-load-title .agreement-badge--sms-sent { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+.agreement-load-title .agreement-badge--saved-by {
+  background: #e2e8f0;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  padding: 5px 10px;
+  font-size: 15px;
+}
 
 .agreement-load-meta {
   display: flex;

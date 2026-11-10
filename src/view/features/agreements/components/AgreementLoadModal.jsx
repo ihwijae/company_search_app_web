@@ -311,7 +311,7 @@ export default function AgreementLoadModal({
               ? formatAmount(meta.estimatedAmount)
               : (meta.estimatedAmountLabel || '-');
             return (
-              <div key={item.path} className="agreement-load-item">
+              <div key={item.path} className={`agreement-load-item${isSmsSent ? ' is-sent' : ''}`}>
                 <div className="agreement-load-main">
                   <div className="agreement-load-title">
                     <strong>{noticeTitle || meta.noticeTitle || meta.noticeNo || '협정'}</strong>
@@ -335,11 +335,8 @@ export default function AgreementLoadModal({
                     ))}
                     {(meta.savedByName || meta.savedById) && (
                       <span className="agreement-badge agreement-badge--saved-by">
-                        작업자 {meta.savedByName || meta.savedById}
+                        {meta.savedByName || meta.savedById}
                       </span>
-                    )}
-                    {isSmsSent && (
-                      <span className="agreement-badge agreement-badge--sms-sent">✓ 전송완료</span>
                     )}
                   </div>
                   <div className="agreement-load-meta">
