@@ -7031,7 +7031,7 @@ export default function AgreementBoardWindow({
                     <div className="readonly-note a-value-warning-note">A값 반드시 확인하세요!</div>
                   )}
                   {netCostBidFloorEnabled && isBidAmountAutoMode && automaticBidCalculation.usesNetCostFloor && (
-                    <div className="readonly-note">순공사원가 반영금액 적용</div>
+                    <div className="readonly-note"><strong>순공사원가 반영금액 적용</strong></div>
                   )}
                 </div>
                 <div className="excel-field-block size-md">
