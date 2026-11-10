@@ -6956,7 +6956,7 @@ export default function AgreementBoardWindow({
           <div className="excel-board-header">
             <div className="excel-header-grid condensed">
               <div className="header-stack stack-owner">
-                <div className="excel-select-block">
+                <div className="excel-select-block excel-owner-field">
                   <label>발주처</label>
                   <select value={ownerSelectValue} onChange={handleOwnerSelectChange}>
                     {agreementGroupsForBoard.map((group) => (
@@ -6972,7 +6972,7 @@ export default function AgreementBoardWindow({
                     ))}
                   </select>
                 </div>
-                <div className="excel-field-block size-xs">
+                <div className="excel-field-block size-xs excel-industry-field" data-industry={industryLabel || ''}>
                   <span className="field-label">공종</span>
                   <select className="input" value={industryLabel || ''} onChange={handleIndustryLabelChange}>
                     <option value="">선택</option>

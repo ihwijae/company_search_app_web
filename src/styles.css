@@ -1714,6 +1714,21 @@ button.primary:hover { background: var(--accent-2); }
 .excel-field-block.size-md { width: 160px; }
 .excel-field-block.size-lg { width: 220px; }
 .excel-field-block.accent { background: #f4f6ff; border-color: #d5def8; }
+.excel-industry-field select {
+  font-weight: 700;
+}
+.excel-industry-field[data-industry='전기'] select {
+  background: #fef9c3;
+  border-color: #fde047;
+}
+.excel-industry-field[data-industry='통신'] select {
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+}
+.excel-industry-field[data-industry='소방'] select {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
 .excel-field-block.readonly .readonly-value {
   font-size: 12px;
   font-weight: 600;
@@ -1840,6 +1855,10 @@ button.primary:hover { background: var(--accent-2); }
 .notice-combined-box .dual { flex: 1; border: none; background: transparent; font-size: 13px; color: #111827; }
 .notice-combined-box .dual::placeholder { color: #94a3b8; }
 .notice-combined-box .dual:focus { outline: none; }
+.excel-board-header .excel-owner-field select,
+.excel-board-header .notice-combined-box .dual {
+  font-weight: 700;
+}
 .excel-notice-meta .input,
 .excel-notice-meta input {
   border: 1px solid #d1d5db;

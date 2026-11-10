@@ -85,8 +85,6 @@ export default function AgreementBoardPage() {
   return (
     <div className="app-shell">
       <div className="main">
-        <div className="title-drag" />
-        <div className="topbar" />
         <div className="stage agreement-board-stage">
           {!serverReachable && (
             <div className="agreement-board-connection-banner">
