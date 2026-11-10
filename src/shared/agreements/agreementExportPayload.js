@@ -2,6 +2,7 @@ import {
   calculatePossibleShareRatio,
   formatPossibleShareValue,
 } from './calculations/possibleShare.js';
+import { resolveNetCostBonusConfig } from './calculations/netCostBonus.js';
 
 const LH_100_TO_300_KEY = 'lh-100to300';
 const LH_QUALITY_DEFAULT_OVER_100B = 88;
@@ -127,7 +128,7 @@ export function buildAgreementExportPayload({
     const hasMembers = Array.isArray(memberIds) && memberIds.some((uid) => Boolean(uid));
     if (!hasMembers) return [];
     const summaryEntry = summaryByGroup.get(groupIndex) || null;
-    const resolvedNetCostBonus = isLHOwner
+    const resolvedNetCostBonus = (isLHOwner || resolveNetCostBonusConfig(ownerId, selectedRangeKey))
       ? (summaryEntry?.netCostBonusScore ?? (netCostBonusScore ?? null))
       : null;
     const approvalValue = String(groupApprovals[groupIndex] || '').trim();

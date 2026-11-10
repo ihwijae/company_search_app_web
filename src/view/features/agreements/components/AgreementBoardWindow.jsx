@@ -64,6 +64,8 @@ import {
   buildGroupSummaryMetrics,
   computeGroupSummaries,
 } from '../../../../shared/agreements/calculations/groupSummary.js';
+import { calculateBidAmount, usesNetCostBidFloor } from '../../../../shared/agreements/calculations/bidAmount.js';
+import { calculateNetCostBonus, resolveNetCostBonusConfig } from '../../../../shared/agreements/calculations/netCostBonus.js';
 import { buildInconMemoText } from '../../../../shared/agreements/calculations/inconMemo.js';
 import { calculateLhSimpleMiscScore } from '../../../../shared/agreements/calculations/lhSimpleMiscScore.js';
 import { calculateMinimumPerformanceAmount } from '../../../../shared/agreements/calculations/minimumPerformanceAmount.js';
@@ -552,13 +554,6 @@ const parseRangeAmountHint = (ownerKeyUpper, rangeLabel) => {
   return fallback > 0 ? fallback : 0;
 };
 
-const roundUpThousand = (value) => {
-  if (value == null) return null;
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return null;
-  return Math.ceil(numeric / 1000) * 1000;
-};
-
 const truncateScore = (value, digits = 2) => {
   if (value == null) return null;
   const numeric = Number(value);
@@ -975,17 +970,6 @@ const parseAmountValue = (value) => {
 };
 
 const normalizeAmountToken = (value) => String(value ?? '').replace(/[,\s]/g, '');
-
-const computeBidAmountByFormula = ({ baseAmount, bidRate, adjustmentRate, aValue, useAValue }) => {
-  const base = parseAmountValue(baseAmount);
-  const bidRateValue = parsePercentValue(bidRate);
-  const adjustmentValue = parsePercentValue(adjustmentRate);
-  if (!base || base <= 0 || !Number.isFinite(bidRateValue) || !Number.isFinite(adjustmentValue)) return 0;
-  if (!useAValue) return Math.round(base * bidRateValue * adjustmentValue);
-  const aValueNumber = parseAmountValue(aValue) || 0;
-  const expectedPrice = base * adjustmentValue;
-  return Math.round(((expectedPrice - aValueNumber) * bidRateValue) + aValueNumber);
-};
 
 const clampScore = (value, max = MANAGEMENT_SCORE_MAX) => {
   if (value === null || value === undefined) return null;
@@ -1483,6 +1467,8 @@ export default function AgreementBoardWindow({
   const showAValueWarning = showsBidAmountField && !hasAValueInput;
   const showManagementBonus = !isLh100To300 && !isEx50To100;
   const showNetCostBonus = !isLh100To300;
+  const netCostBonusConfig = resolveNetCostBonusConfig(ownerId, effectiveSelectedRangeKey);
+  const showNetCostInput = Boolean(netCostBonusConfig);
   const showBidScore = !isLh100To300;
   const showMiscScore = isLh100To300;
   const showConstructionExperience = isLHOwner && !isLh100To300;
@@ -1977,6 +1963,20 @@ export default function AgreementBoardWindow({
   const boardMainRef = React.useRef(null);
   const skipAssignmentSyncRef = React.useRef(false);
   const isBidAmountAutoMode = bidAmountMode !== 'manual';
+  const netCostBidFloorEnabled = usesNetCostBidFloor(ownerId, selectedRangeKey);
+  const automaticBidCalculation = React.useMemo(() => calculateBidAmount({
+    ownerId,
+    rangeKey: selectedRangeKey,
+    baseAmount: parseAmountValue(baseAmount),
+    bidRate: parsePercentValue(bidRate),
+    adjustmentRate: parsePercentValue(adjustmentRate),
+    aValue: parseAmountValue(aValue),
+    useAValue: hasAValueInput,
+    netCostAmount: parseAmountValue(netCostAmount),
+  }), [ownerId, selectedRangeKey, baseAmount, bidRate, adjustmentRate, aValue, hasAValueInput, netCostAmount]);
+  const effectiveBidAmount = netCostBidFloorEnabled && isBidAmountAutoMode
+    ? formatPlainAmount(automaticBidCalculation.amount)
+    : bidAmount;
 
   const handleAValueChange = React.useCallback((value) => {
     if (typeof onUpdateBoard === 'function') onUpdateBoard({ aValue: value });
@@ -1993,13 +1993,7 @@ export default function AgreementBoardWindow({
     const nextMode = event.target.checked ? 'auto' : 'manual';
     const updates = { bidAmountMode: nextMode };
     if (nextMode === 'auto') {
-      const nextAutoValue = formatPlainAmount(computeBidAmountByFormula({
-        baseAmount,
-        bidRate,
-        adjustmentRate,
-        aValue,
-        useAValue: String(aValue || '').trim() !== '',
-      }));
+      const nextAutoValue = formatPlainAmount(automaticBidCalculation.amount);
       setBidTouched(false);
       bidAutoRef.current = nextAutoValue;
       setEditableBidAmount(nextAutoValue);
@@ -2008,7 +2002,7 @@ export default function AgreementBoardWindow({
       setBidTouched(Boolean(String(editableBidAmount || '').trim()));
     }
     if (typeof onUpdateBoard === 'function') onUpdateBoard(updates);
-  }, [aValue, adjustmentRate, baseAmount, bidRate, editableBidAmount, onUpdateBoard, usesBidAmountCriteria]);
+  }, [automaticBidCalculation.amount, editableBidAmount, onUpdateBoard, usesBidAmountCriteria]);
 
   const markSkipAssignmentSync = React.useCallback(() => {
     skipAssignmentSyncRef.current = true;
@@ -2030,26 +2024,16 @@ export default function AgreementBoardWindow({
   const possibleShareBase = React.useMemo(() => {
     const sources = ownerKeyUpper === 'LH'
       ? [ratioBaseAmount]
-      : (usesBidAmountCriteria ? [editableBidAmount, bidAmount] : []);
+      : (usesBidAmountCriteria ? [netCostBidFloorEnabled && isBidAmountAutoMode ? effectiveBidAmount : editableBidAmount, effectiveBidAmount] : []);
     for (const source of sources) {
       const parsed = parseAmountValue(source);
       if (parsed !== null && parsed > 0) return parsed;
     }
-    if (usesBidAmountCriteria && ownerKeyUpper === 'MOIS' && (selectedRangeKey === MOIS_30_TO_50_KEY || selectedRangeKey === MOIS_50_TO_100_KEY)) {
-      const baseValue = parseAmountValue(baseAmount);
-      const bidRateValue = parsePercentValue(bidRate);
-      const adjustmentValue = parsePercentValue(adjustmentRate);
-      if (baseValue && baseValue > 0 && Number.isFinite(bidRateValue) && Number.isFinite(adjustmentValue)) {
-        const aValueNumber = hasAValueInput ? (parseAmountValue(aValue) || 0) : 0;
-        const expectedPrice = baseValue * adjustmentValue;
-        const computed = hasAValueInput
-          ? Math.round(((expectedPrice - aValueNumber) * bidRateValue) + aValueNumber)
-          : Math.round(baseValue * bidRateValue * adjustmentValue);
-        if (computed > 0) return computed;
-      }
+    if (usesBidAmountCriteria && netCostBidFloorEnabled && automaticBidCalculation.amount > 0) {
+      return automaticBidCalculation.amount;
     }
     return null;
-  }, [ownerKeyUpper, selectedRangeKey, ratioBaseAmount, editableBidAmount, bidAmount, baseAmount, bidRate, adjustmentRate, aValue, hasAValueInput, usesBidAmountCriteria]);
+  }, [ownerKeyUpper, ratioBaseAmount, editableBidAmount, effectiveBidAmount, usesBidAmountCriteria, netCostBidFloorEnabled, isBidAmountAutoMode, automaticBidCalculation.amount]);
 
   const { perfectPerformanceAmount, perfectPerformanceBasis } = React.useMemo(() => {
     const rangeKey = ownerKeyUpper === 'LH'
@@ -2166,7 +2150,7 @@ export default function AgreementBoardWindow({
     entryMode: entryModeResolved,
     baseAmount,
     estimatedAmount,
-    bidAmount,
+    bidAmount: effectiveBidAmount,
     bidRate,
     adjustmentRate,
     performanceCoefficient: isLh100To300 ? String(LH_SIMPLE_PERFORMANCE_COEFFICIENT) : performanceCoefficient,
@@ -2175,7 +2159,9 @@ export default function AgreementBoardWindow({
     perfectPerformanceBasis,
     dutyRegions,
     ratioBaseAmount: showPossibleShareLimit
-      ? (isPpsUnder50 && usesBidAmountCriteria ? (bidAmount || ratioBaseAmount || '') : (ratioBaseAmount || ''))
+      ? (netCostBidFloorEnabled
+        ? effectiveBidAmount
+        : (isPpsUnder50 && usesBidAmountCriteria ? (effectiveBidAmount || ratioBaseAmount || '') : (ratioBaseAmount || '')))
       : '',
     showPossibleShareLimit,
     defaultExcludeSingle: true,
@@ -2192,7 +2178,7 @@ export default function AgreementBoardWindow({
     entryModeResolved,
     baseAmount,
     estimatedAmount,
-    bidAmount,
+    effectiveBidAmount,
     bidRate,
     adjustmentRate,
     isLh100To300,
@@ -2203,6 +2189,7 @@ export default function AgreementBoardWindow({
     dutyRegions,
     ratioBaseAmount,
     isPpsUnder50,
+    netCostBidFloorEnabled,
     usesBidAmountCriteria,
     showPossibleShareLimit,
   ]);
@@ -2285,72 +2272,16 @@ export default function AgreementBoardWindow({
     normalizeLhRangeKey(rangeKey) === LH_100_TO_300_KEY ? 4 : (normalizeLhRangeKey(rangeKey) === LH_50_TO_100_KEY ? 5 : 3)
   ), []);
 
-  const netCostBonusScore = React.useMemo(() => {
-    if (!isLHOwner) return 0;
-    const rangeKey = effectiveSelectedRangeKey;
-    if (rangeKey !== LH_UNDER_50_KEY && rangeKey !== LH_50_TO_100_KEY) return 0;
-    const base = toNumber(baseAmount);
-    const netCost = toNumber(netCostAmount);
-    const aValueNumber = toNumber(aValue);
-    if (!base || !netCost || !aValueNumber) return 0;
-    const expectedMin = roundUpThousand(base * 0.988);
-    const expectedMax = roundUpThousand(base * 1.012);
-    if (!expectedMin || !expectedMax) return 0;
-    if (rangeKey === LH_50_TO_100_KEY && expectedMax >= 10000000000) return 0;
-    if (expectedMin <= aValueNumber || expectedMax <= aValueNumber) return 0;
-    const bidMin = netCost * (expectedMin / base) * 0.98;
-    const bidMax = netCost * (expectedMax / base) * 0.98;
-    const rMinRaw = (bidMin - aValueNumber) / (expectedMin - aValueNumber);
-    const rMaxRaw = (bidMax - aValueNumber) / (expectedMax - aValueNumber);
-    const rMin = roundTo(rMinRaw, 4);
-    const rMax = roundTo(rMaxRaw, 4);
-    if (!Number.isFinite(rMin) || !Number.isFinite(rMax)) return 0;
-    const priceScore = (ratio) => (
-      rangeKey === LH_50_TO_100_KEY
-        ? 50 - (2 * Math.abs((0.9 - ratio) * 100))
-        : 70 - (4 * Math.abs((0.9 - ratio) * 100))
-    );
-    const baseline = rangeKey === LH_50_TO_100_KEY ? 45 : 65;
-    const bonusMin = priceScore(rMin) - baseline;
-    const bonusMax = priceScore(rMax) - baseline;
-    const conservative = Math.min(bonusMin, bonusMax);
-    if (!(conservative > 0)) return 0;
-    const truncated = truncateScore(conservative, 2);
-    return truncated != null ? clampScore(truncated, 999) : 0;
-  }, [isLHOwner, effectiveSelectedRangeKey, baseAmount, netCostAmount, aValue]);
-
-  const netCostBonusNotice = React.useMemo(() => {
-    if (!isLHOwner) return '';
-    const rangeKey = effectiveSelectedRangeKey;
-    if (rangeKey !== LH_50_TO_100_KEY) return '';
-    const base = toNumber(baseAmount);
-    const netCost = toNumber(netCostAmount);
-    if (!base || !netCost) return '';
-    const expectedMax = roundUpThousand(base * 1.012);
-    if (!expectedMax) return '';
-    if (expectedMax >= 10000000000) return '예정가격 100억 초과로 순공사원가 적용 안됨';
-    return '';
-  }, [isLHOwner, effectiveSelectedRangeKey, baseAmount, netCostAmount]);
-
-  const netCostPenaltyNotice = React.useMemo(() => {
-    if (!isLHOwner) return false;
-    const rangeKey = effectiveSelectedRangeKey;
-    if (rangeKey !== LH_UNDER_50_KEY && rangeKey !== LH_50_TO_100_KEY) return false;
-    const base = toNumber(baseAmount);
-    const netCost = toNumber(netCostAmount);
-    const aValueNumber = toNumber(aValue);
-    if (!base || !netCost || !aValueNumber) return false;
-    const expectedMin = roundUpThousand(base * 0.988);
-    const expectedMax = roundUpThousand(base * 1.012);
-    if (!expectedMin || !expectedMax) return false;
-    if (rangeKey === LH_50_TO_100_KEY && expectedMax >= 10000000000) return false;
-    if (expectedMin <= aValueNumber || expectedMax <= aValueNumber) return false;
-    const bidMin = netCost * (expectedMin / base) * 0.98;
-    const bidMax = netCost * (expectedMax / base) * 0.98;
-    const rMin = roundTo((bidMin - aValueNumber) / (expectedMin - aValueNumber), 4);
-    const rMax = roundTo((bidMax - aValueNumber) / (expectedMax - aValueNumber), 4);
-    return Number.isFinite(rMin) && Number.isFinite(rMax) && (rMin > 0.9 || rMax > 0.9);
-  }, [isLHOwner, effectiveSelectedRangeKey, baseAmount, netCostAmount, aValue]);
+  const {
+    score: netCostBonusScore,
+    notice: netCostBonusNotice,
+    penaltyNotice: netCostPenaltyNotice,
+  } = React.useMemo(() => calculateNetCostBonus({
+    config: netCostBonusConfig,
+    baseAmount: toNumber(baseAmount),
+    netCostAmount: toNumber(netCostAmount),
+    aValue: toNumber(aValue),
+  }), [netCostBonusConfig, baseAmount, netCostAmount, aValue]);
   const effectiveNetCostBonusScore = React.useMemo(() => {
     const manualValue = parseNumeric(netCostBonusOverride);
     if (manualValue != null && showNetCostBonus) return manualValue;
@@ -2469,7 +2400,7 @@ export default function AgreementBoardWindow({
     estimatedAmount,
     noticeDate,
     baseAmount,
-    bidAmount,
+    bidAmount: effectiveBidAmount,
     ratioBaseAmount,
     bidRate,
     adjustmentRate,
@@ -3008,21 +2939,14 @@ export default function AgreementBoardWindow({
   React.useEffect(() => {
     if (!bidAutoConfig) return;
     if (!isBidAmountAutoMode) return;
-    const autoValue = computeBidAmountByFormula({
-      baseAmount,
-      bidRate,
-      adjustmentRate,
-      aValue,
-      useAValue: hasAValueInput,
-    });
-    const autoFormatted = formatPlainAmount(autoValue);
+    const autoFormatted = formatPlainAmount(automaticBidCalculation.amount);
     const current = editableBidAmount || '';
     bidAutoRef.current = autoFormatted;
     if (current === (autoFormatted || '')) return;
     if (!autoFormatted && current === '') return;
     setEditableBidAmount(autoFormatted);
     if (typeof onUpdateBoard === 'function') onUpdateBoard({ bidAmount: autoFormatted });
-  }, [bidAutoConfig, baseAmount, bidRate, adjustmentRate, editableBidAmount, isBidAmountAutoMode, onUpdateBoard, aValue, hasAValueInput]);
+  }, [bidAutoConfig, automaticBidCalculation.amount, editableBidAmount, isBidAmountAutoMode, onUpdateBoard]);
 
   const handleBidAmountChange = (value) => {
     if (!usesBidAmountCriteria) {
@@ -4567,7 +4491,7 @@ export default function AgreementBoardWindow({
       const baseValue = parseAmountValue(baseAmount);
       const ratioBaseValue = parseAmountValue(ratioBaseAmount);
       const entryAmountValue = parseAmountValue(entryAmount);
-      const bidAmountValue = usesBidAmountCriteria ? parseAmountValue(bidAmount) : null;
+      const bidAmountValue = usesBidAmountCriteria ? parseAmountValue(effectiveBidAmount) : null;
       const amountForScore = (estimatedValue != null && estimatedValue > 0)
         ? estimatedValue
         : (baseValue != null && baseValue > 0 ? baseValue : null);
@@ -4694,7 +4618,7 @@ export default function AgreementBoardWindow({
     estimatedAmount,
     ratioBaseAmount,
     entryAmount,
-    bidAmount,
+    effectiveBidAmount,
     bidDeadline,
     regionDutyRate,
     noticeNo,
@@ -7014,7 +6938,7 @@ export default function AgreementBoardWindow({
                 </div>
                 {showAValueField && (
                   <>
-                    {isLH && !isLh100To300 && (
+                    {showNetCostInput && (
                       <div className="excel-field-block size-lg">
                         <span className="field-label">순공사원가</span>
                         <AmountInput value={netCostAmount || ''} onChange={handleNetCostAmountChange} placeholder="원" />
@@ -7037,8 +6961,7 @@ export default function AgreementBoardWindow({
           <span className="field-label">투찰율</span>
           <input className="input" value={bidRate || ''} onChange={handleBidRateChange} placeholder="예: 86.745" />
         </div>
-        {isLH && !isLh100To300 && (
-          <>
+        {showNetCostInput && (
             <div className="excel-field-block size-xs">
               <span className="field-label">순공사원가가점</span>
               <input
@@ -7054,11 +6977,12 @@ export default function AgreementBoardWindow({
                 <div className="readonly-note">올라탈수록 점수 깎임</div>
               )}
             </div>
+        )}
+        {isLH && !isLh100To300 && (
             <div className="excel-field-block size-xs">
               <span className="field-label">최소 시평액</span>
               <button type="button" className="excel-btn" onClick={openMinRatingModal}>계산</button>
             </div>
-          </>
         )}
               </div>
 
@@ -7096,7 +7020,7 @@ export default function AgreementBoardWindow({
                     </>
                   ) : (
                     <AmountInput
-                      value={editableBidAmount}
+                      value={netCostBidFloorEnabled && isBidAmountAutoMode ? effectiveBidAmount : editableBidAmount}
                       onChange={handleBidAmountChange}
                       placeholder="원"
                       disabled={isBidAmountAutoMode}
@@ -7105,6 +7029,9 @@ export default function AgreementBoardWindow({
                   )}
                   {showAValueWarning && (
                     <div className="readonly-note a-value-warning-note">A값 반드시 확인하세요!</div>
+                  )}
+                  {netCostBidFloorEnabled && isBidAmountAutoMode && automaticBidCalculation.usesNetCostFloor && (
+                    <div className="readonly-note">순공사원가 반영금액 적용</div>
                   )}
                 </div>
                 <div className="excel-field-block size-md">
