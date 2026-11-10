@@ -1,0 +1,133 @@
+.excel-btn.excel-btn-company-import {
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+  color: #075985;
+  font-weight: 700;
+}
+
+.excel-btn.excel-btn-company-import:hover:not(:disabled) {
+  background: #bae6fd;
+  border-color: #38bdf8;
+}
+
+.excel-btn.excel-btn-company-import:focus-visible {
+  outline: 2px solid #0284c7;
+  outline-offset: 2px;
+}
+
+.company-import-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.company-import-dialog {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 24px;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  background: #fff;
+  color: #0f172a;
+  font-family: 'Pretendard', 'Noto Sans KR', 'Segoe UI', system-ui, sans-serif;
+  box-shadow: 0 30px 70px rgba(15, 23, 42, 0.25);
+}
+
+.company-import-dialog__header h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.company-import-dialog__header p {
+  margin: 8px 0 20px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.company-import-dialog__options {
+  display: grid;
+  gap: 10px;
+}
+
+.company-import-dialog button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.company-import-dialog__option,
+.company-import-dialog__undo {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  padding: 15px 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #0f172a;
+  text-align: left;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.company-import-dialog__option:hover:not(:disabled) {
+  border-color: #38bdf8;
+  background: #f0f9ff;
+}
+
+.company-import-dialog strong {
+  font-size: 14px;
+}
+
+.company-import-dialog__option span,
+.company-import-dialog__undo span {
+  color: #64748b;
+  font-size: 13px;
+  word-break: keep-all;
+}
+
+.company-import-dialog__undo {
+  margin-top: 18px;
+  background: #fff;
+  border-style: dashed;
+}
+
+.company-import-dialog__undo:hover:not(:disabled) {
+  background: #fff7ed;
+  border-color: #fdba74;
+}
+
+.company-import-dialog button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.company-import-dialog button:focus-visible {
+  outline: 2px solid #0284c7;
+  outline-offset: 2px;
+}
+
+.company-import-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.company-import-dialog__footer button {
+  min-height: 40px;
+  padding: 8px 20px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 14px;
+}

@@ -6,10 +6,12 @@ import BoardSearchPopup from './BoardSearchPopup.jsx';
 import TechnicianScoreWindow from './TechnicianScoreWindow.jsx';
 import AgreementCandidateWindow from './AgreementCandidateWindow.jsx';
 import RegionCompanyImportDialog from './RegionCompanyImportDialog.jsx';
+import CompanyImportDialog from './CompanyImportDialog.jsx';
 import useRegionCompanyImport from '../hooks/useRegionCompanyImport.js';
 import useFixedCompanyImport from '../hooks/useFixedCompanyImport.js';
 import useOwnCorporationImport from '../hooks/useOwnCorporationImport.js';
 import useBoardImportUndo from '../hooks/useBoardImportUndo.js';
+import useBoardActionConfirmation from '../hooks/useBoardActionConfirmation.js';
 import { REGION_IMPORTED_FLAG } from '../../../../shared/agreements/placement/regionImport.js';
 import LhAwardHistoryWindow from './LhAwardHistoryWindow.jsx';
 import useAgreementBoardStorage from '../hooks/useAgreementBoardStorage.js';
@@ -1953,6 +1955,11 @@ export default function AgreementBoardWindow({
   const [representativeSearchFileType, setRepresentativeSearchFileType] = React.useState('');
   const [exporting, setExporting] = React.useState(false);
   const [candidateRefreshing, setCandidateRefreshing] = React.useState(false);
+  const [companyImportOpen, setCompanyImportOpen] = React.useState(false);
+  const closeCompanyImport = React.useCallback(() => setCompanyImportOpen(false), []);
+  React.useEffect(() => {
+    if (!open) setCompanyImportOpen(false);
+  }, [open]);
   const [editableBidAmount, setEditableBidAmount] = React.useState(bidAmount);
   const [editableEntryAmount, setEditableEntryAmount] = React.useState(entryAmount);
   const [excelCopying, setExcelCopying] = React.useState(false);
@@ -1963,6 +1970,7 @@ export default function AgreementBoardWindow({
   const baseAutoRef = React.useRef('');
   const bidAutoRef = React.useRef('');
   const { notify, confirm, showLoading, hideLoading } = useFeedback();
+  const confirmBoardAction = useBoardActionConfirmation(portalContainer);
   const searchTargetRef = React.useRef(null);
   const pendingPlacementRef = React.useRef(null);
   const rootRef = React.useRef(null);
@@ -6927,6 +6935,17 @@ export default function AgreementBoardWindow({
 
   const boardMarkup = (
     <>
+      <CompanyImportDialog
+        open={open && companyImportOpen}
+        onClose={closeCompanyImport}
+        onRegionImport={() => confirmBoardAction('regionImport', () => regionImport.setDialogOpen(true))}
+        onFixedImport={() => confirmBoardAction('fixedImport', () => fixedImport.importCompanies())}
+        onOwnCorporationImport={() => confirmBoardAction('ownCorporationImport', () => ownCorporationImport.importCompanies())}
+        onUndo={() => confirmBoardAction('undoImport', importUndo.undo)}
+        undoCount={importUndo.count}
+        lastImportTitle={importUndo.lastTitle}
+        disabled={candidateRefreshing || regionImport.loading || fixedImport.loading || ownCorporationImport.loading}
+      />
       <RegionCompanyImportDialog
         open={regionImport.dialogOpen}
         onClose={() => regionImport.setDialogOpen(false)}
@@ -7247,43 +7266,20 @@ export default function AgreementBoardWindow({
                 <button
                   type="button"
                   className="excel-btn"
-                  onClick={handleRefreshCandidateInfo}
+                  onClick={() => confirmBoardAction('refresh', handleRefreshCandidateInfo)}
                   disabled={candidateRefreshing || regionImport.loading || fixedImport.loading || ownCorporationImport.loading}
                 >
                   {candidateRefreshing ? '업체정보갱신 중...' : '업체정보갱신'}
                 </button>
                 <button
                   type="button"
-                  className="excel-btn"
-                  onClick={() => regionImport.setDialogOpen(true)}
+                  className="excel-btn excel-btn-company-import"
+                  onClick={() => setCompanyImportOpen(true)}
+                  aria-haspopup="dialog"
+                  aria-expanded={companyImportOpen}
                   disabled={candidateRefreshing || regionImport.loading || fixedImport.loading || ownCorporationImport.loading}
                 >
-                  {regionImport.loading ? '지역사 불러오는 중...' : '지역사불러오기'}
-                </button>
-                <button
-                  type="button"
-                  className="excel-btn"
-                  onClick={() => fixedImport.importCompanies()}
-                  disabled={candidateRefreshing || regionImport.loading || fixedImport.loading || ownCorporationImport.loading}
-                >
-                  {fixedImport.loading ? '고정업체 불러오는 중...' : '고정업체 불러오기'}
-                </button>
-                <button
-                  type="button"
-                  className="excel-btn"
-                  onClick={() => ownCorporationImport.importCompanies()}
-                  disabled={candidateRefreshing || regionImport.loading || fixedImport.loading || ownCorporationImport.loading}
-                >
-                  {ownCorporationImport.loading ? '우리법인 불러오는 중...' : '우리법인 불러오기'}
-                </button>
-                <button
-                  type="button"
-                  className="excel-btn"
-                  onClick={importUndo.undo}
-                  title={importUndo.count ? `최근 ${importUndo.lastTitle} 취소 (${importUndo.count}회 되돌리기 가능)` : '되돌릴 불러오기 작업이 없습니다.'}
-                  disabled={!importUndo.count || candidateRefreshing || regionImport.loading || fixedImport.loading || ownCorporationImport.loading}
-                >
-                  불러오기 되돌리기
+                  {regionImport.loading || fixedImport.loading || ownCorporationImport.loading ? '업체 불러오는 중...' : '업체 불러오기'}
                 </button>
                 {isLh100To300 && (
                   <button
@@ -7321,7 +7317,7 @@ export default function AgreementBoardWindow({
                 <button
                   type="button"
                   className="excel-btn"
-                  onClick={handleGenerateInconMemo}
+                  onClick={() => confirmBoardAction('inconMemo', handleGenerateInconMemo)}
                   style={{ background: '#eef6d8', borderColor: '#b7d48a', color: '#3f5f1e' }}
                 >
                   아이건설넷 메모
