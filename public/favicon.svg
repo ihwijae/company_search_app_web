@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <title>협정보조 · 업무 자동화</title>
+  <defs>
+    <linearGradient id="tile" x1="8" y1="4" x2="56" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7C5CFA" />
+      <stop offset="0.5" stop-color="#5B36D6" />
+      <stop offset="1" stop-color="#352071" />
+    </linearGradient>
+    <linearGradient id="flow" x1="12" y1="24" x2="54" y2="40" gradientUnits="userSpaceOnUse">
+      <stop offset="0.2" stop-color="#FFFFFF" />
+      <stop offset="0.55" stop-color="#DDFBF5" />
+      <stop offset="1" stop-color="#6EE7CE" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="17" fill="url(#tile)" />
+  <rect x="1" y="1" width="62" height="62" rx="16" stroke="#FFFFFF" stroke-opacity="0.16" />
+  <path
+    d="M32 32C26 23 23 20 19 20C13 20 10 25 10 32C10 39 14 44 20 44C26 44 30 36 34 30C38 24 42 20 47 20C53 20 56 25 56 32C56 39 52 44 46 44C40 44 37 38 32 32Z"
+    stroke="#23124F"
+    stroke-opacity="0.2"
+    stroke-width="7"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    transform="translate(0 2)"
+  />
+  <path
+    d="M32 32C26 23 23 20 19 20C13 20 10 25 10 32C10 39 14 44 20 44C26 44 30 36 34 30C38 24 42 20 47 20C53 20 56 25 56 32C56 39 52 44 46 44C40 44 37 38 32 32Z"
+    stroke="url(#flow)"
+    stroke-width="6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>
