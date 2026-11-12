@@ -8,6 +8,7 @@ import Drawer from '../../../../components/Drawer';
 import { INDUSTRY_AVERAGES, DEBT_RATIO_WARN_FACTOR, CURRENT_RATIO_WARN_FACTOR } from '../../../../ratios.js';
 import { loadPersisted, savePersisted } from '../../../../shared/persistence.js';
 import searchClient from '../../../../shared/searchClient.js';
+import searchOwnCorporations from '../services/ownCorporationSearch.js';
 import lhAwardHistoryClient from '../../../../shared/lhAwardHistoryClient.js';
 import CREDIT_GRADE_ORDER from '../../../../shared/creditGrades.json';
 import { isCreditScoreExpired } from '../../../../shared/agreements/calculations/managementScore.js';
@@ -83,6 +84,7 @@ const normalizeFileType = (value) => {
     소방: 'sobang',
     all: 'all',
     전체: 'all',
+    'own-corporations': 'own-corporations',
   })[token];
   if (direct) return direct;
   const lowered = token.toLowerCase();
@@ -838,6 +840,7 @@ function App() {
   } = {}) => {
     const effectiveCriteria = criteria || buildSearchCriteria();
     const effectiveFileType = normalizeFileType(targetFileType || fileType);
+    const resultFileType = effectiveFileType === 'own-corporations' ? 'all' : effectiveFileType;
     const effectiveOnlyLatest = overrides.onlyLatest !== undefined ? overrides.onlyLatest : onlyLatest;
     const effectiveOnlyLHQuality = overrides.onlyLHQuality !== undefined ? overrides.onlyLHQuality : onlyLHQuality;
     const effectiveOnlyWomenOwned = overrides.onlyWomenOwned !== undefined ? overrides.onlyWomenOwned : onlyWomenOwned;
@@ -893,7 +896,9 @@ function App() {
     }
 
     try {
-      const response = await searchClient.searchCompanies(criteriaJson, effectiveFileType, optionsJson);
+      const response = effectiveFileType === 'own-corporations'
+        ? await searchOwnCorporations(criteriaJson, payloadOptions)
+        : await searchClient.searchCompanies(criteriaJson, effectiveFileType, optionsJson);
 
       if (lastRequestIdRef.current !== requestId) return;
 
@@ -920,7 +925,7 @@ function App() {
       setTotalCount(nextTotalCount);
       setTotalPages(nextTotalPages);
       setPage(nextPage);
-      setSearchedFileType(effectiveFileType);
+      setSearchedFileType(resultFileType);
 
       const currentSelectedKey = selectedCompanyKeyRef.current;
 
@@ -931,20 +936,20 @@ function App() {
       } else if (!preserveSelection || !currentSelectedKey) {
         handleCompanySelect(items[0], globalOffset, {
           scrollIntoView: false,
-          resultFileType: effectiveFileType,
+          resultFileType,
         });
       } else {
         const matchIndex = findMatchIndexByKey(items, currentSelectedKey, globalOffset);
         if (matchIndex >= 0) {
           handleCompanySelect(items[matchIndex], globalOffset + matchIndex, {
             scrollIntoView: false,
-            resultFileType: effectiveFileType,
+            resultFileType,
           });
         } else {
           // 이전 선택 항목이 새 결과에 없으면 첫 번째 결과로 교체해 상단 패널이 오래된 업체를 유지하지 않도록 한다.
           handleCompanySelect(items[0], globalOffset, {
             scrollIntoView: false,
-            resultFileType: effectiveFileType,
+            resultFileType,
           });
         }
       }
@@ -1024,6 +1029,24 @@ function App() {
       onlyWomenOwned: nextOnlyWomenOwned,
     };
   }, [buildSearchCriteria, executeSearch, fileType, onlyLatest, onlyLHQuality, onlyWomenOwned, sortDir, sortKey]);
+
+  const handleOwnCorporationsSelect = () => {
+    setFileType('own-corporations');
+    setFilters(createDefaultFilters());
+    setOnlyLatest(false);
+    setOnlyLHQuality(false);
+    setOnlyWomenOwned(false);
+    // Keep the modifier effect from issuing a second search with the previous criteria.
+    lastAutoSearchRef.current = {
+      fileType: 'own-corporations', sortKey, sortDir,
+      onlyLatest: false, onlyLHQuality: false, onlyWomenOwned: false,
+    };
+    executeSearch({
+      criteria: createDefaultFilters(),
+      targetFileType: 'own-corporations',
+      overrides: { onlyLatest: false, onlyLHQuality: false, onlyWomenOwned: false },
+    });
+  };
 
   const currentPage = React.useMemo(() => {
     const safeTotal = totalPages && totalPages > 0 ? totalPages : 1;
@@ -1113,8 +1136,9 @@ function App() {
         console.log(`[App.jsx LOG] 검색 초기 데이터(${fileType})를 가져옵니다. (트리거: uploadCount=${uploadCount})`);
         const statuses = await refreshFileStatuses();
         if (canceled) return;
-        if (statuses?.[fileType]) {
-          const response = await searchClient.getRegions(fileType);
+        const regionFileType = fileType === 'own-corporations' ? 'all' : fileType;
+        if (statuses?.[regionFileType] || (regionFileType === 'all' && Object.values(statuses || {}).some(Boolean))) {
+          const response = await searchClient.getRegions(regionFileType);
           if (canceled) return;
           console.log('[App.jsx LOG] 지역 목록 응답:', response);
           if (Array.isArray(response) && response.length > 1) {
@@ -1613,6 +1637,7 @@ function App() {
                       <label><input type="radio" value="tongsin" checked={fileType === 'tongsin'} onChange={(e) => setFileType(normalizeFileType(e.target.value))} /> 통신</label>
                       <label><input type="radio" value="sobang" checked={fileType === 'sobang'} onChange={(e) => setFileType(normalizeFileType(e.target.value))} /> 소방</label>
                       <label><input type="radio" value="all" checked={fileType === 'all'} onChange={(e) => setFileType(normalizeFileType(e.target.value))} /> 전체</label>
+                      <label><input type="radio" value="own-corporations" checked={fileType === 'own-corporations'} onChange={handleOwnCorporationsSelect} /> 우리법인</label>
                     </div>
                   </div>
                   <div className="filter-grid search-web-filter-grid" onKeyDown={handleKeyDown}>
