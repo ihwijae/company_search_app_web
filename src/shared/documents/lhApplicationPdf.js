@@ -70,8 +70,12 @@ export async function createLhApplicationPdf(model, { regularFontBytes, boldFont
   center(model.recipient, layout.recipientY, documentFontSize(13), bold);
   let footnoteY = 112;
   for (const note of model.footnotes) {
-    const lines = wrapText(note, regular, documentFontSize(10.2), width);
-    for (const line of lines) { draw(line, left, footnoteY, documentFontSize(10.2)); footnoteY -= 17; }
+    const noteSize = documentFontSize(10.2);
+    const prefix = String(note).match(/^주\d+\.\s*/)?.[0] || '';
+    const indent = regular.widthOfTextAtSize(prefix, noteSize);
+    const lines = wrapText(String(note).slice(prefix.length), regular, noteSize, width - indent);
+    draw(prefix, left, footnoteY, noteSize);
+    for (const line of lines) { draw(line, left + indent, footnoteY, noteSize); footnoteY -= 17; }
     footnoteY -= 3;
   }
   pdf.setTitle(`적격심사 신청서 - ${model.noticeTitle || model.noticeNo}`);
