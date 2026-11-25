@@ -22,7 +22,7 @@ const PREVIEW_PAGES = [
   { title: '7. 입찰가격점수', tab: '7. 입찰가격', description: '공고정보의 입찰가격·예정가격·A값을 원본 산식에 대입한 결과입니다.' },
 ];
 
-export default function LhApplicationPreview({ application, overview = null, initialPage = 1, onClose }) {
+export default function LhApplicationPreview({ application, overview = null, fontFamily, initialPage = 1, onClose }) {
   const { notify } = useFeedback();
   const closeRef = useRef(null);
   const [bytes, setBytes] = useState(null);
@@ -43,15 +43,15 @@ export default function LhApplicationPreview({ application, overview = null, ini
     setBytes(null);
     (async () => {
       try {
-        const generated = await createApplicationPdfBytes(model, { allowIncomplete: true });
-        const combined = overviewModel ? await createSubmissionPdfBytes(generated, overviewModel) : generated;
+        const generated = await createApplicationPdfBytes(model, { allowIncomplete: true, fontFamily });
+        const combined = overviewModel ? await createSubmissionPdfBytes(generated, overviewModel, { fontFamily }) : generated;
         if (!canceled) { setApplicationBytes(generated); setBytes(combined); setLoading(false); }
       } catch (failure) {
         if (!canceled) { setError(failure.message || '신청서 미리보기를 만들지 못했습니다.'); setLoading(false); }
       }
     })();
     return () => { canceled = true; };
-  }, [model, overviewModel, attempt]);
+  }, [model, overviewModel, fontFamily, attempt]);
 
   const download = () => {
     if (!bytes || !model.complete || loading || error) return;

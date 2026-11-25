@@ -115,8 +115,8 @@ async function main() {
     const bidContent = (await (await pdf.getPage(10)).getTextContent()).items;
     const bidText = bidContent.map((item) => item.str).join('').replace(/\s/g, '');
     for (const value of ['7.입찰가격점수', '9,293,373,771-704,658,655', '10,520,624,000-704,658,655', '8,588,715,116', '9,815,965,345', '0.8750', '45.00점']) assert.ok(bidText.includes(value), value);
-    const bidNumerator = bidContent.find((item) => item.str === '8,588,715,116');
-    const bidDenominator = bidContent.find((item) => item.str === '9,815,965,345');
+    const bidNumerator = bidContent.find((item) => item.str.trim() === '8,588,715,116');
+    const bidDenominator = bidContent.find((item) => item.str.trim() === '9,815,965,345');
     assert.ok(bidNumerator.transform[5] > bidDenominator.transform[5]);
     assert.equal(overview.model.bidPricePage.score, overview.model.scores.bid);
     assert.match(firstText, /적격심사신청서/);

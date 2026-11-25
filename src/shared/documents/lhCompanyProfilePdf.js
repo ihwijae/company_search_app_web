@@ -1,10 +1,11 @@
+import { documentFontSize } from './documentTypography.js';
 export function appendLhCompanyProfilePage(pdf, companies, { font, bold, color }) {
   const page = pdf.addPage([595.28, 841.89]);
   const left = 57;
   const width = 481;
   const labelWidth = 130;
   const companyWidth = (width - labelWidth) / companies.length;
-  const size = companies.length >= 4 ? 8 : 9.5;
+  const size = companies.length >= 4 ? documentFontSize(8) : documentFontSize(9.5);
   const wrap = (value, available, fontSize) => {
     const result = [];
     for (const paragraph of String(value || '—').split('\n')) {
@@ -17,7 +18,7 @@ export function appendLhCompanyProfilePage(pdf, companies, { font, bold, color }
     }
     return result;
   };
-  page.drawText('다. 업체현황', { x: left, y: 766, size: 12, font: bold, color });
+  page.drawText('다. 업체현황', { x: left, y: 766, size: documentFontSize(12), font: bold, color });
   const rows = [
     ['회 사 명', (company) => company.name],
     ['대 표 자', (company) => company.representative ? `${company.representative}     (인)` : '—'],
@@ -44,7 +45,7 @@ export function appendLhCompanyProfilePage(pdf, companies, { font, bold, color }
       const startY = top - (height - lines.length * fontSize * 1.4) / 2 - fontSize;
       lines.forEach((line, index) => page.drawText(line, { x: x + (cellWidth - font.widthOfTextAtSize(line, fontSize)) / 2, y: startY - index * fontSize * 1.4, size: fontSize, font, color }));
     };
-    cell([label], left, labelWidth, 10);
+    cell([label], left, labelWidth, documentFontSize(10));
     values.forEach((lines, index) => cell(lines, left + labelWidth + index * companyWidth, companyWidth, size));
     top -= height;
   }

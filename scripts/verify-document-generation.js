@@ -20,7 +20,7 @@ async function main() {
       creditGradeText: '', creditExpiry: '', creditExpired: '', creditStatus: '', debtRatio: '', currentRatio: '', bizYears: '', managementMethod: 'auto',
     });
     const form = {
-      reviewType: 'qualification', industry: 'eung', companyCount: 2, ownerId: 'LH', rangeId: '',
+      reviewType: 'qualification', industry: 'eung', companyCount: 2, fontFamily: 'pretendard', ownerId: 'LH', rangeId: '',
       estimatedPrice: '1,000,000,000', baseAmount: '1,100,000,000', noticeNo: 'TEST-2026-001', noticeTitle: '검증용 공고',
       bidAmount: '9,293,373,771', expectedPrice: '10,520,624,000', aValue: '704,658,655',
       noticeDate: '2026-11-20', writtenDate: '2026-11-24', bidDeadline: '2026-11-25T10:00',

@@ -1,3 +1,4 @@
+import { normalizeDocumentFont } from '../../../shared/documents/documentTypography.js';
 import { getCandidateTextField, getQualityBadgeText, normalizeCellText } from '../../../utils/companyIndicators.js';
 import { getDocumentRangeOptions } from '../../../shared/navigation.js';
 import { resolveCreditValidity, extractCreditGrade } from '../../../shared/agreements/calculations/creditEvaluation.js';
@@ -36,7 +37,7 @@ export function createDocumentForm() {
     reviewType: 'qualification', ownerId: '', rangeId: '', industry: 'eung', companyCount: 2,
     estimatedPrice: '', baseAmount: '', bidAmount: '', expectedPrice: '', aValue: '', noticeNo: '', noticeTitle: '', noticeDate: '',
     writtenDate: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`,
-    bidDeadline: '', companies: Array.from({ length: 5 }, createCompany),
+    bidDeadline: '', fontFamily: 'pretendard', companies: Array.from({ length: 5 }, createCompany),
   };
 }
 
@@ -89,6 +90,7 @@ export function companyFromSearch(candidate) {
 export function normalizeDocumentForm(form) {
   const defaults = createDocumentForm();
   const next = { ...defaults, ...form, companies: defaults.companies.map((company, index) => ({ ...company, ...form.companies[index] })) };
+  next.fontFamily = normalizeDocumentFont(next.fontFamily);
   if (!getDocumentRangeOptions(next.ownerId, next.reviewType).some((range) => range.key === next.rangeId)) next.rangeId = '';
   return next;
 }

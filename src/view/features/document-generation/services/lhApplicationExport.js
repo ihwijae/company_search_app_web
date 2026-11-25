@@ -1,28 +1,32 @@
-let fontsPromise;
+import { normalizeDocumentFont } from '../../../../shared/documents/documentTypography.js';
 
-async function loadFonts() {
-  if (!fontsPromise) fontsPromise = Promise.all([
-    fetch(new URL('../../../../assets/fonts/Pretendard-Regular.ttf', import.meta.url)).then((response) => {
-      if (!response.ok) throw new Error('신청서 한글 글꼴을 불러오지 못했습니다.');
-      return response.arrayBuffer();
-    }),
-    fetch(new URL('../../../../assets/fonts/Pretendard-Bold.ttf', import.meta.url)).then((response) => {
-      if (!response.ok) throw new Error('신청서 제목 글꼴을 불러오지 못했습니다.');
-      return response.arrayBuffer();
-    }),
-  ]).catch((error) => { fontsPromise = null; throw error; });
-  const [regularFontBytes, boldFontBytes] = await fontsPromise;
-  return { regularFontBytes, boldFontBytes };
+const fontUrls = {
+  pretendard: [new URL('../../../../assets/fonts/Pretendard-Regular.ttf', import.meta.url), new URL('../../../../assets/fonts/Pretendard-Bold.ttf', import.meta.url)],
+  'nanum-gothic': [new URL('../../../../assets/fonts/NanumGothic-Regular.ttf', import.meta.url), new URL('../../../../assets/fonts/NanumGothic-Bold.ttf', import.meta.url)],
+  'nanum-myeongjo': [new URL('../../../../assets/fonts/NanumMyeongjo-Regular.ttf', import.meta.url), new URL('../../../../assets/fonts/NanumMyeongjo-Bold.ttf', import.meta.url)],
+};
+const fontPromises = new Map();
+
+async function loadFonts(fontFamily) {
+  const key = normalizeDocumentFont(fontFamily);
+  if (!fontPromises.has(key)) fontPromises.set(key, Promise.all(fontUrls[key].map(async (url) => {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('서류 글꼴을 불러오지 못했습니다. 다시 시도해 주세요.');
+    return response.arrayBuffer();
+  })).catch((error) => { fontPromises.delete(key); throw error; }));
+  const [regularFontBytes, boldFontBytes] = await fontPromises.get(key);
+  // Nanum fonts need full embedding to retain composite glyphs in PDF viewers.
+  return { regularFontBytes, boldFontBytes, subsetFonts: key === 'pretendard' };
 }
 
-export async function createApplicationPdfBytes(model, { allowIncomplete = false } = {}) {
-  const fonts = await loadFonts();
+export async function createApplicationPdfBytes(model, { allowIncomplete = false, fontFamily } = {}) {
+  const fonts = await loadFonts(fontFamily);
   const { createLhApplicationPdf } = await import('../../../../shared/documents/lhApplicationPdf.js');
   return createLhApplicationPdf(model, { ...fonts, allowIncomplete });
 }
 
-export async function createSubmissionPdfBytes(applicationBytes, overviewModel) {
-  const fonts = await loadFonts();
+export async function createSubmissionPdfBytes(applicationBytes, overviewModel, { fontFamily } = {}) {
+  const fonts = await loadFonts(fontFamily);
   const { createLhSubmissionPdf } = await import('../../../../shared/documents/lhOverviewPdf.js');
   return createLhSubmissionPdf(applicationBytes, overviewModel, { ...fonts, allowIncomplete: true });
 }

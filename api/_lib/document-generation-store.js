@@ -9,7 +9,7 @@ const { APP_DATA_ROOT, ensureDir, readJsonFile } = require('./local-storage');
 
 const DOCUMENT_ROOT = path.join(APP_DATA_ROOT, 'document-generation');
 let writeQueue = Promise.resolve();
-const FORM_FIELDS = ['ownerId', 'rangeId', 'estimatedPrice', 'baseAmount', 'bidAmount', 'expectedPrice', 'aValue', 'noticeNo', 'noticeTitle', 'noticeDate', 'writtenDate', 'bidDeadline'];
+const FORM_FIELDS = ['ownerId', 'rangeId', 'estimatedPrice', 'baseAmount', 'bidAmount', 'expectedPrice', 'aValue', 'noticeNo', 'noticeTitle', 'noticeDate', 'writtenDate', 'bidDeadline', 'fontFamily'];
 const COMPANY_FIELDS = ['name', 'bizNo', 'representative', 'share', 'rank', 'address', 'phone', 'writer', 'corporateNo', 'creditAgency', 'registrationNo', 'safetyDeductions', 'safetyCertificate', 'performance5y', 'sipyungAmount', 'qualityScore', 'creditGradeText', 'creditExpiry', 'creditExpired', 'creditStatus', 'debtRatio', 'currentRatio', 'bizYears', 'managementMethod'];
 let sharedPromise;
 const loadShared = () => {
@@ -44,9 +44,12 @@ function normalizeForm(form) {
   if (!['qualification', 'comprehensive'].includes(form.reviewType)) fail('심사유형이 올바르지 않습니다.');
   if (!['eung', 'tongsin', 'sobang'].includes(form.industry)) fail('공종이 올바르지 않습니다.');
   if (![2, 3, 4, 5].includes(form.companyCount) || !Array.isArray(form.companies) || form.companies.length !== 5) fail('참여업체 정보가 올바르지 않습니다.');
+  const fontFamily = text(form.fontFamily) || 'pretendard';
+  if (!['pretendard', 'nanum-gothic', 'nanum-myeongjo'].includes(fontFamily)) fail('서류 글꼴이 올바르지 않습니다.');
   return {
     reviewType: form.reviewType, industry: form.industry, companyCount: form.companyCount,
     ...Object.fromEntries(FORM_FIELDS.map((key) => [key, text(form[key])])),
+    fontFamily,
     companies: form.companies.map((company) => {
       if (!company || typeof company !== 'object' || Array.isArray(company)) fail('업체정보가 올바르지 않습니다.');
       const managementMethod = text(company.managementMethod) || 'auto';

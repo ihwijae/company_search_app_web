@@ -1,3 +1,4 @@
+import { documentFontSize } from './documentTypography.js';
 import { rgb } from 'pdf-lib';
 
 const number = (value, digits = 2) => value == null ? '—' : value.toLocaleString('ko-KR', { maximumFractionDigits: digits });
@@ -27,22 +28,22 @@ export function appendLhExperiencePage(pdf, model, { font, bold, color }) {
     }
     return lines;
   };
-  const write = (value, x, y, size = 10, selectedFont = font) => page.drawText(value, { x, y, size, font: selectedFont, color });
-  const cell = (value, x, top, width, height, { size = 10, align = 'center', selectedFont = font, fill = null } = {}) => {
+  const write = (value, x, y, size = documentFontSize(10), selectedFont = font) => page.drawText(value, { x, y, size, font: selectedFont, color });
+  const cell = (value, x, top, width, height, { size = documentFontSize(10), align = 'center', selectedFont = font, fill = null } = {}) => {
     const lines = wrap(value, width - 8, size, selectedFont);
     if (lines.length * size * 1.12 > height - 4) throw new Error('시공경험평가 내용이 셀 높이를 초과합니다. 업체명과 입력 내용을 확인해 주세요.');
     page.drawRectangle({ x, y: top - height, width, height, borderColor: color, borderWidth: .6, ...(fill ? { color: fill } : {}) });
     const startY = top - (height - lines.length * size * 1.12) / 2 - size;
     lines.forEach((line, index) => write(line, align === 'left' ? x + 6 : x + (width - selectedFont.widthOfTextAtSize(line, size)) / 2, startY - index * size * 1.12, size, selectedFont));
   };
-  write('2. 시공경험평가 [공사종류 또는 입찰방법에 따라 해당하는 항목 작성]', left, 766, 11, bold);
+  write('2. 시공경험평가 [공사종류 또는 입찰방법에 따라 해당하는 항목 작성]', left, 766, documentFontSize(11), bold);
   write('다. 가목 및 나목 이외 경우', left + 6, 747);
   const memberWidth = widths[3] / members.length;
-  const contentSize = members.length >= 4 ? 8.5 : 9.5;
+  const contentSize = members.length >= 4 ? documentFontSize(8.5) : documentFontSize(9.5);
   const lineHeight = contentSize * 1.12;
-  const nameSize = members.length >= 4 ? 7 : 8;
-  const nameHeight = Math.max(14, ...members.map((member) => wrap(member.name || '미선택', memberWidth - 8, nameSize).length * nameSize * 1.12 + 5));
-  const headerHeight = nameHeight + 13;
+  const nameSize = members.length >= 4 ? documentFontSize(7) : documentFontSize(8);
+  const nameHeight = Math.max(16, ...members.map((member) => wrap(member.name || '미선택', memberWidth - 8, nameSize).length * nameSize * 1.12 + 5));
+  const headerHeight = nameHeight + 16;
   const headerFill = rgb(.9, .9, .9);
   let top = 737;
   ['심사항목', '등 급', '배점\n한도'].forEach((label, index) => cell(label, xs[index], top, widths[index], headerHeight, { fill: headerFill }));
@@ -50,7 +51,7 @@ export function appendLhExperiencePage(pdf, model, { font, bold, color }) {
   members.forEach((member, index) => {
     const x = xs[3] + index * memberWidth;
     cell(member.name || '미선택', x, top, memberWidth, nameHeight, { size: nameSize, fill: headerFill });
-    cell(`${number(member.share, 4)}%`, x, top - nameHeight, memberWidth, 13, { size: 8, fill: headerFill });
+    cell(`${number(member.share, 4)}%`, x, top - nameHeight, memberWidth, 16, { size: documentFontSize(8), fill: headerFill });
   });
   top -= headerHeight;
 
@@ -148,7 +149,7 @@ export function appendLhExperiencePage(pdf, model, { font, bold, color }) {
   top -= performanceHeight;
   const thresholds = criteria.qualityThresholds.map((threshold, index) => `${String.fromCharCode(65 + index)}: ${thresholdLabel(threshold, index)}(${number(threshold.score)}점)`);
   cell('품질평가점수\n(LH의 품질평가 결과)', xs[0], top, widths[0], qualityHeight);
-  cell(thresholds.join('\n'), xs[1], top, widths[1], qualityHeight, { size: 8.5, align: 'left' });
+  cell(thresholds.join('\n'), xs[1], top, widths[1], qualityHeight, { size: documentFontSize(8.5), align: 'left' });
   cell(number(Math.max(...criteria.qualityThresholds.map((threshold) => threshold.score))), xs[2], top, widths[2], qualityHeight);
   cell('', xs[3], top, widths[3], qualityHeight);
   cell(ready ? number(result.qualityPoints) : '—', xs[4], top, widths[4], qualityHeight, { selectedFont: bold });
@@ -159,5 +160,5 @@ export function appendLhExperiencePage(pdf, model, { font, bold, color }) {
   top -= qualityHeight;
   cell('평가합계', left, top, xs[4] - left, 27, { align: 'center' });
   cell(ready ? result.score.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: criteria.scoreDigits }) : '—', xs[4], top, widths[4], 27, { selectedFont: bold });
-  notes.forEach((note, index) => write(note, left, top - 47 - index * 16, 9));
+  notes.forEach((note, index) => write(note, left, top - 47 - index * 16, documentFontSize(9)));
 }

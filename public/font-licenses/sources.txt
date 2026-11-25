@@ -1,0 +1,3 @@
+Nanum Gothic: https://github.com/google/fonts/tree/main/ofl/nanumgothic
+Nanum Myeongjo: https://github.com/google/fonts/tree/main/ofl/nanummyeongjo
+Fonts distributed unchanged under the accompanying SIL Open Font License 1.1.

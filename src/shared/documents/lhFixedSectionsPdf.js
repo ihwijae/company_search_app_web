@@ -1,3 +1,4 @@
+import { documentFontSize } from './documentTypography.js';
 import { rgb } from 'pdf-lib';
 
 export function appendLhFixedSectionsPage(pdf, model, { font, bold, color }) {
@@ -5,14 +6,14 @@ export function appendLhFixedSectionsPage(pdf, model, { font, bold, color }) {
   const left = 57;
   const widths = [216, 114, 92, 59];
   const xs = widths.reduce((positions, width) => [...positions, positions[positions.length - 1] + width], [left]);
-  const write = (value, x, y, size = 10.5, selectedFont = font) => page.drawText(value, { x, y, size, font: selectedFont, color });
-  const cell = (value, x, top, width, height, { selectedFont = font, size = 10, fill = false } = {}) => {
+  const write = (value, x, y, size = documentFontSize(10.5), selectedFont = font) => page.drawText(value, { x, y, size, font: selectedFont, color });
+  const cell = (value, x, top, width, height, { selectedFont = font, size = documentFontSize(10), fill = false } = {}) => {
     page.drawRectangle({ x, y: top - height, width, height, borderColor: color, borderWidth: .6, ...(fill ? { color: rgb(.9, .9, .9) } : {}) });
     const lines = value.split('\n');
     const startY = top - (height - lines.length * size * 1.2) / 2 - size;
     lines.forEach((line, index) => write(line, x + (width - selectedFont.widthOfTextAtSize(line, size)) / 2, startY - index * size * 1.2, size, selectedFont));
   };
-  write('5. 하도급 관리계획 적정성 평가', left, 766, 12, bold);
+  write('5. 하도급 관리계획 적정성 평가', left, 766, documentFontSize(12), bold);
   let top = 747;
   const headerHeight = 32;
   ['심사항목', '등 급', '배점한도', '입찰자\n평 점'].forEach((label, index) => cell(label, xs[index], top, widths[index], headerHeight, { fill: true }));
@@ -29,6 +30,6 @@ export function appendLhFixedSectionsPage(pdf, model, { font, bold, color }) {
   top -= rowHeight * 3;
   write('다. 전문, 전기, 정보통신, 소방시설, 문화재공사 등의 하도급관리계획 적정성은 만점', left, top - 23);
   write('으로 평가한다.', left + 24, top - 41);
-  write('6. 자재 및 인력조달 가격의 적정성 평가', left, top - 80, 12, bold);
+  write('6. 자재 및 인력조달 가격의 적정성 평가', left, top - 80, documentFontSize(12), bold);
   write('※자재 및 인력조달 가격의 적정성 평가는 배점한도 점수를 부여한다.', left + 12, top - 103);
 }

@@ -47,10 +47,10 @@ async function main() {
     if (index === 0) {
       assert.equal(result.score, 45);
       for (const fragment of ['9,293,373,771-704,658,655', '10,520,624,000-704,658,655', '8,588,715,116', '9,815,965,345', '0.8750', '5.00', '₩704,658,655']) assert.ok(text.includes(fragment), fragment);
-      const numerator = items.find((item) => item.str === '8,588,715,116');
-      const denominator = items.find((item) => item.str === '9,815,965,345');
+      const numerator = items.find((item) => item.str.trim() === '8,588,715,116');
+      const denominator = items.find((item) => item.str.trim() === '9,815,965,345');
       assert.ok(numerator.transform[5] > denominator.transform[5]);
-      assert.ok(Math.abs(numerator.transform[4] + numerator.width / 2 - denominator.transform[4] - denominator.width / 2) < 1);
+      assert.ok(Math.abs(numerator.transform[4] + font.widthOfTextAtSize(numerator.str.trim(), numerator.height) / 2 - denominator.transform[4] - font.widthOfTextAtSize(denominator.str.trim(), denominator.height) / 2) < 1);
       await fs.writeFile('/tmp/lh-bid-price-preview.pdf', bytes);
     }
     await parsed.destroy();

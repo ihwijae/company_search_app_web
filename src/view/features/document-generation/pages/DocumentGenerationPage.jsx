@@ -1,3 +1,4 @@
+import { DOCUMENT_FONTS } from '../../../../shared/documents/documentTypography.js';
 import React from 'react';
 import '../../../../styles.css';
 import '../../../../fonts.css';
@@ -83,6 +84,7 @@ export default function DocumentGenerationPage() {
                     <DocumentField label="발주처"><select value={form.ownerId} onChange={(event) => update('ownerId', event.target.value)}><option value="">발주처 선택</option>{AGREEMENT_GROUPS.map((group) => <option key={group.ownerId} value={group.ownerId}>{group.label}</option>)}</select></DocumentField>
                     <DocumentField label="금액대"><select value={form.rangeId} disabled={!form.ownerId} onChange={(event) => update('rangeId', event.target.value)}><option value="">{form.ownerId ? '금액대 선택' : '발주처를 먼저 선택하세요'}</option>{rangeOptions.map((range) => <option key={range.key} value={range.key}>{range.label}</option>)}</select></DocumentField>
                     <DocumentField label="공종"><select className="document-industry-select" data-industry={form.industry} value={form.industry} onChange={(event) => state.changeIndustry(event.target.value)}>{INDUSTRIES.map((industry) => <option key={industry.value} value={industry.value}>{industry.label}</option>)}</select></DocumentField>
+                    <DocumentField label="서류 글꼴" hint="미리보기와 PDF 전체에 적용"><select value={form.fontFamily} onChange={(event) => update('fontFamily', event.target.value)}>{DOCUMENT_FONTS.map((font) => <option key={font.value} value={font.value}>{font.label}</option>)}</select></DocumentField>
                     <DocumentField label="공고번호">{input('noticeNo', '공고번호 입력')}</DocumentField>
                     <DocumentField label="공고명" wide>{input('noticeTitle', '공고명을 입력해 주세요')}</DocumentField>
                     <DocumentField label="추정가격" suffix="원"><AmountInput value={form.estimatedPrice} onChange={(value) => update('estimatedPrice', value)} placeholder="금액 입력" /></DocumentField>
@@ -126,7 +128,7 @@ export default function DocumentGenerationPage() {
       {library.saveOpen && <DocumentSaveDialog record={state.record} form={form} saving={library.saving} error={library.saveError} onSave={library.save} onClose={library.closeSave} />}
       {library.loadOpen && <DocumentLoadDialog library={library} currentId={state.record?.id} />}
       {materialsOpen && <MajorMaterialsDialog onClose={() => setMaterialsOpen(false)} />}
-      {applicationOpen && application && <LhApplicationPreview application={application} overview={overview} initialPage={previewPage} onClose={() => setApplicationOpen(false)} />}
+      {applicationOpen && application && <LhApplicationPreview application={application} fontFamily={form.fontFamily} overview={overview} initialPage={previewPage} onClose={() => setApplicationOpen(false)} />}
     </div>
   );
 }
