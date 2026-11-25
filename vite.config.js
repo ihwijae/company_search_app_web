@@ -9,6 +9,20 @@ export default defineConfig({
   // dev(server)에는 영향 없음.
   base: './',
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        // Keep module contents intact, but use .js for copied module assets so
+        // existing Node server processes also serve workers as JavaScript.
+        assetFileNames: (asset) => {
+          const names = asset.names || [asset.name || ''];
+          return names.some((name) => name.endsWith('.mjs'))
+            ? 'assets/[name]-[hash].js'
+            : 'assets/[name]-[hash][extname]';
+        },
+      },
+    },
+  },
   server: {
     port: 5173,        // 개발 서버 포트를 Electron dev URL과 통일
     strictPort: true,  // 이미 사용 중이면 에러 내고 종료 (다른 포트로 자동 변경 방지)

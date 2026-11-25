@@ -1,3 +1,5 @@
+import { calculateLhQualificationPerformance } from './lhQualification.js';
+
 export function buildGroupSummaryMetrics({
   groupAssignments = [],
   participantMap,
@@ -263,10 +265,10 @@ export async function computeGroupSummaries({
     }
 
     if ((isLhUnder50 || isLh50To100) && performanceRatioRounded != null) {
-      const lhRawScore = performanceRatioRounded * 13;
       const perfCapCurrent = getPerformanceCap() || derivedPerformanceMax;
-      performanceScoreRaw = lhRawScore;
-      performanceScore = clampScore(lhRawScore, perfCapCurrent);
+      const evaluated = calculateLhQualificationPerformance(performanceRatioRounded, perfCapCurrent);
+      performanceScoreRaw = evaluated.rawScore;
+      performanceScore = evaluated.score;
     }
 
     const isKrailUnder50SobangDebug = !isKrail50To100

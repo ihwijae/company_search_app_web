@@ -23,6 +23,8 @@ import React from 'react';
  * - ariaLabel: string — 접근성 label
  * - ariaLabelledby: string — 접근성 labelledby id
  * - role: string — ARIA role(기본 'dialog')
+ * - header, footer: ReactNode — 기본 제목/버튼 영역을 대체하는 자체 UI
+ * - contentClassName: string — 스크롤 본문 영역의 추가 클래스
  */
 export default function Modal({
   open,
@@ -48,6 +50,9 @@ export default function Modal({
   ariaLabel,
   ariaLabelledby,
   role = 'dialog',
+  header,
+  footer,
+  contentClassName = '',
 }) {
   const boxRef = React.useRef(null);
   const previousFocusRef = React.useRef(null);
@@ -155,7 +160,7 @@ export default function Modal({
         aria-label={ariaLabel}
         aria-labelledby={ariaLabelledby}
       >
-        {title && (
+        {header ?? (title && (
           <h3
             style={{
               marginTop: 0,
@@ -171,14 +176,14 @@ export default function Modal({
           >
             {title}
           </h3>
-        )}
-        <div style={{ marginBottom: 0, overflow: 'auto', flex: 1, minHeight: 0 }}>
+        ))}
+        <div className={contentClassName} style={{ marginBottom: 0, overflow: 'auto', flex: 1, minHeight: 0 }}>
           {children}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, borderTop: '1px solid #e5e7eb', paddingTop: 12, marginTop: 12, background: '#ffffff' }}>
+        {footer ?? <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, borderTop: '1px solid #e5e7eb', paddingTop: 12, marginTop: 12, background: '#ffffff' }}>
           <button type="button" disabled={cancelDisabled} onClick={doCancel} style={{ backgroundColor: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db' }}>{cancelLabel}</button>
           <button type="button" disabled={confirmDisabled} onClick={doSave} style={{ backgroundColor: '#2563eb', border: '1px solid #2563eb', color: '#ffffff' }}>{confirmLabel}</button>
-        </div>
+        </div>}
       </div>
     </div>
   );

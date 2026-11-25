@@ -1,4 +1,13 @@
 import React from 'react';
+import { resolveCandidateBusinessYears } from '../../../../shared/agreements/calculations/businessYears.js';
+import {
+  LH_QUALIFICATION_RULES,
+  resolveLhQualificationCriteria,
+  resolveLhQualificationDenominator,
+  resolveLhQualificationQualityPoints,
+  evaluateLhQualificationQuality,
+  resolveLhConstructionExperienceScore as resolveConstructionExperienceScore,
+} from '../../../../shared/agreements/calculations/lhQualification.js';
 import { createPortal } from 'react-dom';
 import CompanySearchModal from '../../../../components/CompanySearchModal.jsx';
 import AgreementLoadModal from './AgreementLoadModal.jsx';
@@ -126,8 +135,8 @@ const DEFAULT_GROUP_SIZE = 5;
 const MIN_GROUPS = 4;
 const BID_SCORE_DEFAULT = 65;
 const LH_50_TO_100_BID_SCORE = 45;
-const LH_50_TO_100_SUBCONTRACT_SCORE = 10;
-const LH_50_TO_100_MATERIAL_SCORE = 10;
+const LH_50_TO_100_SUBCONTRACT_SCORE = LH_QUALIFICATION_RULES.ranges['lh-50to100'].subcontractScore;
+const LH_50_TO_100_MATERIAL_SCORE = LH_QUALIFICATION_RULES.ranges['lh-50to100'].materialScore;
 const EX_50_TO_100_BID_SCORE = 45;
 const KRAIL_50_TO_100_BID_SCORE = 45;
 const KRAIL_50_TO_100_SUBCONTRACT_MATERIAL_SCORE = 20;
@@ -137,13 +146,13 @@ const MOIS_50_TO_100_SUBCONTRACT_SCORE = 10;
 const MOIS_50_TO_100_MATERIAL_SCORE = 10;
 const SUBCONTRACT_SCORE = 5;
 const MANAGEMENT_SCORE_MAX = 15;
-const CONSTRUCTION_EXPERIENCE_SCORE_MAX = 15;
+const CONSTRUCTION_EXPERIENCE_SCORE_MAX = LH_QUALIFICATION_RULES.constructionMax;
 const KRAIL_TECHNICIAN_ABILITY_MAX = 5;
 const PERFORMANCE_DEFAULT_MAX = 13;
 const PERFORMANCE_MOIS_DEFAULT_MAX = 15;
 const PERFORMANCE_CAP_VERSION = 4;
 const MANAGEMENT_SCORE_VERSION = 5;
-const LH_QUALITY_DEFAULT_UNDER_100B = 85;
+const LH_QUALITY_DEFAULT_UNDER_100B = LH_QUALIFICATION_RULES.qualityDefault;
 const LH_QUALITY_DEFAULT_OVER_100B = 88;
 const LH_SIMPLE_PERFORMANCE_COEFFICIENT = 3;
 const LH_SIMPLE_REGION_ADJUSTMENT_COEFFICIENT = 1;
@@ -373,19 +382,8 @@ const resolveLhQualityPoints = (qualityScore, rangeKey) => {
     if (score >= 85) return 3.7;
     return 3.6;
   }
-  if (normalizedRangeKey === LH_50_TO_100_KEY) {
-    if (score >= 90) return 5;
-    if (score >= 88) return 3;
-    if (score >= 85) return 2;
-    if (score >= 83) return 1.5;
-    if (score >= 80) return 1;
-    return 0;
-  }
-  if (score >= 88) return 3;
-  if (score >= 85) return 2;
-  if (score >= 83) return 1.5;
-  if (score >= 80) return 1;
-  return 0;
+  const criteria = resolveLhQualificationCriteria({ rangeId: normalizedRangeKey === LH_50_TO_100_KEY ? LH_50_TO_100_KEY : LH_UNDER_50_KEY, fileType: 'eung' });
+  return resolveLhQualificationQualityPoints(score, criteria);
 };
 
 const parseNumeric = (value) => {
@@ -801,104 +799,7 @@ const toNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-const BIZ_YEARS_DATE_PATTERN = /(\d{2,4})[^0-9]{0,3}(\d{1,2})[^0-9]{0,3}(\d{1,2})/;
-const BIZ_YEARS_MS_PER_DAY = 24 * 60 * 60 * 1000;
-const BIZ_YEARS_MS_PER_YEAR = 365.2425 * BIZ_YEARS_MS_PER_DAY;
-const BIZ_YEARS_EXCEL_EPOCH = new Date(Date.UTC(1899, 11, 30));
-
-const isValidDateValue = (value) => value instanceof Date && !Number.isNaN(value.getTime());
-
-const parseDateLikeForBizYears = (raw) => {
-  if (!raw && raw !== 0) return null;
-  if (raw instanceof Date) return isValidDateValue(raw) ? raw : null;
-
-  if (typeof raw === 'number') {
-    if (raw > 1000) {
-      const milliseconds = Math.round(raw * BIZ_YEARS_MS_PER_DAY);
-      const date = new Date(BIZ_YEARS_EXCEL_EPOCH.getTime() + milliseconds);
-      if (isValidDateValue(date)) return date;
-    }
-    return null;
-  }
-
-  const text = String(raw || '').trim();
-  if (!text) return null;
-
-  const match = text.match(BIZ_YEARS_DATE_PATTERN);
-  if (match) {
-    let year = Number(match[1]);
-    const month = Number(match[2]);
-    const day = Number(match[3]);
-    if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
-      if (year < 100) year += year >= 70 ? 1900 : 2000;
-      const date = new Date(year, month - 1, day);
-      if (isValidDateValue(date)) return date;
-    }
-  }
-
-  const digitsOnly = text.replace(/[^0-9]/g, '');
-  if (digitsOnly.length === 8) {
-    const year = Number(digitsOnly.slice(0, 4));
-    const month = Number(digitsOnly.slice(4, 6));
-    const day = Number(digitsOnly.slice(6, 8));
-    if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
-      const date = new Date(year, month - 1, day);
-      if (isValidDateValue(date)) return date;
-    }
-  }
-  return null;
-};
-
-const parseBizYearsFromText = (value) => {
-  const text = String(value || '').trim();
-  if (!text) return null;
-  const yearMonthMatch = text.match(/(\d+(?:\.\d+)?)\s*년\s*(\d+(?:\.\d+)?)?\s*개월?/);
-  if (yearMonthMatch) {
-    const yearsPart = Number(yearMonthMatch[1]);
-    const monthsPart = yearMonthMatch[2] != null ? Number(yearMonthMatch[2]) : 0;
-    const total = (Number.isFinite(yearsPart) ? yearsPart : 0) + (Number.isFinite(monthsPart) ? monthsPart / 12 : 0);
-    if (Number.isFinite(total) && total > 0) return Number(total.toFixed(4));
-  }
-  const monthsOnlyMatch = text.match(/(\d+(?:\.\d+)?)\s*개월/);
-  if (monthsOnlyMatch) {
-    const months = Number(monthsOnlyMatch[1]);
-    if (Number.isFinite(months) && months > 0) return Number((months / 12).toFixed(4));
-  }
-  return null;
-};
-
-const resolveCandidateBizYears = (candidate, evaluationDateRaw) => {
-  const rawValue = extractAmountValue(
-    candidate,
-    ['bizYears', '영업기간', '설립연수', '업력'],
-    [['영업기간', '업력', 'bizyears']],
-  );
-  if (rawValue === null || rawValue === undefined || rawValue === '') return null;
-
-  const evaluationDate = parseDateLikeForBizYears(evaluationDateRaw) || new Date();
-  evaluationDate.setHours(0, 0, 0, 0);
-
-  const startDate = parseDateLikeForBizYears(rawValue);
-  if (startDate) {
-    const base = evaluationDate.getTime();
-    const diff = base - startDate.getTime();
-    const years = diff > 0 ? (diff / BIZ_YEARS_MS_PER_YEAR) : 0;
-    return Number.isFinite(years) ? Number(years.toFixed(4)) : 0;
-  }
-
-  if (typeof rawValue === 'number' && Number.isFinite(rawValue) && rawValue > 0 && rawValue <= 200) {
-    return Number(rawValue.toFixed(4));
-  }
-
-  const fromText = parseBizYearsFromText(rawValue);
-  if (fromText != null) return fromText;
-
-  const numeric = toNumber(rawValue);
-  if (Number.isFinite(numeric) && numeric > 0 && numeric <= 200) {
-    return Number(numeric.toFixed(4));
-  }
-  return null;
-};
+const resolveCandidateBizYears = (candidate, evaluationDateRaw) => resolveCandidateBusinessYears(candidate, evaluationDateRaw, { extractAmountValue, toNumber });
 
 const formatScore = (score, digits = 3) => {
   const value = toNumber(score);
@@ -978,15 +879,6 @@ const clampScore = (value, max = MANAGEMENT_SCORE_MAX) => {
   if (number < 0) return 0;
   if (number > max) return max;
   return number;
-};
-
-const resolveConstructionExperienceScore = (performanceScore, qualityPoints, { cap = true } = {}) => {
-  const performanceValue = toNumber(performanceScore);
-  if (performanceValue == null) return null;
-  const qualityValue = toNumber(qualityPoints);
-  const rawScore = performanceValue + (qualityValue == null ? 0 : qualityValue);
-  if (!cap) return rawScore;
-  return clampScore(rawScore, CONSTRUCTION_EXPERIENCE_SCORE_MAX);
 };
 
 const getCandidateManagementScore = (candidate) => resolveCandidateManagementScore(candidate, {
@@ -1533,13 +1425,13 @@ export default function AgreementBoardWindow({
     [isMoisUnderOr30To50],
   );
   const roundForLhTotals = React.useCallback(
-    (value) => (isLHOwner ? roundTo(value, 2) : value),
-    [isLHOwner],
+    (value) => (isLHOwner ? roundTo(value, isLh100To300 ? 2 : LH_QUALIFICATION_RULES.scoreDigits) : value),
+    [isLHOwner, isLh100To300],
   );
   const roundForLhPerformanceTotals = React.useCallback(
     (value) => {
       if (!isLHOwner) return value;
-      return roundTo(value, isLh100To300 ? 3 : 2);
+      return roundTo(value, isLh100To300 ? 3 : LH_QUALIFICATION_RULES.scoreDigits);
     },
     [isLHOwner, isLh100To300],
   );
@@ -2067,20 +1959,12 @@ export default function AgreementBoardWindow({
     }
 
     if (ownerKeyUpper === 'LH') {
-      if (rangeKey === LH_UNDER_50_KEY) {
-        return base > 0
-          ? { perfectPerformanceAmount: base, perfectPerformanceBasis: '기초금액 × 1배' }
-          : { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
+      if (rangeKey === LH_UNDER_50_KEY || rangeKey === LH_50_TO_100_KEY) {
+        const normalizedType = String(fileType || '').toLowerCase();
+        return resolveLhQualificationDenominator(base, resolveLhQualificationCriteria({ rangeId: rangeKey, fileType: ['eung', 'tongsin', 'sobang'].includes(normalizedType) ? normalizedType : 'eung' }));
       }
       if (rangeKey === LH_100_TO_300_KEY) {
         const multiplier = lhSimplePerformanceCoefficient || 3;
-        return base > 0
-          ? { perfectPerformanceAmount: base * multiplier, perfectPerformanceBasis: `기초금액 × ${multiplier}배` }
-          : { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
-      }
-      if (rangeKey === LH_50_TO_100_KEY) {
-        const normalizedType = String(fileType || '').toLowerCase();
-        const multiplier = normalizedType === 'sobang' ? 3 : 2;
         return base > 0
           ? { perfectPerformanceAmount: base * multiplier, perfectPerformanceBasis: `기초금액 × ${multiplier}배` }
           : { perfectPerformanceAmount: 0, perfectPerformanceBasis: '' };
@@ -2269,7 +2153,7 @@ export default function AgreementBoardWindow({
   }, []);
 
   const resolveQualityPointsMax = React.useCallback((rangeKey) => (
-    normalizeLhRangeKey(rangeKey) === LH_100_TO_300_KEY ? 4 : (normalizeLhRangeKey(rangeKey) === LH_50_TO_100_KEY ? 5 : 3)
+    normalizeLhRangeKey(rangeKey) === LH_100_TO_300_KEY ? 4 : Math.max(...(LH_QUALIFICATION_RULES.ranges[normalizeLhRangeKey(rangeKey)] || LH_QUALIFICATION_RULES.ranges[LH_UNDER_50_KEY]).qualityThresholds.map((item) => item.score))
   ), []);
 
   const {
@@ -2777,7 +2661,11 @@ export default function AgreementBoardWindow({
       const shareRatio = Math.max(0, Math.min(effectiveShare / 100, 1));
       const managementScore = roundForLhTotals(managementMaxValue * shareRatio) || 0;
       const qualityTotal = 85 * shareRatio;
-      const qualityPoints = resolveQualityPoints(qualityTotal, effectiveSelectedRangeKey) || 0;
+      const qualityPoints = normalizeLhRangeKey(effectiveSelectedRangeKey) === LH_50_TO_100_KEY
+        ? evaluateLhQualificationQuality([{ qualityScore: 85, share: shareRatio * 100 }], {
+          ...LH_QUALIFICATION_RULES, ...LH_QUALIFICATION_RULES.ranges[LH_50_TO_100_KEY],
+        }).qualityPoints
+        : resolveQualityPoints(qualityTotal, effectiveSelectedRangeKey) || 0;
       const constructionExperienceScore = resolveConstructionExperienceScore(performanceMax, qualityPoints) || 0;
       const totalScore = roundForLhTotals(
         managementScore
@@ -4913,7 +4801,7 @@ export default function AgreementBoardWindow({
         estimatedValue,
         perfCoefficient: isPps50To100 ? 2 : (isLh100To300 ? LH_SIMPLE_PERFORMANCE_COEFFICIENT : null),
         perfScoreMultiplier: isPps50To100 ? 15 : null,
-        roundRatioDigits: (isLh50To100 || isLhUnder50) ? 2 : null,
+        roundRatioDigits: (isLh50To100 || isLhUnder50) ? LH_QUALIFICATION_RULES.ratioDigits : null,
         formulasEvaluate: formulasClient.evaluate,
         updatePerformanceCap,
         getPerformanceCap,
@@ -6294,9 +6182,8 @@ export default function AgreementBoardWindow({
     const highlightQualityStyle = { backgroundColor: '#fff3b0' };
     const qualityGuide = (effectiveSelectedRangeKey === LH_100_TO_300_KEY)
       ? '94점이상:4점/91점이상:3.9점/88점이상:3.8점/85점이상:3.7점/85점미만:3.6점'
-      : (effectiveSelectedRangeKey === LH_50_TO_100_KEY)
-      ? '90점이상:5점/88점이상:3점/85점이상:2점/83점이상:1.5점/80점이상:1점'
-      : '품질 88점이상:3점/85점이상:2점/83점이상:1.5점/80점이상:1점';
+      : (LH_QUALIFICATION_RULES.ranges[effectiveSelectedRangeKey] || LH_QUALIFICATION_RULES.ranges[LH_UNDER_50_KEY]).qualityThresholds
+        .filter((item) => item.gte > 0).map((item) => `${item.gte}점이상:${item.score}점`).join('/');
     const nameSpan = columnSpans.nameSpan;
     const shareSpan = columnSpans.shareSpan;
     const guideSpan = 1 + nameSpan;
@@ -6365,7 +6252,7 @@ export default function AgreementBoardWindow({
                         ? String(meta.qualityInput)
                         : (meta.qualityScore != null ? formatScore(meta.qualityScore, 2) : '');
                       if (!shown) return '-';
-                      if (!emphasizeQuality) return shown;
+                      if (!emphasizeQuality && !isLh50To100) return shown;
                       const converted = resolveLhQualityPoints(qualityScoreValue, effectiveSelectedRangeKey);
                       return (
                         <span className="quality-score-stack">
@@ -6422,7 +6309,12 @@ export default function AgreementBoardWindow({
       }, 0)
       : null;
     const qualityWeightedPoints = isLh100To300 ? roundTo(qualityWeightedPointsRaw, 3) : null;
-    const qualityTotal = isLh100To300 ? qualityWeightedPoints : qualityTotalRaw;
+    const qualificationQuality = isLh50To100 ? evaluateLhQualificationQuality(
+      slotMetasWithLimit.filter((meta) => !meta.empty && !isSplitAssignedSlot(meta.slotIndex))
+        .map((meta) => ({ qualityScore: toNumber(meta.qualityScore), share: toNumber(meta.shareForCalc) })),
+      { ...LH_QUALIFICATION_RULES, ...LH_QUALIFICATION_RULES.ranges[LH_50_TO_100_KEY] },
+    ) : null;
+    const qualityTotal = isLh100To300 ? qualityWeightedPoints : qualificationQuality?.qualityPoints ?? qualityTotalRaw;
     const dutyRateValue = parseNumeric(regionDutyRate);
     const dutyShareTotal = slotMetasWithLimit.reduce((acc, meta) => {
       if (meta.empty || !meta.isDutyRegion) return acc;
@@ -6440,7 +6332,7 @@ export default function AgreementBoardWindow({
       ? summaryInfo?.totalMaxWithCred
       : summaryInfo?.totalMaxBase;
     const qualityPoints = isLHOwner
-      ? (isLh100To300 ? qualityWeightedPoints : resolveQualityPoints(qualityTotalRaw, effectiveSelectedRangeKey))
+      ? (isLh100To300 ? qualityWeightedPoints : qualificationQuality?.qualityPoints ?? resolveQualityPoints(qualityTotalRaw, effectiveSelectedRangeKey))
       : null;
     const cappedPerformanceScoreForTotal = toNumber(summaryInfo?.performanceScore);
     const constructionExperienceScore = showConstructionExperience

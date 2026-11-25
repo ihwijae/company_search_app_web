@@ -39,6 +39,10 @@ export default function Sidebar({ active, onSelect, fileStatuses, collapsed = tr
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [authMenuOpen]);
   const handleSelect = (key) => {
+    if (key === 'document-generation') {
+      window.location.hash = '#/document-generation';
+      return;
+    }
     if (key === 'excel-web-edit' && typeof window !== 'undefined') {
       window.location.hash = '#/excel-web-edit';
       return;
@@ -143,6 +147,7 @@ export default function Sidebar({ active, onSelect, fileStatuses, collapsed = tr
       label: '협정보드',
       icon: '📋',
     },
+    { key: 'document-generation', label: '서류생성', icon: '📄' },
     {
       key: 'auto-agreement',
       label: '협정 자동화',

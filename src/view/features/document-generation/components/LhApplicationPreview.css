@@ -1,0 +1,32 @@
+.application-preview-page-number { display: grid; place-items: center; flex-shrink: 0; width: 48px; height: 55px; border: 1px solid #dbe8ff; border-radius: 12px; color: #2563eb; background: #eff5ff; font-size: 24px; font-weight: 750; }
+.application-preview-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; min-height: 450px; }
+.application-preview-paper-area { padding: 25px; background: #e9edf4; min-width: 0; }
+.application-preview-paper { display: block; width: 100%; height: auto; background: #fff; box-shadow: 0 8px 26px #1e293b18; }
+.application-preview-paper[hidden] { display: none; }
+.application-preview-info { padding: 25px 22px; display: flex; flex-direction: column; gap: 23px; border-left: 1px solid #e6edf5; }
+.application-preview-info h3 { font-size: 16px; line-height: 1.6; }
+.application-preview-status h3 { margin: 8px 0; }
+.application-preview-missing { margin: -8px 0 0; padding: 15px 16px 15px 30px; border-radius: 10px; background: #fff6e9; color: #9a6b27; font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+.application-preview-methods { border-top: 1px solid #e4ebf5; padding-top: 20px; }
+.application-preview-methods > p { margin: 8px 0 15px; font-size: 13px; }
+.application-preview-methods > div { display: grid; gap: 7px; padding: 14px 0; border-bottom: 1px solid #edf1f7; }
+.application-preview-methods strong { font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
+.application-preview-methods span { font-size: 13px; color: #9a6b27; }
+.application-preview-methods span.is-complete { color: #426da8; }
+.application-preview-methods small { font-size: 12px; line-height: 1.7; color: #8797ad; }
+.application-preview-info .application-preview-note { margin-top: auto; font-size: 13px; }
+.application-preview-tabs { display: flex; flex-wrap: wrap; gap: 9px; padding: 15px 25px; border-bottom: 1px solid #e6edf5; background: #f8faff; }
+.application-preview-dialog .application-preview-tabs button { padding: 10px 15px; border: 1px solid #dce5f2; border-radius: 9px; color: #526882; background: #fff; font-size: 14px; }
+.application-preview-dialog .application-preview-tabs button[aria-pressed="true"] { background: #e9f1ff; color: #2563eb; border-color: #8eb3f0; }
+.application-overview-status { display: grid; gap: 12px; }
+.application-overview-status dl { display: grid; gap: 13px; margin: 0; font-size: 14px; }
+.application-overview-status dl > div { display: flex; gap: 10px; justify-content: space-between; }
+.application-overview-status dt { color: #64748b; }
+.application-overview-status dd { margin: 0; color: #315c9f; font-weight: 700; }
+.application-overview-status > p { font-size: 13px; }
+@media (max-width: 800px) {
+  .application-preview-layout { grid-template-columns: 1fr; }
+  .application-preview-paper-area { padding: 14px; }
+  .application-preview-info { border-left: 0; border-top: 1px solid #e6edf5; }
+  .application-preview-dialog .document-library-footer { flex-wrap: wrap; }
+}

@@ -9,6 +9,7 @@ export const BASE_ROUTES = {
   companyNotes: '#/company-notes',
   fixedCompanies: '#/fixed-companies',
   excelWebEdit: '#/excel-web-edit',
+  documentGeneration: '#/document-generation',
 };
 
 export const AGREEMENT_GROUPS = [
@@ -85,6 +86,13 @@ export const AGREEMENT_GROUPS = [
 export const AGREEMENT_MENU_ITEMS = AGREEMENT_GROUPS.flatMap((group) =>
   group.items.map((item) => ({ ...item, groupId: group.id, ownerId: group.ownerId, groupLabel: group.label }))
 );
+
+export function getDocumentRangeOptions(ownerId, reviewType = 'qualification') {
+  const group = AGREEMENT_GROUPS.find((item) => item.ownerId === ownerId);
+  const items = group?.items || [];
+  if (ownerId !== 'LH') return items;
+  return items.filter((item) => reviewType === 'qualification' ? item.key !== 'lh-100to300' : item.key === 'lh-100to300');
+}
 
 const HASH_TO_MENU = new Map(AGREEMENT_MENU_ITEMS.map((item) => [item.hash, item]));
 const KEY_TO_MENU = new Map(AGREEMENT_MENU_ITEMS.map((item) => [item.key, item]));

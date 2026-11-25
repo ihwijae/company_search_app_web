@@ -3,6 +3,7 @@ import {
   formatPossibleShareValue,
 } from './calculations/possibleShare.js';
 import { resolveNetCostBonusConfig } from './calculations/netCostBonus.js';
+import { evaluateLhQualificationQuality, LH_QUALIFICATION_RULES, normalizeLhQualificationRange } from './calculations/lhQualification.js';
 
 const LH_100_TO_300_KEY = 'lh-100to300';
 const LH_QUALITY_DEFAULT_OVER_100B = 88;
@@ -235,10 +236,16 @@ export function buildAgreementExportPayload({
         qualityTotal += Number(qualityValue) * (shareValue / 100);
         hasQuality = true;
       });
-      if (hasQuality) {
+      if (hasQuality && normalizeLhQualificationRange(selectedRangeKey) !== 'lh-50to100') {
         qualityPoints = isLh100To300
           ? roundTo(qualityTotal, 3)
           : resolveQualityPoints(qualityTotal, selectedRangeKey);
+      }
+      if (normalizeLhQualificationRange(selectedRangeKey) === 'lh-50to100') {
+        qualityPoints = evaluateLhQualificationQuality(
+          members.filter((member) => !member.isSplitMember).map((member) => ({ qualityScore: member.qualityScore, share: member.sharePercent })),
+          { ...LH_QUALIFICATION_RULES, ...LH_QUALIFICATION_RULES.ranges['lh-50to100'] },
+        ).qualityPoints;
       }
     }
 

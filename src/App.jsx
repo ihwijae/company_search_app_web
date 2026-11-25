@@ -30,6 +30,7 @@ import FixedCompaniesPage from './view/features/fixed-companies/pages/FixedCompa
 import LoginPage from './view/features/auth/pages/LoginPage.jsx';
 import ExcelWebEditPage from './view/features/excel-web/pages/ExcelWebEditPage.jsx';
 import ScanArchivePage from './view/features/scan-archive/pages/ScanArchivePage.jsx';
+import DocumentGenerationPage from './view/features/document-generation/pages/DocumentGenerationPage.jsx';
 import authClient from './shared/authClient.js';
 import { loadPersisted, savePersisted } from './shared/persistence.js';
 
@@ -154,6 +155,9 @@ export default function App() {
 
   let Screen = SearchPage;
   switch (path) {
+    case '/document-generation':
+      Screen = DocumentGenerationPage;
+      break;
     case '/lh/under50':
       Screen = LHUnder50Page;
       break;
