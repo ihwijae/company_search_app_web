@@ -47,7 +47,7 @@ export function appendLhBidPricePage(pdf, model, { font, bold, color }) {
     suffix(end, y);
   };
 
-  write('7. 입찰가격점수', 56.64, 747.28, bold);
+  write(model.title || '7. 입찰가격점수', 56.64, 747.28, bold);
   write('평점(점)', 82.44, 717.88, font);
   fractionRow(717.88, '입찰가격 - A', '예정가격 - A', 82, font, -3.72);
   fractionRow(678.16, `${amount(bid)} - ${amount(a)}`, `${amount(expected)} - ${amount(a)}`, 172);

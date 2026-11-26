@@ -11,7 +11,7 @@ function loadDraft() {
     const draft = JSON.parse(window.sessionStorage.getItem(DRAFT_KEY));
     const form = draft?.form || draft;
     if (!form || !Array.isArray(form.companies) || form.companies.length !== 5) return empty;
-    if (![2, 3, 4, 5].includes(form.companyCount)) return empty;
+    if (![1, 2, 3, 4, 5].includes(form.companyCount)) return empty;
     return {
       form: normalizeDocumentForm(form),
       record: draft.record || null,

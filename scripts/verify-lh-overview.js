@@ -40,7 +40,7 @@ async function main() {
       return resolveLhOverview(sample, { previousSnapshot, application, experience });
     };
     let cases = 0;
-    for (const industry of ['eung', 'tongsin', 'sobang']) for (const count of [2, 3, 4, 5]) {
+    for (const industry of ['eung', 'tongsin', 'sobang']) for (const count of [1, 2, 3, 4, 5]) {
       const sample = structuredClone(form);
       sample.industry = industry;
       sample.companyCount = count;
@@ -79,7 +79,8 @@ async function main() {
     incomplete.companies[0].share = '';
     assert.equal(resolve(incomplete).model.scores.management, null);
     assert.equal(resolve(incomplete).model.scores.construction, null);
-    assert.equal(resolve({ ...form, rangeId: 'lh-under50' }), null, 'The provided overview layout is only for LH 50–100');
+    assert.equal(resolve({ ...form, rangeId: 'lh-under50' }).model.rangeId, 'lh-under50');
+    assert.equal(resolve({ ...form, rangeId: 'lh-100to300' }), null, 'Unsupported ranges must not reuse qualification forms');
     const originalConstruction = resolve(form).model.scores.construction;
     assert.equal(resolve({ ...form, estimatedPrice: '1' }).model.scores.construction, originalConstruction, 'LH 50–100 follows the board base-amount denominator');
     assert.notEqual(resolve({ ...form, baseAmount: '19,113,240,000' }).model.scores.construction, originalConstruction);
@@ -155,6 +156,30 @@ async function main() {
     assert.ok(!experienceText.includes('협정보드기준'), 'Keep implementation notes out of the submitted form');
     assert.ok(!experienceText.includes('NaN'));
     await pdf.destroy();
+    const solo = structuredClone(form);
+    solo.companyCount = 1;
+    solo.companies[0].share = '100';
+    const soloSaved = await store.saveDocument({ title: '단독 제출 검증', form: solo });
+    const soloLoaded = await store.loadDocument(soloSaved.id);
+    assert.deepEqual(soloLoaded.form, solo);
+    const soloSummary = (await store.listDocuments()).find((document) => document.id === soloSaved.id);
+    assert.equal(soloSummary.companyCount, 1);
+    assert.deepEqual(soloSummary.companyNames, ['검증업체1(주)']);
+    assert.equal(soloLoaded.overviewSnapshot.model.complete, true);
+    assert.equal(soloLoaded.overviewSnapshot.model.shareSum, 100);
+    assert.equal(soloLoaded.applicationSnapshot.model.methods.length, 1);
+    const soloApplicationBytes = await createLhApplicationPdf(soloLoaded.applicationSnapshot.model, fonts);
+    const soloBytes = await createLhSubmissionPdf(soloApplicationBytes, soloLoaded.overviewSnapshot.model, fonts);
+    const soloPdf = await getDocument({ data: soloBytes.slice() }).promise;
+    assert.equal(soloPdf.numPages, 10);
+    for (let page = 1; page <= soloPdf.numPages; page++) {
+      const content = await (await soloPdf.getPage(page)).getTextContent();
+      const text = content.items.map((item) => item.str).join('').replace(/\s/g, '');
+      assert.ok(!text.includes('NaN'));
+      for (let company = 2; company <= 5; company++) assert.ok(!text.includes(`검증업체${company}(주)`));
+      if (page === 3) assert.ok(text.includes('검증업체1(주)'));
+    }
+    await soloPdf.destroy();
     for (const count of [3, 4, 5]) {
       const sample = structuredClone(form);
       sample.companyCount = count;

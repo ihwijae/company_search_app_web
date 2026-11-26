@@ -1,3 +1,4 @@
+import { getLhDocumentConfig } from '../../../../shared/agreements/lhDocumentConfig.js';
 import React, { useEffect, useRef, useState } from 'react';
 import Modal from '../../../../components/Modal.jsx';
 import { useFeedback } from '../../../../components/FeedbackProvider.jsx';
@@ -33,7 +34,12 @@ export default function LhApplicationPreview({ application, overview = null, fon
   const [attempt, setAttempt] = useState(0);
   const { model } = application;
   const overviewModel = overview?.model || null;
-  const selectedPage = PREVIEW_PAGES[pageNumber - 1];
+  const config = getLhDocumentConfig(application.scope.rangeId);
+  const previewPages = config.includeFixedSections ? PREVIEW_PAGES : [
+    ...PREVIEW_PAGES.slice(0, 8),
+    { ...PREVIEW_PAGES[9], title: config.bidTitle, tab: '5. 입찰가격' },
+  ];
+  const selectedPage = previewPages[pageNumber - 1];
   const submissionComplete = model.complete && Boolean(overviewModel?.complete);
 
   useEffect(() => {
@@ -58,10 +64,10 @@ export default function LhApplicationPreview({ application, overview = null, fon
     try { downloadApplicationPdf(pageNumber >= 2 ? bytes : applicationBytes, model, { includeOverview: pageNumber >= 2, draft: !submissionComplete }); } catch (failure) { notify({ message: failure.message || 'PDF를 내려받지 못했습니다.', type: 'error' }); }
   };
   const header = <header className="document-library-header"><span className="application-preview-page-number">{pageNumber}</span><div><span className="document-library-caption">LH · 적격심사 · {pageNumber === 1 ? '신청서' : '자기평가표'}</span><h2 id="lh-application-preview-title">{selectedPage.title}</h2><p>{selectedPage.description}</p></div><button type="button" className="document-library-close" ref={closeRef} onClick={onClose} aria-label="서류 미리보기 닫기">×</button></header>;
-  const footer = <footer className="document-library-footer"><p>{pageNumber === 1 ? '신청서 1페이지 · A4 PDF' : `신청서 + 자기평가표 10페이지${submissionComplete ? '' : ' · 작성 중'}`}</p><div className="document-library-footer__actions"><button type="button" className="document-library-button document-library-button--secondary" onClick={onClose}>닫기</button><button type="button" className="document-library-button document-library-button--primary" disabled={loading || !bytes || Boolean(error) || !model.complete} onClick={download}>{pageNumber === 1 ? '신청서 PDF 다운로드' : `신청서·자기평가표 PDF${submissionComplete ? '' : '(작성 중)'}`}</button></div></footer>;
+  const footer = <footer className="document-library-footer"><p>{pageNumber === 1 ? '신청서 1페이지 · A4 PDF' : `신청서 + 자기평가표 ${previewPages.length}페이지${submissionComplete ? '' : ' · 작성 중'}`}</p><div className="document-library-footer__actions"><button type="button" className="document-library-button document-library-button--secondary" onClick={onClose}>닫기</button><button type="button" className="document-library-button document-library-button--primary" disabled={loading || !bytes || Boolean(error) || !model.complete} onClick={download}>{pageNumber === 1 ? '신청서 PDF 다운로드' : `신청서·자기평가표 PDF${submissionComplete ? '' : '(작성 중)'}`}</button></div></footer>;
   return (
     <Modal open onClose={onClose} initialFocusRef={closeRef} ariaLabelledby="lh-application-preview-title" disableEscClose={false} maxWidth={1180} overlayClassName="document-library-overlay" boxClassName="document-library-dialog application-preview-dialog" header={header} footer={footer}>
-      {overview && <div className="application-preview-tabs" role="group" aria-label="서류 페이지 선택">{PREVIEW_PAGES.map((page, index) => <button key={index} type="button" aria-pressed={pageNumber === index + 1} onClick={() => setPageNumber(index + 1)}>{index + 1}페이지 · {page.tab}</button>)}</div>}
+      {overview && <div className="application-preview-tabs" role="group" aria-label="서류 페이지 선택">{previewPages.map((page, index) => <button key={index} type="button" aria-pressed={pageNumber === index + 1} onClick={() => setPageNumber(index + 1)}>{index + 1}페이지 · {page.tab}</button>)}</div>}
       <div className="application-preview-layout">
         <div className="application-preview-paper-area" aria-busy={loading}>
           {loading && <div className="document-library-state" role="status"><span className="document-library-spinner" /><p>서류 미리보기를 준비하고 있습니다.</p></div>}

@@ -1,5 +1,6 @@
 // Form wording from the supplied LH self-evaluation PDF. All applicant scores
 // are fixed at zero for now; no agreement-board credibility rules are changed.
+import { getLhDocumentConfig } from './lhDocumentConfig.js';
 const ITEMS = [
   {
     id: 'integrity', category: '시공업체로서의 성실성', allocation: '-2',
@@ -64,7 +65,7 @@ export function withFixedLhCredibility(snapshot) {
   const scores = { ...model.scores, credibility: 0 };
   const round = (value) => Math.round(value * 10 ** criteria.scoreDigits) / 10 ** criteria.scoreDigits;
   const shareComplete = Math.abs((model.shareSum || 0) - 100) < .01;
-  const subtotalKeys = ['construction', 'management', 'credibility', 'subcontract', 'material'];
+  const subtotalKeys = getLhDocumentConfig(snapshot.scope.rangeId).subtotalKeys;
   scores.subtotal = shareComplete && subtotalKeys.every((key) => Number.isFinite(scores[key]))
     ? round(subtotalKeys.reduce((sum, key) => sum + scores[key], 0)) : null;
   scores.total = scores.subtotal != null && Number.isFinite(scores.bid) ? round(scores.subtotal + scores.bid) : null;

@@ -7,6 +7,7 @@ import { appendLhManagementPages } from './lhManagementPdf.js';
 import { appendLhCredibilityPages } from './lhCredibilityPdf.js';
 import { appendLhFixedSectionsPage } from './lhFixedSectionsPdf.js';
 import { appendLhBidPricePage } from './lhBidPricePdf.js';
+import { getLhDocumentConfig } from '../agreements/lhDocumentConfig.js';
 
 const BLACK = rgb(0, 0, 0);
 const GRAY = rgb(.94, .94, .94);
@@ -27,6 +28,7 @@ function linesFor(text, font, size, width) {
 
 export async function createLhOverviewPdf(model, { regularFontBytes, boldFontBytes, subsetFonts = true, allowIncomplete = false } = {}) {
   if (!model || (!model.complete && !allowIncomplete)) throw new Error('총괄표에 미산정 항목이 남아 있습니다. 작성 중 PDF로 확인해 주세요.');
+  const config = getLhDocumentConfig(model.rangeId);
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
   const font = await pdf.embedFont(regularFontBytes, { subset: subsetFonts });
@@ -57,20 +59,20 @@ export async function createLhOverviewPdf(model, { regularFontBytes, boldFontByt
   }
   text('나. 종합평가', left + 7, top - 32, documentFontSize(11.5));
   top -= 45;
-  const widths = [66, 46, 46, 49, 49, 43, 60, 72, 50];
+  const { widths, columns } = config;
+  const lastIndex = widths.length - 1;
   const xs = widths.reduce((list, size) => [...list, list[list.length - 1] + size], [left]);
   const headerTop = 31;
   const headerBottom = 54;
   cell('구  분', xs[0], top, widths[0], headerTop + headerBottom);
   cell('종합평점', xs[1], top, widths[1], headerTop + headerBottom, { size: documentFontSize(9) });
-  cell('당 해 공 사 수 행 능 력', xs[2], top, widths.slice(2, 8).reduce((sum, size) => sum + size, 0), headerTop);
-  cell('입찰가격', xs[8], top, widths[8], headerTop + headerBottom, { size: documentFontSize(9) });
-  const headers = ['소 계', '시공경험', '경영상태', '신인도', '하도급\n관리계획의\n적정성', '자재 및\n인력조달\n가격의 적정성'];
-  headers.forEach((label, index) => cell(label, xs[index + 2], top - headerTop, widths[index + 2], headerBottom, { size: documentFontSize(9) }));
+  cell('당 해 공 사 수 행 능 력', xs[2], top, widths.slice(2, lastIndex).reduce((sum, size) => sum + size, 0), headerTop);
+  cell('입찰가격', xs[lastIndex], top, widths[lastIndex], headerTop + headerBottom, { size: documentFontSize(9) });
+  columns.forEach(({ label }, index) => cell(label, xs[index + 2], top - headerTop, widths[index + 2], headerBottom, { size: documentFontSize(9) }));
   top -= headerTop + headerBottom;
   widths.forEach((size, index) => cell(index === 0 ? '★심사평점' : '점', xs[index], top, size, 28, { size: documentFontSize(9.5), fill: GRAY }));
   top -= 28;
-  const keys = ['total', 'subtotal', 'construction', 'management', 'credibility', 'subcontract', 'material', 'bid'];
+  const keys = ['total', ...columns.map(({ key }) => key), 'bid'];
   cell('자기평가\n평    점', left, top, widths[0], 38, { size: documentFontSize(9.5) });
   keys.forEach((key, index) => cell(scoreText(model.scores[key]), xs[index + 1], top, widths[index + 1], 38, { size: documentFontSize(10) }));
   const noteY = top - 54;
@@ -81,7 +83,7 @@ export async function createLhOverviewPdf(model, { regularFontBytes, boldFontByt
   if (model.experiencePage) appendLhExperiencePage(pdf, model.experiencePage, { font, bold, color: BLACK });
   if (model.managementPage) appendLhManagementPages(pdf, model.managementPage, { font, bold, color: BLACK });
   if (model.credibilityPage) appendLhCredibilityPages(pdf, model.credibilityPage, { font, bold, color: BLACK });
-  appendLhFixedSectionsPage(pdf, model, { font, bold, color: BLACK });
+  if (config.includeFixedSections) appendLhFixedSectionsPage(pdf, model, { font, bold, color: BLACK });
   if (model.bidPricePage) appendLhBidPricePage(pdf, model.bidPricePage, { font, bold, color: BLACK });
   pdf.setTitle(`적격심사 자기평가 및 심사표 - ${model.noticeTitle || model.noticeNo}`);
   return pdf.save();

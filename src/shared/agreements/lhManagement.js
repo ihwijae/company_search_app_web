@@ -1,7 +1,10 @@
 // Uses the application's shared evaluator result. No second score evaluator here.
+import { getLhDocumentConfig } from './lhDocumentConfig.js';
+
 export function buildLhManagementPage(form, application, totalScore) {
   const criteria = application.criteria;
-  const tier = criteria.formulasDoc.agencies.find((agency) => agency.id === 'lh').tiers.find((item) => item.minAmount === 5000000000);
+  const config = getLhDocumentConfig(form.rangeId);
+  const tier = criteria.formulasDoc.agencies.find((agency) => agency.id === 'lh').tiers.find((item) => item.minAmount === config.tierMinAmount);
   const management = tier.rules.management;
   const financial = management.methods.find((method) => method.id === 'composite');
   const credit = management.methods.find((method) => method.id === 'credit');
@@ -23,8 +26,7 @@ export function buildLhManagementPage(form, application, totalScore) {
   if (Math.abs(companies.reduce((sum, company) => sum + (company.share || 0), 0) - 100) >= .01) missing.push('참여비율 합계 100%');
   return {
     version: 1, companies, industryAvg, financial, credit, totalScore, missing,
-    // The provided financial form shows a 45-point table converted to 15 points.
-    financialFormScale: 3,
+    financialFormScale: config.financialFormScale,
     financialSubtotal: companies.filter((company) => company.method === 'composite').reduce((sum, company) => sum + (company.contribution || 0), 0),
     creditSubtotal: companies.filter((company) => company.method === 'credit').reduce((sum, company) => sum + (company.contribution || 0), 0),
   };

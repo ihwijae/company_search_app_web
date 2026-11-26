@@ -43,7 +43,7 @@ function normalizeForm(form) {
   if (!form || typeof form !== 'object' || Array.isArray(form)) fail('서류 입력정보가 필요합니다.');
   if (!['qualification', 'comprehensive'].includes(form.reviewType)) fail('심사유형이 올바르지 않습니다.');
   if (!['eung', 'tongsin', 'sobang'].includes(form.industry)) fail('공종이 올바르지 않습니다.');
-  if (![2, 3, 4, 5].includes(form.companyCount) || !Array.isArray(form.companies) || form.companies.length !== 5) fail('참여업체 정보가 올바르지 않습니다.');
+  if (![1, 2, 3, 4, 5].includes(form.companyCount) || !Array.isArray(form.companies) || form.companies.length !== 5) fail('참여업체 정보가 올바르지 않습니다.');
   const fontFamily = text(form.fontFamily) || 'pretendard';
   if (!['pretendard', 'nanum-gothic', 'nanum-myeongjo'].includes(fontFamily)) fail('서류 글꼴이 올바르지 않습니다.');
   return {

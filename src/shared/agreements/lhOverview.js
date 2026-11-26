@@ -1,6 +1,7 @@
 import { LH_QUALIFICATION_RULES, parseLhEvaluationNumber } from './calculations/lhQualification.js';
 import { buildGroupSummaryMetrics } from './calculations/groupSummary.js';
-import { evaluateLhBidPrice, LH_BID_PRICE_RULES } from './calculations/lhBidPrice.js';
+import { evaluateLhBidPrice, getLhBidPriceRules } from './calculations/lhBidPrice.js';
+import { getLhDocumentConfig } from './lhDocumentConfig.js';
 import { buildLhManagementPage } from './lhManagement.js';
 import { withFixedLhCredibility } from './lhCredibility.js';
 
@@ -10,7 +11,8 @@ function completeOverview(snapshot) {
   const document = withFixedLhCredibility(snapshot);
   const bidPricePage = {
     inputs: { bidAmount: document.inputs.bidAmount || '', expectedPrice: document.inputs.expectedPrice || '', aValue: document.inputs.aValue || '' },
-    criteria: document.criteria.bidPrice || { ...LH_BID_PRICE_RULES },
+    criteria: document.criteria.bidPrice || { ...getLhBidPriceRules(document.scope.rangeId) },
+    title: getLhDocumentConfig(document.scope.rangeId).bidTitle,
     result: document.model.bidResult || null,
     score: document.model.scores.bid,
   };
@@ -18,7 +20,8 @@ function completeOverview(snapshot) {
 }
 
 export function resolveLhOverview(form, { previousSnapshot = null, application, experience, now = new Date().toISOString() } = {}) {
-  if (form.ownerId !== 'LH' || form.reviewType !== 'qualification' || form.rangeId !== 'lh-50to100' || !application || !experience) return null;
+  const config = getLhDocumentConfig(form.rangeId);
+  if (form.ownerId !== 'LH' || form.reviewType !== 'qualification' || !config || !application || !experience) return null;
   const scope = { ownerId: form.ownerId, reviewType: form.reviewType, rangeId: form.rangeId, industry: form.industry };
   const previous = previousSnapshot?.version === 1 && same(previousSnapshot.scope, scope) ? previousSnapshot : null;
   const experiencePage = { criteria: experience.criteria, result: experience.result };
@@ -44,18 +47,18 @@ export function resolveLhOverview(form, { previousSnapshot = null, application, 
     if (same(previous.model.companyProfiles, companyProfiles) && resolvedPage === priorPage && previous.model.managementPage) return completeOverview(previous);
     return completeOverview({ ...previous, capturedAt: now, criteria: { ...previous.criteria, experienceRules: resolvedPage.criteria }, model: { ...previous.model, companyProfiles, experiencePage: resolvedPage, managementPage: previous.model.managementPage || buildLhManagementPage(form, application, previous.model.scores.management) } });
   }
-  const tier = application.criteria.formulasDoc.agencies.find((agency) => agency.id === 'lh')?.tiers.find((item) => item.minAmount === 5000000000);
+  const tier = application.criteria.formulasDoc.agencies.find((agency) => agency.id === 'lh')?.tiers.find((item) => item.minAmount === config.tierMinAmount);
   const managementMax = Math.max(...(tier?.rules.management.methods || []).map((method) => Number(method.maxScore) || 0));
   const criteria = previous?.criteria || {
     version: 1,
     managementMax,
     scoreDigits: LH_QUALIFICATION_RULES.scoreDigits,
-    subcontractScore: LH_QUALIFICATION_RULES.ranges['lh-50to100'].subcontractScore,
-    materialScore: LH_QUALIFICATION_RULES.ranges['lh-50to100'].materialScore,
+    subcontractScore: LH_QUALIFICATION_RULES.ranges[form.rangeId].subcontractScore ?? null,
+    materialScore: LH_QUALIFICATION_RULES.ranges[form.rangeId].materialScore ?? null,
     managementRules: application.criteria,
     experienceRules: experience.criteria,
   };
-  const bidCriteria = criteria.bidPrice || { ...LH_BID_PRICE_RULES };
+  const bidCriteria = criteria.bidPrice || { ...getLhBidPriceRules(form.rangeId) };
   const updatedCriteria = { ...criteria, bidPrice: bidCriteria, experienceRules: experience.criteria };
   const bidResult = evaluateLhBidPrice(inputs, bidCriteria);
   const ids = inputs.members.map((member, index) => String(index));
@@ -90,7 +93,7 @@ export function resolveLhOverview(form, { previousSnapshot = null, application, 
   return completeOverview({
     version: 1, scope, inputs, criteria: updatedCriteria, capturedAt: now, criteriaCapturedAt: previous?.criteriaCapturedAt || now,
     model: {
-      templateVersion: 1, formLabel: '[별지 제2호서식]', rangeNote: '<별표 2의 경우>',
+      templateVersion: 1, rangeId: form.rangeId, formLabel: '[별지 제2호서식]', rangeNote: config.rangeNote,
       title: '적격심사 자기평가 및 심사표', noticeNo: form.noticeNo, noticeTitle: form.noticeTitle, bidDeadline: form.bidDeadline,
       scores, members: inputs.members, companyProfiles, experiencePage, managementPage: buildLhManagementPage(form, application, managementScore), missing, calculatedReady: missing.length === 0,
       pending: ['신인도'], complete: false, bidResult,

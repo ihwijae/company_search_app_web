@@ -5,6 +5,12 @@ export const LH_BID_PRICE_RULES = {
   version: 1, maxScore: 50, targetRatio: 0.9, coefficient: 2, ratioDigits: 4, scoreDigits: 2,
 };
 
+export const LH_UNDER50_BID_PRICE_RULES = {
+  ...LH_BID_PRICE_RULES, maxScore: 70, coefficient: 4,
+};
+
+export const getLhBidPriceRules = (rangeId) => rangeId === 'lh-under50' ? LH_UNDER50_BID_PRICE_RULES : LH_BID_PRICE_RULES;
+
 export function evaluateLhBidPrice({ bidAmount, expectedPrice, aValue }, criteria = LH_BID_PRICE_RULES) {
   const bid = parseLhEvaluationNumber(bidAmount);
   const expected = parseLhEvaluationNumber(expectedPrice);
