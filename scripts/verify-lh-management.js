@@ -52,6 +52,11 @@ async function main() {
       const financialText = financial.items.map((item) => item.str).join('').replace(/\s/g, '');
       const creditText = credit.items.map((item) => item.str).join('').replace(/\s/g, '');
       assert.ok(financialText.includes('3.경영상태평가'));
+      assert.ok(!financialText.includes('나.회사채'));
+      assert.ok(creditText.includes('나.회사채,기업어음,기업의신용평가등급으로평가하는경우'));
+      const creditTitle = credit.items.find((item) => item.str.startsWith('나. 회사채'));
+      const creditHeader = credit.items.find((item) => item.str === '회사채에 대한');
+      assert.ok(creditTitle.transform[5] > creditHeader.transform[5]);
       assert.ok(financialText.includes('18.13%/120.77%'));
       assert.ok(financialText.includes('A:22점'));
       assert.ok(creditText.includes('(A-)'));

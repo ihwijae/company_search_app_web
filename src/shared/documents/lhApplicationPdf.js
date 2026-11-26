@@ -59,7 +59,7 @@ export async function createLhApplicationPdf(model, { regularFontBytes, boldFont
   const { size, lineHeight } = layout;
   layout.paragraph.forEach((line, index) => draw(line, left, layout.paragraphY - index * lineHeight, size));
   center(dateLabel(model.writtenDate), layout.dateY, size);
-  draw('제 출 자 (공동수급체 대표자)', left + 30, layout.signatureY, size);
+  draw(model.methods.length === 1 ? '제 출 자' : '제 출 자 (공동수급체 대표자)', left + 30, layout.signatureY, size);
   let signatureY = layout.signatureY;
   for (const [label, lines] of [['주  소 :', layout.address], ['회사명 :', layout.company], ['대표자 :', layout.representative]]) {
     draw(label, left + 213, signatureY, size);

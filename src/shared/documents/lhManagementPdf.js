@@ -110,13 +110,13 @@ export function appendLhManagementPages(pdf, model, fonts) {
   top -= financialFormulaHeight;
   financialTable.cell('평가합계', left, top, dataX - left, 24);
   financialTable.cell(model.missing.length ? '-' : numeric(model.financialSubtotal, 4), dataX, top, 520 - (dataX - left), 24, { strong: true });
-  financialTable.write('나. 회사채, 기업어음, 기업의 신용평가등급으로 평가하는 경우', left, top - 48);
 
   const creditTable = createTable(pdf, fonts);
+  creditTable.write('나. 회사채, 기업어음, 기업의 신용평가등급으로 평가하는 경우', left, 790);
   const creditWidths = [66, 66, 174, 32];
   const creditX = left + creditWidths.reduce((sum, width) => sum + width, 0);
   const creditCompanyWidth = (520 - (creditX - left)) / companies.length;
-  top = header(creditTable, ['회사채에 대한\n신용평가등급', '기업어음에 대한\n신용평가등급', '기업신용평가등급', '평점'], creditWidths, 780, creditCompanyWidth);
+  top = header(creditTable, ['회사채에 대한\n신용평가등급', '기업어음에 대한\n신용평가등급', '기업신용평가등급', '평점'], creditWidths, 766, creditCompanyWidth);
   for (const [bond, paper, grades] of CREDIT_GROUPS) {
     const gradeRow = credit.gradeTable.find((row) => grades.includes(row.grade));
     if (!gradeRow) continue;

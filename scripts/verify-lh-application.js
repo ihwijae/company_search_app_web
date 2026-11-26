@@ -86,7 +86,7 @@ async function main() {
     };
     await assert.rejects(createLhApplicationPdf(resolveLhApplication(incomplete, options).model, fonts));
     const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
-    for (const rangeId of ['lh-under50', 'lh-50to100']) for (let count = 2; count <= 5; count++) {
+    for (const rangeId of ['lh-under50', 'lh-50to100']) for (let count = 1; count <= 5; count++) {
       const sample = { ...form, rangeId, companyCount: count };
       const generated = resolveLhApplication(sample, options);
       const bytes = await createLhApplicationPdf(generated.model, fonts);
@@ -101,6 +101,8 @@ async function main() {
       assert.match(text, /TEST-001/);
       assert.match(text, /검증용전기공사/);
       assert.match(text, /한국토지주택공사사장귀하/);
+      assert.ok(text.includes('제출자'));
+      assert.equal(text.includes('제출자(공동수급체대표자)'), count >= 2);
       assert.ok(text.includes(`검증업체${count}(주)`));
       assert.ok(items.every((item) => item.transform[4] >= 56 && item.transform[4] + item.width <= 540), 'All text stays within page margins');
       if (count === 3) await fs.writeFile('/tmp/lh-application-preview.pdf', bytes);
@@ -129,7 +131,7 @@ async function main() {
     oldRules.agencies.find((agency) => agency.id === 'lh').tiers[1].rules.management.methods.find((method) => method.id === 'credit').gradeTable.forEach((row) => { row.score = 0; });
     assert.equal(resolveLhApplication(form, { ...options, formulasDoc: oldRules }).model.methods[0].method, 'composite');
     assert.deepEqual(resolveLhApplication(form, { ...options, formulasDoc: oldRules, previousSnapshot: saved.applicationSnapshot }).model.methods, application.model.methods);
-    console.log('PASS: both LH qualification ranges, shared credit expiry, mixed methods, financial ties, missing inputs, 2–5 companies, Korean PDF text, A4 single page, margins, saved historical application and copy');
+    console.log('PASS: both LH qualification ranges, shared credit expiry, mixed methods, financial ties, missing inputs, 1–5 companies, solo/joint applicant labels, Korean PDF text, A4 single page, margins, saved historical application and copy');
     console.log('Synthetic preview PDF: /tmp/lh-application-preview.pdf');
   } finally {
     await fs.rm(root, { recursive: true, force: true });
