@@ -869,6 +869,10 @@ button.primary:hover { background: var(--accent-2); }
 .candidates-window__content { flex: 1; min-height: 0; overflow: hidden; }
 .candidates-window__filters { background: #ffffff; border-radius: 12px; }
 .candidates-window__results { background: #ffffff; border-radius: 12px; }
+.candidates-window .details-table tbody tr.region-company-row--placed td { background: #ecfdf5; }
+.candidates-window .details-table tbody tr.region-company-row--placed:hover td { background: #d1fae5; }
+.candidates-window .details-table tbody tr.region-company-row--placed td:first-child { box-shadow: inset 3px 0 #34d399; }
+.region-company-placed-badge { display: inline-flex; align-items: center; flex-shrink: 0; margin-left: 8px; padding: 2px 8px; border: 1px solid #a7f3d0; border-radius: 999px; background: #d1fae5; color: #065f46; font-size: 11px; font-weight: 600; line-height: 1.5; }
 .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: #e0ecff; color: var(--accent-2); border: 1px solid #dbeafe; }
 .status-pill { display: inline-flex; align-items: center; justify-content: center; height: 22px; border-radius: 999px; font-size: 11px; font-weight: 600; padding: 0 8px; }
 .status-latest { background: #dcfce7; color: #166534; }

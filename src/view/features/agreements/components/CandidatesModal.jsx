@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import AmountInput from '../../../../components/AmountInput.jsx';
+import { getRegionCompanyKey } from '../../../../shared/agreements/placement/regionImport.js';
 import { copyDocumentStyles } from '../../../../utils/windowBridge.js';
 import {
   isWomenOwnedCompany,
@@ -190,12 +191,14 @@ export default function CandidatesModal({
   noticeTitle = '',
   noticeDate = '',
   industryLabel = '',
+  boardPlacedCompanyKeys = EMPTY_ARRAY,
   initialCandidates = EMPTY_ARRAY,
   initialPinned = EMPTY_ARRAY,
   initialExcluded = EMPTY_ARRAY,
   onApply,
   readOnly = false,
 }) {
+  const boardPlacedCompanyKeySet = useMemo(() => new Set(boardPlacedCompanyKeys), [boardPlacedCompanyKeys]);
   const popupRef = useRef(getStoredRegionWindow());
   const [portalContainer, setPortalContainer] = useState(() => getStoredPortalContainer());
   const [applying, setApplying] = useState(false);
@@ -1072,6 +1075,7 @@ const industryToLabel = (type) => {
               </thead>
               <tbody>
                 {(sorted || []).map((c, idx) => {
+                  const isBoardPlaced = boardPlacedCompanyKeySet.has(getRegionCompanyKey(c));
                   const pct = c._pct;
                   const isAuto = autoPinned.has(c.id);
                   const debtMax = Number.isFinite(Number(c.debtMaxScore)) && Number(c.debtMaxScore) > 0
@@ -1159,11 +1163,12 @@ const industryToLabel = (type) => {
                   const qualityBadgeText = getQualityBadgeText(c);
                   const showBadges = c.wasAlwaysIncluded || c.summaryStatus || femaleOwned || qualityBadgeText;
                   return (
-                  <tr key={`${c.id}-${idx}`}>
+                  <tr key={`${c.id}-${idx}`} className={isBoardPlaced ? 'region-company-row--placed' : undefined}>
                     <td>
                       <div className="company-cell">
                         <div className="company-name-line">
                           <span className="company-name-text">{c.name}</span>
+                          {isBoardPlaced && <span className="region-company-placed-badge">보드 배치됨</span>}
                         </div>
                         {managerNames.length > 0 && (
                           <div className="company-manager-badges">

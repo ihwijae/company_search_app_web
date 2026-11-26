@@ -25,6 +25,7 @@ import { REGION_IMPORTED_FLAG } from '../../../../shared/agreements/placement/re
 import LhAwardHistoryWindow from './LhAwardHistoryWindow.jsx';
 import useAgreementBoardStorage from '../hooks/useAgreementBoardStorage.js';
 import useBoardSearch from '../hooks/useBoardSearch.js';
+import useBoardRegionSearch from '../hooks/useBoardRegionSearch.js';
 import useBoardInlineEditing from '../hooks/useBoardInlineEditing.js';
 import useTechnicianScoreWorkflow from '../hooks/useTechnicianScoreWorkflow.js';
 import useLhAwardHistoryWindow from '../hooks/useLhAwardHistoryWindow.js';
@@ -32,10 +33,6 @@ import AmountInput from '../../../../components/AmountInput.jsx';
 import Modal from '../../../../components/Modal.jsx';
 import { useFeedback } from '../../../../components/FeedbackProvider.jsx';
 import { copyDocumentStyles } from '../../../../utils/windowBridge.js';
-import {
-  openRegionSearch,
-  subscribeRegionSearch,
-} from './regionSearchStore.js';
 import { isWomenOwnedCompany, getQualityBadgeText, extractManagerNames } from '../../../../utils/companyIndicators.js';
 import { generateMany } from '../../../../shared/agreements/generator.js';
 import { AGREEMENT_GROUPS } from '../../../../shared/navigation.js';
@@ -1194,7 +1191,6 @@ export default function AgreementBoardWindow({
   const [exportTargetFileHandle, setExportTargetFileHandle] = React.useState(null);
   const [exportTargetName, setExportTargetName] = React.useState('');
   const [exportSheetName, setExportSheetName] = React.useState('');
-  const regionSearchSessionRef = React.useRef(null);
   const [technicianModalOpen, setTechnicianModalOpen] = React.useState(false);
   const technicianWindowRef = React.useRef(null);
   const [technicianPortalContainer, setTechnicianPortalContainer] = React.useState(null);
@@ -2077,27 +2073,6 @@ export default function AgreementBoardWindow({
     usesBidAmountCriteria,
     showPossibleShareLimit,
   ]);
-
-  const handleOpenRegionSearch = React.useCallback(() => {
-    const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    regionSearchSessionRef.current = sessionId;
-    const payload = { ...buildRegionSearchPayload(), sessionId };
-    openRegionSearch(payload);
-  }, [buildRegionSearchPayload]);
-
-  React.useEffect(() => {
-    const unsubscribe = subscribeRegionSearch((next) => {
-      if (!next.open && next.props?.sessionId === regionSearchSessionRef.current) {
-        regionSearchSessionRef.current = null;
-      }
-    });
-    return unsubscribe;
-  }, []);
-
-  React.useEffect(() => {
-    // Keep the opened region-search popup stable; changes apply on reopen/re-search.
-  }, [buildRegionSearchPayload]);
-
 
   const formatPercentValue = React.useCallback((value, digits = 1) => {
     if (value == null) return '-';
@@ -3648,6 +3623,12 @@ export default function AgreementBoardWindow({
     }
     return map;
   }, [representativeEntries, regionEntries]);
+
+  const handleOpenRegionSearch = useBoardRegionSearch({
+    buildRegionSearchPayload,
+    groupAssignments,
+    participantMap,
+  });
 
   const getGroupMinimumPerformanceContext = React.useCallback((groupIndex) => {
     const memberIds = Array.isArray(groupAssignments[groupIndex]) ? groupAssignments[groupIndex] : [];
