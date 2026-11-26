@@ -75,6 +75,13 @@
 .mail-folder-dialog__preview { display: grid; gap: 12px; padding: 17px 19px; border: 1px solid #e4ebf5; border-radius: 12px; background: #f8fafc; }
 .mail-folder-dialog__preview > div { display: flex; align-items: center; gap: 11px; font-size: 16px; color: #475569; }
 .mail-folder-dialog__preview svg { flex-shrink: 0; width: 19px; height: 19px; color: #7b9ac3; }
+.mail-folder-dialog__preview .mail-folder-dialog__parent { align-items: flex-start; color: #3b5f91; line-height: 1.7; }
+.mail-folder-dialog__parent svg { margin-top: 4px; }
+.mail-folder-dialog__parent strong { min-width: 0; font-size: 16px; font-weight: 650; }
+.mail-folder-dialog__preview .mail-folder-dialog__children { display: grid; gap: 12px; margin-left: 9px; padding: 5px 0 5px 22px; border-left: 1px solid #d9e3f2; }
+.mail-folder-dialog__children > div { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.mail-folder-dialog .mail-folder-dialog__result-location { margin-bottom: 14px; font-size: 14px; color: #64748b; }
+.mail-folder-dialog__result-location strong { display: block; margin-top: 5px; color: #3b5f91; font-size: 15px; font-weight: 650; }
 .mail-folder-dialog .mail-folder-dialog__more { font-size: 14px; color: #8797ad; padding-left: 30px; }
 .mail-folder-dialog .mail-folder-dialog__hint { margin-top: 9px; color: #7a8ba2; font-size: 14px; line-height: 1.8; }
 .mail-folder-dialog__body > .mail-folder-dialog__hint { margin-top: -12px; }

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { buildVendorFolderEntries, createVendorFolders } from '../services/vendorFolders.js';
+import { buildProjectFolderPlan, buildVendorFolderEntries, createProjectVendorFolders } from '../services/vendorFolders.js';
 
 export default function useVendorFolders(showStatusMessage) {
   const [directory, setDirectory] = useState(null);
@@ -29,8 +29,13 @@ export default function useVendorFolders(showStatusMessage) {
     }
   };
 
-  const generate = async (recipients) => {
+  const generate = async (recipients, { fileName, profileName, profileError } = {}) => {
     if (!directory || lock.current) return;
+    const plan = buildProjectFolderPlan(fileName, profileName);
+    if (profileError || plan.error) {
+      showStatusMessage(profileError || plan.error, { type: 'warning' });
+      return;
+    }
     const entries = buildVendorFolderEntries(recipients);
     if (!entries.length) {
       showStatusMessage('폴더를 생성할 업체명이 없습니다.', { type: 'warning' });
@@ -48,12 +53,12 @@ export default function useVendorFolders(showStatusMessage) {
       if (permission !== 'granted') {
         throw new Error('저장 폴더의 쓰기 권한이 필요합니다. 저장 폴더를 다시 선택한 뒤 폴더 생성 버튼을 눌러 주세요.');
       }
-      const nextResult = await createVendorFolders(directory, entries, (processed) => {
+      const nextResult = await createProjectVendorFolders(directory, plan.parentName, entries, (processed) => {
         setProgress({ processed, total: entries.length });
       });
       setResult(nextResult);
       showStatusMessage(
-        `업체 폴더: 생성 ${nextResult.created}개 / 기존 ${nextResult.existing}개 / 실패 ${nextResult.failures.length}개`,
+        `공고 폴더 ${nextResult.parentCreated ? '생성' : '사용'} 완료 · 업체 폴더: 생성 ${nextResult.created}개 / 기존 ${nextResult.existing}개 / 실패 ${nextResult.failures.length}개`,
         { type: nextResult.failures.length ? 'warning' : 'success' },
       );
     } catch (error) {

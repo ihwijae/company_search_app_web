@@ -13,7 +13,8 @@ import useVendorFolders from '../hooks/useVendorFolders.js';
 import VendorFolderDialog from '../components/VendorFolderDialog.jsx';
 import MailIcon from '../components/MailIcon.jsx';
 import MailAddressBookWindow from '../components/MailAddressBookWindow.jsx';
-import { getAssignedRecipients, normalizeMailVendorName as normalizeVendorName } from '../services/recipientAssignment.js';
+import { getAssignedRecipients, getLoadedSmtpProfile, normalizeMailVendorName as normalizeVendorName } from '../services/recipientAssignment.js';
+import { buildProjectFolderPlan } from '../services/vendorFolders.js';
 import './MailAutomationPage.css';
 
 const DEFAULT_PROJECT_INFO = {
@@ -401,6 +402,7 @@ function MailAutomationPageInner() {
   const [activeMenu, setActiveMenu] = React.useState('mail');
   const [ownerId, setOwnerId] = React.useState('');
   const [excelFile, setExcelFile] = React.useState(null);
+  const [folderSourceFileName, setFolderSourceFileName] = React.useState('');
   const [projectInfo, setProjectInfo] = React.useState(() => (
     isPlainObject(initialDraft.projectInfo)
       ? { ...DEFAULT_PROJECT_INFO, ...initialDraft.projectInfo }
@@ -784,6 +786,7 @@ function MailAutomationPageInner() {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
     setExcelFile(file);
+    setFolderSourceFileName('');
     showStatusMessage('엑셀 데이터를 분석 중입니다...');
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -944,6 +947,7 @@ function MailAutomationPageInner() {
         }
 
         setProjectInfo(extracted);
+        setFolderSourceFileName(file.name);
       } catch (error) {
         console.error('[mail] excel parsing failed', error);
         setProjectInfo(DEFAULT_PROJECT_INFO);
@@ -1380,6 +1384,7 @@ function MailAutomationPageInner() {
     });
     if (!confirmed) return;
     setExcelFile(null);
+    setFolderSourceFileName('');
     setProjectInfo({ ...DEFAULT_PROJECT_INFO });
     setRecipients([]);
     setVendorAmounts({});
@@ -1406,6 +1411,23 @@ function MailAutomationPageInner() {
       return next;
     });
   }, [showStatusMessage]);
+
+  const loadedFolderProfile = React.useMemo(() => getLoadedSmtpProfile({
+    loadedSmtpProfileId, selectedSmtpProfileId, smtpProfiles,
+  }), [loadedSmtpProfileId, selectedSmtpProfileId, smtpProfiles]);
+
+  const handleOpenFolderDialog = () => {
+    if (loadedFolderProfile.error) {
+      showStatusMessage(`${loadedFolderProfile.error} SMTP 프로필을 선택한 뒤 ‘불러오기’를 눌러 주세요.`, { type: 'warning', title: 'SMTP 프로필 확인' });
+      return;
+    }
+    const plan = buildProjectFolderPlan(folderSourceFileName, loadedFolderProfile.profileName);
+    if (plan.error) {
+      showStatusMessage(plan.error, { type: 'warning', title: '투찰금액 엑셀 확인' });
+      return;
+    }
+    setFolderDialogOpen(true);
+  };
 
   const assignedRecipients = React.useMemo(() => getAssignedRecipients({
     recipients, vendorWorkers, loadedSmtpProfileId, selectedSmtpProfileId, smtpProfiles,
@@ -1861,7 +1883,7 @@ function MailAutomationPageInner() {
                 <h2><MailIcon name="users" />업체 목록<span className="mail-recipient-count">{recipients.length}</span></h2>
                 <div className="mail-recipient-actions">
                   <button type="button" className="btn-soft" onClick={() => handleOpenAddressBook()}><MailIcon name="addressBook" size={15} />주소록</button>
-                  <button type="button" className="btn-soft" onClick={() => setFolderDialogOpen(true)} aria-haspopup="dialog" aria-expanded={folderDialogOpen}><MailIcon name="folder" size={15} />폴더생성</button>
+                  <button type="button" className="btn-soft" onClick={handleOpenFolderDialog} aria-haspopup="dialog" aria-expanded={folderDialogOpen}><MailIcon name="folder" size={15} />폴더생성</button>
                   <button
                     type="button"
                     className={`btn-soft ${includeGlobalRecipients ? 'btn-soft--active' : ''}`}
@@ -1998,7 +2020,7 @@ function MailAutomationPageInner() {
           </div>
         </div>
       </div>
-      {folderDialogOpen && <VendorFolderDialog folders={vendorFolders} recipients={recipients} assignment={assignedRecipients} onClose={() => setFolderDialogOpen(false)} />}
+      {folderDialogOpen && <VendorFolderDialog folders={vendorFolders} recipients={recipients} assignment={assignedRecipients} fileName={folderSourceFileName} profile={loadedFolderProfile} onClose={() => setFolderDialogOpen(false)} />}
       {previewOpen && (
         <div className="mail-addressbook-overlay" role="presentation">
           <div
