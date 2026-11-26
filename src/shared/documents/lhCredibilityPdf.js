@@ -18,7 +18,12 @@ export function appendLhCredibilityPages(pdf, model, { font, bold, color }) {
     }
     return lines;
   };
-  const groups = [model.items.slice(0, 4), model.items.slice(4)];
+  let offset = 0;
+  const groups = (model.itemsPerPage || [4, model.items.length - 4]).map((count) => {
+    const items = model.items.slice(offset, offset + count);
+    offset += count;
+    return items;
+  });
   groups.forEach((items, pageIndex) => {
     const page = pdf.addPage([595.28, 841.89]);
     const nameSize = model.members.length >= 4 ? documentFontSize(7) : documentFontSize(8);
@@ -27,7 +32,11 @@ export function appendLhCredibilityPages(pdf, model, { font, bold, color }) {
     const shareHeight = Math.max(18, ...model.members.map((member) => wrap(member.share == null ? '-' : `${member.share}%`, companyWidth - 8, shareSize).length * shareSize * 1.2 + 6));
     const headerHeight = nameHeight + shareHeight;
     const rowValues = (item) => [item.category, item.factor, item.allocation, item.grades, item.points];
-    const rowHeight = (item, size) => Math.max(38, ...rowValues(item).map((value, index) => wrap(value, widths[index] - 8, size).length * size * 1.2 + 12));
+    const rowTextSize = (item, size) => item.scoreBlank ? Math.min(size, documentFontSize(7)) : size;
+    const rowHeight = (item, size) => {
+      const textSize = rowTextSize(item, size);
+      return Math.max(item.scoreBlank ? 18 : 38, ...rowValues(item).map((value, index) => wrap(value, widths[index] - 8, textSize).length * textSize * 1.2 + 12));
+    };
     let size = documentFontSize(8);
     const footerHeight = pageIndex === groups.length - 1 ? 40 : 0;
     while (737 - headerHeight - items.reduce((sum, item) => sum + rowHeight(item, size), 0) - footerHeight < 57 && size > 7) size -= .25;
@@ -52,12 +61,31 @@ export function appendLhCredibilityPages(pdf, model, { font, bold, color }) {
     items.forEach((item) => {
       const height = rowHeight(item, size);
       let x = left;
-      rowValues(item).forEach((value, index) => { cell(value, x, top, widths[index], height, { align: index === 1 || index === 3 ? 'left' : 'center' }); x += widths[index]; });
+      rowValues(item).forEach((value, index) => {
+        cell(index === 4 && item.pointsByGrade ? '' : value, x, top, widths[index], height, { textSize: rowTextSize(item, size), align: index === 1 || index === 3 ? 'left' : 'center' });
+        if (index === 4 && item.pointsByGrade) {
+          const lineHeight = size * 1.2;
+          const lines = wrap(item.grades, widths[3] - 8, size);
+          let y = top - (height - lines.length * lineHeight) / 2 - size;
+          item.grades.split('\n\n').forEach((grade, gradeIndex) => {
+            const points = item.pointsByGrade[gradeIndex];
+            page.drawText(points, { x: x + (widths[index] - font.widthOfTextAtSize(points, size)) / 2, y, size, font, color });
+            y -= (wrap(grade, widths[3] - 8, size).length + 1) * lineHeight;
+          });
+        }
+        x += widths[index];
+      });
       item.scores.forEach((score, index) => cell(String(score), x + index * companyWidth, top, companyWidth, height, { textSize: documentFontSize(10), strong: true }));
       top -= height;
     });
     if (pageIndex === groups.length - 1) {
-      cell('합 계 [최종평점 : 신인도 평점 합계]\n배점 범위: +1.5 ~ -3', left, top, fixedWidth, 40, { textSize: documentFontSize(9) });
+      if (model.summaryAllocation) {
+        cell(model.summaryLabel, left, top, widths[0] + widths[1], 40, { textSize: documentFontSize(9) });
+        cell(model.summaryAllocation, left + widths[0] + widths[1], top, widths[2], 40, { textSize: documentFontSize(9) });
+        cell('', left + widths[0] + widths[1] + widths[2], top, widths[3] + widths[4], 40);
+      } else {
+        cell('합 계 [최종평점 : 신인도 평점 합계]\n배점 범위: +1.5 ~ -3', left, top, fixedWidth, 40, { textSize: documentFontSize(9) });
+      }
       model.members.forEach((member, index) => cell(String(member.score), left + fixedWidth + index * companyWidth, top, companyWidth, 40, { textSize: documentFontSize(10), strong: true }));
     }
   });

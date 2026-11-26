@@ -36,7 +36,7 @@ export default function LhApplicationPreview({ application, overview = null, fon
   const overviewModel = overview?.model || null;
   const config = getLhDocumentConfig(application.scope.rangeId);
   const previewPages = config.includeFixedSections ? PREVIEW_PAGES : [
-    ...PREVIEW_PAGES.slice(0, 8),
+    ...PREVIEW_PAGES.slice(0, 7),
     { ...PREVIEW_PAGES[9], title: config.bidTitle, tab: '5. 입찰가격' },
   ];
   const selectedPage = previewPages[pageNumber - 1];

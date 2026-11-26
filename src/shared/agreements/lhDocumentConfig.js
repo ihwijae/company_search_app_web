@@ -10,7 +10,7 @@ export const LH_DOCUMENT_CONFIG = {
   'lh-under50': {
     label: 'LH 50억 미만', tierMinAmount: 0, financialFormScale: 1,
     rangeNote: '<별표 3의 경우>', includeFixedSections: false,
-    bidTitle: '5. 입찰가격점수', bidPage: 9,
+    bidTitle: '5. 입찰가격점수', bidPage: 8,
     subtotalKeys: ['construction', 'management', 'credibility'],
     columns: COMMON_COLUMNS,
     widths: [76, 65, 65, 70, 70, 65, 70],

@@ -16,6 +16,7 @@ async function main() {
     const { createDocumentForm } = await load('src/view/features/document-generation/documentForm.js');
     const { resolveDocumentExperience } = await load('src/shared/agreements/documentEvaluation.js');
     const { resolveLhApplication } = await load('src/shared/agreements/lhApplication.js');
+    const { buildLhCredibilityPage } = await load('src/shared/agreements/lhCredibility.js');
     const { resolveLhOverview } = await load('src/shared/agreements/lhOverview.js');
     const { evaluateLhBidPrice, LH_UNDER50_BID_PRICE_RULES } = await load('src/shared/agreements/calculations/lhBidPrice.js');
     const { createLhApplicationPdf } = await load('src/shared/documents/lhApplicationPdf.js');
@@ -105,6 +106,16 @@ async function main() {
     assert.equal(upperRange.criteria.bidPrice.maxScore, 50);
     assert.equal(upperRange.model.scores.bid, 45);
     assert.equal(upperRange.model.scores.subcontract, 10);
+    const legacy = structuredClone(saved.overviewSnapshot);
+    legacy.model.credibilityPage = buildLhCredibilityPage(legacy.model.members);
+    const upgraded = resolve(form, legacy);
+    assert.equal(upgraded.model.credibilityPage.templateId, 'lh-under50-v1');
+    assert.deepEqual(upgraded.model.scores, legacy.model.scores);
+    assert.deepEqual(upgraded.criteria, legacy.criteria);
+    assert.equal(legacy.model.credibilityPage.items.length, 9);
+    assert.deepEqual(upgraded.model.credibilityPage.items.map((item) => item.id), ['employment', 'deleted']);
+    const updated = await store.saveDocument({ id: saved.id, revision: saved.revision, title: saved.title, form });
+    assert.equal(updated.overviewSnapshot.model.credibilityPage.templateId, 'lh-under50-v1');
     const fonts = {
       regularFontBytes: await fs.readFile(path.join(__dirname, '../src/assets/fonts/Pretendard-Regular.ttf')),
       boldFontBytes: await fs.readFile(path.join(__dirname, '../src/assets/fonts/Pretendard-Bold.ttf')),
@@ -113,7 +124,7 @@ async function main() {
     const bytes = await createLhSubmissionPdf(applicationBytes, restored.overviewSnapshot.model, fonts);
     await fs.writeFile('/tmp/lh-under50-submission-preview.pdf', bytes);
     const pdf = await getDocument({ data: bytes.slice() }).promise;
-    assert.equal(pdf.numPages, 9);
+    assert.equal(pdf.numPages, 8);
     for (let page = 1; page <= pdf.numPages; page++) {
       const items = (await (await pdf.getPage(page)).getTextContent()).items;
       const text = items.map((item) => item.str).join('').replace(/\s/g, '');
@@ -132,7 +143,12 @@ async function main() {
         assert.ok(text.includes('88점이상(3점)'));
         assert.ok(!text.includes('90점이상(5점)'));
       }
-      if (page === 9) {
+      if (page === 7) {
+        for (const fragment of ['4.신인도평가', '일자리창출', '퇴직급여액제외', '<삭제>', '합계', '+1.5', '+1.0', '+0.5']) assert.ok(text.includes(fragment), fragment);
+        for (const fragment of ['성실성', '하도급관련사항', '건설재해', '합산벌점', '-3']) assert.ok(!text.includes(fragment), fragment);
+        assert.ok(items.every((item) => item.transform[5] >= 55));
+      }
+      if (page === 8) {
         for (const fragment of ['5.입찰가격점수', '=70-4×', '2,462,500,000-100,000,000', '2,800,000,000-100,000,000', '0.8750', '60.00점']) assert.ok(text.includes(fragment), fragment);
       }
     }
@@ -144,13 +160,13 @@ async function main() {
     const fiveApplicationBytes = await createLhApplicationPdf(fiveApplication.model, fonts);
     const fiveBytes = await createLhSubmissionPdf(fiveApplicationBytes, resolve(fiveCompanies).model, fonts);
     const fivePdf = await getDocument({ data: fiveBytes.slice() }).promise;
-    assert.equal(fivePdf.numPages, 9);
-    for (const page of [3, 4, 5, 6, 7, 8]) {
+    assert.equal(fivePdf.numPages, 8);
+    for (const page of [3, 4, 5, 6, 7]) {
       const text = (await (await fivePdf.getPage(page)).getTextContent()).items.map((item) => item.str).join('').replace(/\s/g, '');
       assert.ok(text.includes('단독검증업체5'));
     }
     await fivePdf.destroy();
-    console.log(`PASS: ${cases} LH under-50 range/industry/member cases, bid formula, shared management, weighted-raw quality, incomplete inputs, saved copies and nine-page PDF`);
+    console.log(`PASS: ${cases} LH under-50 range/industry/member cases, bid formula, shared management, weighted-raw quality, incomplete inputs, saved copies and eight-page PDF`);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

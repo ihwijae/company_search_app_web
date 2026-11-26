@@ -1,6 +1,7 @@
 // Form wording from the supplied LH self-evaluation PDF. All applicant scores
 // are fixed at zero for now; no agreement-board credibility rules are changed.
 import { getLhDocumentConfig } from './lhDocumentConfig.js';
+import { LH_UNDER50_CREDIBILITY_TEMPLATE } from './lhUnder50Credibility.js';
 const ITEMS = [
   {
     id: 'integrity', category: '시공업체로서의 성실성', allocation: '-2',
@@ -51,16 +52,24 @@ const ITEMS = [
   },
 ];
 
-export function buildLhCredibilityPage(members) {
+export function buildLhCredibilityPage(members, rangeId = 'lh-50to100') {
+  const template = rangeId === 'lh-under50' ? LH_UNDER50_CREDIBILITY_TEMPLATE : null;
+  const { items, ...layout } = template || { items: ITEMS };
   return {
     version: 1, mode: 'fixed-zero', score: 0,
+    ...layout,
     members: members.map((member) => ({ name: member.name, share: member.share, score: 0 })),
-    items: ITEMS.map((item) => ({ ...item, scores: members.map(() => 0) })),
+    items: items.map((item) => ({ ...item, scores: members.map(() => item.scoreBlank ? '' : 0) })),
   };
 }
 
 export function withFixedLhCredibility(snapshot) {
-  if (snapshot.model.credibilityPage?.mode === 'fixed-zero') return snapshot;
+  if (snapshot.model.credibilityPage?.mode === 'fixed-zero') {
+    if (snapshot.scope.rangeId === 'lh-under50' && snapshot.model.credibilityPage.templateId !== LH_UNDER50_CREDIBILITY_TEMPLATE.templateId) {
+      return { ...snapshot, model: { ...snapshot.model, credibilityPage: buildLhCredibilityPage(snapshot.model.members, snapshot.scope.rangeId) } };
+    }
+    return snapshot;
+  }
   const { model, criteria } = snapshot;
   const scores = { ...model.scores, credibility: 0 };
   const round = (value) => Math.round(value * 10 ** criteria.scoreDigits) / 10 ** criteria.scoreDigits;
@@ -74,7 +83,7 @@ export function withFixedLhCredibility(snapshot) {
     ...snapshot,
     criteria: { ...criteria, credibility: { version: 1, mode: 'fixed-zero', score: 0 } },
     model: {
-      ...model, scores, pending, credibilityPage: buildLhCredibilityPage(model.members),
+      ...model, scores, pending, credibilityPage: buildLhCredibilityPage(model.members, snapshot.scope.rangeId),
       complete: model.missing.length === 0 && pending.length === 0 && scores.total != null,
     },
   };
