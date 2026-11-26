@@ -109,13 +109,13 @@ async function main() {
     const legacy = structuredClone(saved.overviewSnapshot);
     legacy.model.credibilityPage = buildLhCredibilityPage(legacy.model.members);
     const upgraded = resolve(form, legacy);
-    assert.equal(upgraded.model.credibilityPage.templateId, 'lh-under50-v1');
+    assert.equal(upgraded.model.credibilityPage.templateId, 'lh-under50-v2');
     assert.deepEqual(upgraded.model.scores, legacy.model.scores);
     assert.deepEqual(upgraded.criteria, legacy.criteria);
     assert.equal(legacy.model.credibilityPage.items.length, 9);
     assert.deepEqual(upgraded.model.credibilityPage.items.map((item) => item.id), ['employment', 'deleted']);
     const updated = await store.saveDocument({ id: saved.id, revision: saved.revision, title: saved.title, form });
-    assert.equal(updated.overviewSnapshot.model.credibilityPage.templateId, 'lh-under50-v1');
+    assert.equal(updated.overviewSnapshot.model.credibilityPage.templateId, 'lh-under50-v2');
     const fonts = {
       regularFontBytes: await fs.readFile(path.join(__dirname, '../src/assets/fonts/Pretendard-Regular.ttf')),
       boldFontBytes: await fs.readFile(path.join(__dirname, '../src/assets/fonts/Pretendard-Bold.ttf')),
@@ -144,7 +144,7 @@ async function main() {
         assert.ok(!text.includes('90점이상(5점)'));
       }
       if (page === 7) {
-        for (const fragment of ['4.신인도평가', '일자리창출', '퇴직급여액제외', '<삭제>', '합계', '+1.5', '+1.0', '+0.5']) assert.ok(text.includes(fragment), fragment);
+        for (const fragment of ['4.신인도평가', '일자리창출', '퇴직급여액제외', '<삭제>', '합계[최종평점:신인도평점합계]', '배점범위:+1.5', '+1.0', '+0.5']) assert.ok(text.includes(fragment), fragment);
         for (const fragment of ['성실성', '하도급관련사항', '건설재해', '합산벌점', '-3']) assert.ok(!text.includes(fragment), fragment);
         assert.ok(items.every((item) => item.transform[5] >= 55));
       }

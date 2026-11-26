@@ -79,13 +79,7 @@ export function appendLhCredibilityPages(pdf, model, { font, bold, color }) {
       top -= height;
     });
     if (pageIndex === groups.length - 1) {
-      if (model.summaryAllocation) {
-        cell(model.summaryLabel, left, top, widths[0] + widths[1], 40, { textSize: documentFontSize(9) });
-        cell(model.summaryAllocation, left + widths[0] + widths[1], top, widths[2], 40, { textSize: documentFontSize(9) });
-        cell('', left + widths[0] + widths[1] + widths[2], top, widths[3] + widths[4], 40);
-      } else {
-        cell('합 계 [최종평점 : 신인도 평점 합계]\n배점 범위: +1.5 ~ -3', left, top, fixedWidth, 40, { textSize: documentFontSize(9) });
-      }
+      cell(model.summaryLabel || '합 계 [최종평점 : 신인도 평점 합계]\n배점 범위: +1.5 ~ -3', left, top, fixedWidth, 40, { textSize: documentFontSize(9) });
       model.members.forEach((member, index) => cell(String(member.score), left + fixedWidth + index * companyWidth, top, companyWidth, 40, { textSize: documentFontSize(10), strong: true }));
     }
   });

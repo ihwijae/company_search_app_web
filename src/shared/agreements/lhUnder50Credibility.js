@@ -1,9 +1,8 @@
 // Wording and rows from 서류양식/LH_50억미만_신인도.png.
 export const LH_UNDER50_CREDIBILITY_TEMPLATE = {
-  templateId: 'lh-under50-v1',
+  templateId: 'lh-under50-v2',
   itemsPerPage: [2],
-  summaryLabel: '합 계',
-  summaryAllocation: '+1.5',
+  summaryLabel: '합 계 [최종평점 : 신인도 평점 합계]\n배점 범위: +1.5',
   items: [
     {
       id: 'employment', category: '일자리 창출 관련', allocation: '+1.5',
