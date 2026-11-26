@@ -1,0 +1,122 @@
+.dialog-overlay.mail-folder-overlay {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 24px;
+  background: rgba(15, 23, 42, .48);
+  backdrop-filter: blur(5px);
+}
+
+.dialog-box.mail-folder-dialog {
+  padding: 0;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .7);
+  border-radius: 23px;
+  background: #fff;
+  color: #1e293b;
+  box-shadow: 0 32px 100px #0f172a40;
+  font-family: inherit;
+  font-size: 15px;
+}
+
+.mail-folder-dialog *,
+.mail-folder-dialog *::before,
+.mail-folder-dialog *::after { box-sizing: border-box; }
+.mail-folder-dialog h2,
+.mail-folder-dialog h3,
+.mail-folder-dialog p { margin: 0; }
+.mail-folder-dialog p { font-size: 16px; font-weight: 400; line-height: 1.7; color: #64748b; }
+.mail-folder-dialog button { font: inherit; cursor: pointer; transition: background .15s, border-color .15s; }
+.mail-folder-dialog button:focus-visible { outline: 3px solid #93bafc; outline-offset: 3px; }
+.mail-folder-dialog button:disabled { cursor: not-allowed; opacity: .55; }
+
+.mail-folder-dialog__header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 26px 28px;
+  border-bottom: 1px solid #e6edf5;
+  background: linear-gradient(115deg, #f4f8ff, #fff);
+  flex-shrink: 0;
+}
+.mail-folder-dialog__header > div { min-width: 0; }
+.mail-folder-dialog__icon { display: grid; place-items: center; flex-shrink: 0; width: 50px; height: 54px; border: 1px solid #dbe8fd; border-radius: 15px; background: #eaf2ff; color: #2563eb; }
+.mail-folder-dialog__icon svg { width: 27px; height: 27px; }
+.mail-folder-dialog__caption { display: block; margin-bottom: 5px; color: #6b85a8; font-size: 14px; font-weight: 650; }
+.mail-folder-dialog__header h2 { margin-bottom: 5px; font-size: 24px; font-weight: 750; letter-spacing: -.5px; }
+.mail-folder-dialog .mail-folder-dialog__close { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; margin-left: auto; align-self: flex-start; flex-shrink: 0; border: 1px solid #e2e8f0; border-radius: 10px; color: #64748b; background: #fff; }
+.mail-folder-dialog__close:hover { background: #f1f5f9; }
+
+.mail-folder-dialog__body { display: grid; gap: 22px; padding: 26px 28px; overflow-wrap: anywhere; }
+.mail-folder-dialog__section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.mail-folder-dialog h3 { font-size: 16px; font-weight: 700; color: #334155; }
+.mail-folder-dialog__badge { padding: 4px 9px; border-radius: 6px; background: #f1f5f9; color: #64748b; font-size: 14px; font-weight: 600; }
+.mail-folder-dialog__badge.is-ready { color: #2563eb; background: #eaf2ff; }
+.mail-folder-dialog__count { color: #2563eb; font-size: 15px; font-weight: 650; }
+.mail-folder-dialog__filter { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; padding: 17px; border: 1px solid #dce5f2; border-radius: 12px; background: #f8faff; }
+.mail-folder-dialog__filter > div { min-width: 0; }
+.mail-folder-dialog__filter strong { font-size: 16px; color: #334155; }
+.mail-folder-dialog__filter p { margin-top: 6px; font-size: 14px; }
+.mail-folder-dialog__filter button { flex-shrink: 0; }
+.mail-folder-dialog__filter button[aria-pressed="true"] { border-color: #b4cff8; background: #eaf2ff; color: #2563eb; }
+.mail-folder-dialog__filter-error { margin-bottom: 16px; }
+.mail-folder-dialog__path { display: flex; align-items: center; gap: 13px; padding: 17px; border: 1px solid #dce5f2; border-radius: 12px; background: #f8faff; }
+.mail-folder-dialog__path-icon { color: #7192bd; display: flex; flex-shrink: 0; }
+.mail-folder-dialog__path > div { min-width: 0; flex: 1; }
+.mail-folder-dialog__path strong { font-size: 17px; font-weight: 650; }
+.mail-folder-dialog__path p { margin-top: 5px; font-size: 14px; }
+.mail-folder-dialog__path button { flex-shrink: 0; }
+.mail-folder-dialog__preview { display: grid; gap: 12px; padding: 17px 19px; border: 1px solid #e4ebf5; border-radius: 12px; background: #f8fafc; }
+.mail-folder-dialog__preview > div { display: flex; align-items: center; gap: 11px; font-size: 16px; color: #475569; }
+.mail-folder-dialog__preview svg { flex-shrink: 0; width: 19px; height: 19px; color: #7b9ac3; }
+.mail-folder-dialog .mail-folder-dialog__more { font-size: 14px; color: #8797ad; padding-left: 30px; }
+.mail-folder-dialog .mail-folder-dialog__hint { margin-top: 9px; color: #7a8ba2; font-size: 14px; line-height: 1.8; }
+.mail-folder-dialog__body > .mail-folder-dialog__hint { margin-top: -12px; }
+.mail-folder-dialog__body > [role="status"]:empty { display: none; }
+.mail-folder-dialog__progress p { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
+.mail-folder-dialog__progress progress { width: 100%; height: 8px; accent-color: #2563eb; }
+.mail-folder-dialog__result { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.mail-folder-dialog__result > div { display: grid; gap: 9px; padding: 15px; border: 1px solid #e4ebf5; border-radius: 10px; background: #f8fafc; }
+.mail-folder-dialog__result span { color: #64748b; font-size: 14px; }
+.mail-folder-dialog__result strong { color: #334155; font-size: 24px; }
+.mail-folder-dialog__result > div:first-child strong { color: #2563eb; }
+.mail-folder-dialog__result small { margin-left: 4px; font-size: 14px; font-weight: 400; }
+.mail-folder-dialog__error { padding: 15px 17px; border: 1px solid #fecdd3; border-radius: 10px; background: #fff1f2; color: #b42338; font-size: 15px; line-height: 1.7; }
+.mail-folder-dialog__error summary { cursor: pointer; }
+.mail-folder-dialog__error ul { margin: 10px 0 0; padding-left: 20px; }
+.mail-folder-dialog__notice { display: grid; gap: 12px; padding: 20px; border: 1px solid #dce5f2; border-radius: 12px; background: #f8faff; }
+
+.mail-folder-dialog__footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 28px; border-top: 1px solid #e6edf5; background: #fff; flex-shrink: 0; }
+.mail-folder-dialog__footer p { font-size: 15px; }
+.mail-folder-dialog__footer > div { display: flex; gap: 9px; flex-shrink: 0; }
+.mail-folder-dialog .mail-folder-dialog__button { display: inline-flex; align-items: center; justify-content: center; padding: 11px 17px; min-height: 48px; border: 1px solid #dce4ef; border-radius: 10px; background: #fff; color: #475569; font-size: 16px; font-weight: 650; }
+.mail-folder-dialog__button:hover:not(:disabled) { background: #f1f5f9; }
+.mail-folder-dialog .mail-folder-dialog__button--primary { background: #2563eb; color: #fff; border-color: #2563eb; box-shadow: 0 3px 8px #2563eb20; }
+.mail-folder-dialog__button--primary:hover:not(:disabled) { background: #1d4ed8; }
+.mail-folder-dialog__button--primary:disabled { background: #e8eef8; color: #8697b1; border-color: #e8eef8; opacity: 1; box-shadow: none; }
+
+@media (max-width: 650px) {
+  .dialog-overlay.mail-folder-overlay { padding: 12px; }
+  .mail-folder-dialog__header { padding: 21px 18px; gap: 12px; }
+  .mail-folder-dialog__icon { width: 40px; height: 44px; border-radius: 12px; }
+  .mail-folder-dialog__header h2 { font-size: 21px; }
+  .mail-folder-dialog__header p { font-size: 15px; }
+  .mail-folder-dialog__body { padding: 22px 18px; }
+  .mail-folder-dialog__path { flex-wrap: wrap; }
+  .mail-folder-dialog__path > div { flex-basis: calc(100% - 40px); }
+  .mail-folder-dialog__path button { width: 100%; }
+  .mail-folder-dialog__filter { flex-wrap: wrap; }
+  .mail-folder-dialog__filter button { width: 100%; }
+  .mail-folder-dialog__footer { padding: 16px 18px; flex-wrap: wrap; }
+  .mail-folder-dialog__footer > div { width: 100%; justify-content: flex-end; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mail-folder-dialog button { transition: none; }
+}

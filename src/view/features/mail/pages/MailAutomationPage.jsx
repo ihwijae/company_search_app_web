@@ -9,6 +9,12 @@ import { loadPersisted, savePersisted } from '../../../../shared/persistence.js'
 import mailAddressBookClient from '../../../../shared/mailAddressBookClient.js';
 import mailClient from '../../../../shared/mailClient.js';
 import { copyDocumentStyles } from '../../../../utils/windowBridge.js';
+import useVendorFolders from '../hooks/useVendorFolders.js';
+import VendorFolderDialog from '../components/VendorFolderDialog.jsx';
+import MailIcon from '../components/MailIcon.jsx';
+import MailAddressBookWindow from '../components/MailAddressBookWindow.jsx';
+import { getAssignedRecipients, normalizeMailVendorName as normalizeVendorName } from '../services/recipientAssignment.js';
+import './MailAutomationPage.css';
 
 const DEFAULT_PROJECT_INFO = {
   announcementNumber: '공고번호를 불러오세요',
@@ -25,12 +31,6 @@ const GLOBAL_RECIPIENTS = Object.freeze([
 ]);
 const MAIL_DRAFT_STORAGE_KEY = 'mail:draft';
 
-const normalizeVendorName = (name = '') => name
-  .replace(/[\s]/g, '')
-  .replace(/^[㈜\(주\)\(합\)\(유\)\(재\)]+/gi, '')
-  .replace(/^주식회사|^유한회사|^합자회사|^재단법인|^사단법인/gi, '')
-  .replace(/(㈜|\(주\)|주식회사|\(합\)|합자회사|\(유\)|유한회사|\(재\)|재단법인|\(사\)|사단법인)$/gi, '')
-  .toLowerCase();
 const trimValue = (value) => (typeof value === 'string' ? value.trim() : '');
 const formatEmailAddress = (name, email) => {
   const normalizedEmail = trimValue(email);
@@ -396,6 +396,8 @@ function MailAutomationPageInner() {
     });
   }, [notify]);
 
+  const vendorFolders = useVendorFolders(showStatusMessage);
+  const [folderDialogOpen, setFolderDialogOpen] = React.useState(false);
   const [activeMenu, setActiveMenu] = React.useState('mail');
   const [ownerId, setOwnerId] = React.useState('');
   const [excelFile, setExcelFile] = React.useState(null);
@@ -774,6 +776,11 @@ function MailAutomationPageInner() {
   }, []);
 
   const handleExcelChange = (event) => {
+    if (vendorFolders.busy) {
+      event.target.value = '';
+      showStatusMessage('폴더 작업이 끝난 뒤 엑셀을 불러와 주세요.', { type: 'warning' });
+      return;
+    }
     const file = event.target.files && event.target.files[0];
     if (!file) return;
     setExcelFile(file);
@@ -1400,45 +1407,18 @@ function MailAutomationPageInner() {
     });
   }, [showStatusMessage]);
 
+  const assignedRecipients = React.useMemo(() => getAssignedRecipients({
+    recipients, vendorWorkers, loadedSmtpProfileId, selectedSmtpProfileId, smtpProfiles,
+  }), [recipients, vendorWorkers, loadedSmtpProfileId, selectedSmtpProfileId, smtpProfiles]);
+
   const handleKeepAssignedRecipients = React.useCallback(() => {
-    if (!loadedSmtpProfileId) {
-      showStatusMessage('먼저 SMTP 프로필을 불러오세요.', { type: 'warning' });
+    if (assignedRecipients.error) {
+      showStatusMessage(assignedRecipients.error, { type: 'warning' });
       return;
     }
-    if (selectedSmtpProfileId && selectedSmtpProfileId !== loadedSmtpProfileId) {
-      showStatusMessage('선택한 SMTP 프로필을 먼저 불러오세요.', { type: 'warning' });
-      return;
-    }
-    const profile = smtpProfiles.find((item) => item.id === loadedSmtpProfileId);
-    if (!profile) {
-      showStatusMessage('불러온 SMTP 프로필을 찾을 수 없습니다.', { type: 'warning' });
-      return;
-    }
-    const rawName = trimValue(profile.name);
-    if (!rawName) {
-      showStatusMessage('SMTP 프로필 이름이 비어 있습니다.', { type: 'warning' });
-      return;
-    }
-    const normalizedName = rawName.replace(/\s+/g, '');
-    const surname = normalizedName.slice(0, 1);
-    const tokens = [normalizedName];
-    if (surname && surname !== normalizedName) {
-      tokens.push(surname);
-    }
-    const total = recipients.length;
-    const nextList = recipients.filter((item) => {
-      const normalizedVendor = normalizeVendorName(item.vendorName);
-      const worker = (item.workerName || vendorWorkers[normalizedVendor] || '').replace(/\s+/g, '');
-      if (!worker) return false;
-      return tokens.some((token) => token && worker.includes(token));
-    });
-    if (!nextList.length) {
-      showStatusMessage(`'${rawName}' 담당 업체를 찾지 못했습니다.`, { type: 'warning' });
-      return;
-    }
-    setRecipients(nextList);
-    showStatusMessage(`'${rawName}' 담당 업체만 남겼습니다. (${nextList.length}/${total}건)`);
-  }, [loadedSmtpProfileId, selectedSmtpProfileId, smtpProfiles, recipients, vendorWorkers, showStatusMessage]);
+    setRecipients(assignedRecipients.recipients);
+    showStatusMessage(`'${assignedRecipients.profileName}' 담당 업체만 남겼습니다. (${assignedRecipients.recipients.length}/${recipients.length}건)`);
+  }, [assignedRecipients, recipients.length, showStatusMessage]);
 
   const buildRecipientContext = React.useCallback((recipient) => ({
     announcementNumber: projectInfo.announcementNumber || '',
@@ -1703,118 +1683,29 @@ function MailAutomationPageInner() {
   }, [ensureOwnerSelected, recipients, subjectTemplate, bodyTemplate, buildRecipientContext, buildFallbackText]);
 
   const addressBookWindowContent = (
-    <div className="mail-addressbook-window">
-      <header className="mail-addressbook-window__header">
-        <div className="mail-addressbook-window__title">
-          <h1>{addressBookTargetId ? '업체 담당자 선택' : '메일 주소록'}</h1>
-          <p>
-            총 {contacts.length}건
-            {contactsLoading ? ' · 불러오는 중' : ''}
-            {!contactsLoading && contactsDirty ? ' · 저장 안 됨' : ''}
-            {addressBookTargetId ? ` · 선택 ${selectedAddressBookIds.length}건` : ''}
-          </p>
-        </div>
-        <div className="mail-addressbook-window__toolbar">
-          <button type="button" className="btn-sm btn-soft" onClick={handleAddContact} disabled={contactsLoading || contactsSaving}>주소 추가</button>
-          <button type="button" className="btn-sm btn-soft" onClick={() => contactsFileInputRef.current?.click()} disabled={contactsLoading || contactsSaving}>가져오기</button>
-          <button type="button" className="btn-sm btn-soft" onClick={handleExportContacts} disabled={!contacts.length}>내보내기</button>
-          <button
-            type="button"
-            className="btn-sm btn-primary"
-            onClick={handleManualSaveContacts}
-            disabled={contactsLoading || contactsSaving || !contactsDirty}
-          >
-            {contactsSaving ? '저장 중...' : '저장'}
-          </button>
-          {addressBookTargetId ? (
-            <button type="button" className="btn-sm btn-primary" onClick={handleApplySelectedContactsToRecipient}>
-              선택한 담당자 추가
-            </button>
-          ) : null}
-          <button type="button" className="btn-sm btn-muted" onClick={handleCloseAddressBook}>창 닫기</button>
-        </div>
-      </header>
-
-      <section className="mail-addressbook-window__search">
-        <input
-          value={addressBookQuery}
-          onChange={(event) => setAddressBookQuery(event.target.value)}
-          placeholder="업체명, 담당자, 이메일 검색"
-        />
-        <input
-          ref={contactsFileInputRef}
-          type="file"
-          accept=".json"
-          style={{ display: 'none' }}
-          onChange={handleImportContacts}
-        />
-      </section>
-
-      <section className="mail-addressbook-window__table">
-        <div
-          className="mail-addressbook-window__table-head"
-          style={addressBookTargetId ? { gridTemplateColumns: '52px minmax(220px,1.5fr) minmax(160px,1fr) minmax(240px,1.3fr) 160px' } : undefined}
-        >
-          {addressBookTargetId ? <span>선택</span> : null}
-          <span>업체명</span>
-          <span>담당자</span>
-          <span>이메일</span>
-          <span>작업</span>
-        </div>
-        <div className="mail-addressbook-window__table-body">
-          {filteredContacts.length ? filteredContacts.map((contact) => (
-            <div
-              key={contact.id}
-              className="mail-addressbook-window__row"
-              style={addressBookTargetId ? { gridTemplateColumns: '52px minmax(220px,1.5fr) minmax(160px,1fr) minmax(240px,1.3fr) 160px' } : undefined}
-            >
-              {addressBookTargetId ? (
-                <label className="mail-addressbook-window__check">
-                  <input
-                    type="checkbox"
-                    checked={selectedAddressBookIds.includes(contact.id)}
-                    onChange={() => handleToggleAddressBookSelection(contact.id)}
-                  />
-                </label>
-              ) : null}
-              <input
-                value={contact.vendorName}
-                onChange={(event) => handleContactFieldChange(contact.id, 'vendorName', event.target.value)}
-                placeholder="업체명"
-              />
-              <input
-                value={contact.contactName}
-                onChange={(event) => handleContactFieldChange(contact.id, 'contactName', event.target.value)}
-                placeholder="담당자"
-              />
-              <input
-                value={contact.email}
-                onChange={(event) => handleContactFieldChange(contact.id, 'email', event.target.value)}
-                placeholder="example@company.com"
-              />
-              <div className="mail-addressbook-window__row-actions">
-                <button
-                  type="button"
-                  className="btn-sm btn-soft"
-                  onClick={() => {
-                    if (addressBookTargetId) {
-                      handleApplyContactToRecipient(addressBookTargetId, contact);
-                    } else {
-                      handleUseContact(contact);
-                    }
-                  }}
-                >
-                  {addressBookTargetId ? '1명 추가' : '추가'}
-                </button>
-                <button type="button" className="btn-sm btn-muted" onClick={() => handleRemoveContact(contact.id)}>삭제</button>
-              </div>
-            </div>
-          )) : (
-            <div className="mail-addressbook-window__empty">주소록이 비어 있습니다. 주소를 추가하거나 가져오세요.</div>
-          )}
-        </div>
-      </section>
-    </div>
+    <MailAddressBookWindow
+      contacts={contacts}
+      filteredContacts={filteredContacts}
+      loading={contactsLoading}
+      saving={contactsSaving}
+      dirty={contactsDirty}
+      targetId={addressBookTargetId}
+      selectedIds={selectedAddressBookIds}
+      query={addressBookQuery}
+      fileInputRef={contactsFileInputRef}
+      onQueryChange={setAddressBookQuery}
+      onAdd={handleAddContact}
+      onImport={handleImportContacts}
+      onExport={handleExportContacts}
+      onSave={handleManualSaveContacts}
+      onApplySelected={handleApplySelectedContactsToRecipient}
+      onClose={handleCloseAddressBook}
+      onToggleSelection={handleToggleAddressBookSelection}
+      onFieldChange={handleContactFieldChange}
+      onApplyContact={handleApplyContactToRecipient}
+      onUseContact={handleUseContact}
+      onRemove={handleRemoveContact}
+    />
   );
 
   return (
@@ -1827,8 +1718,8 @@ function MailAutomationPageInner() {
           <div className="mail-layout">
             <section className="mail-panel mail-panel--config">
               <header className="mail-panel__header">
-                <h2>엑셀 불러오기</h2>
-                <button type="button" className="btn-soft" onClick={() => excelInputRef.current?.click()}>파일 선택</button>
+                <h2><MailIcon name="file" />엑셀 불러오기</h2>
+                <button type="button" className="btn-soft" onClick={() => excelInputRef.current?.click()}><MailIcon name="upload" size={15} />파일 선택</button>
                 <input
                   ref={excelInputRef}
                   type="file"
@@ -1838,19 +1729,21 @@ function MailAutomationPageInner() {
                 />
               </header>
               <div className="mail-upload">
-                <div className="mail-upload__dropzone" role="presentation" onClick={() => excelInputRef.current?.click()}>
+                <button type="button" className={`mail-upload__dropzone${excelFile ? ' is-loaded' : ''}`} onClick={() => excelInputRef.current?.click()}>
                   {excelFile ? (
                     <>
+                      <span className="mail-upload__icon"><MailIcon name="file" size={23} /></span>
                       <strong>{excelFile.name}</strong>
                       <span>{(excelFile.size / 1024).toFixed(1)} KB</span>
                     </>
                   ) : (
                     <>
-                      <span className="mail-upload__icon">📄</span>
-                      <p>엑셀 파일을 끌어오거나 클릭하여 선택하세요 (.xlsx / .xlsm)</p>
+                      <span className="mail-upload__icon"><MailIcon name="upload" size={23} /></span>
+                      <strong>투찰금액 엑셀을 선택하세요</strong>
+                      <span>클릭하여 파일 불러오기 · XLSX / XLSM / XLS</span>
                     </>
                   )}
-                </div>
+                </button>
                 <div className="mail-project">
                   <dl>
                     <div>
@@ -1878,7 +1771,7 @@ function MailAutomationPageInner() {
               </div>
 
               <div className="mail-section">
-                <h3>SMTP 프로필</h3>
+                <h3><MailIcon name="profile" size={17} />SMTP 프로필</h3>
                 <div className="mail-smtp-profile-manager">
                   <label>
                     SMTP 프로필 이름
@@ -1928,7 +1821,7 @@ function MailAutomationPageInner() {
               </div>
 
               <div className="mail-section">
-                <h3>템플릿</h3>
+                <h3><MailIcon name="template" size={17} />템플릿</h3>
                 <div className="mail-template-owner-row">
                   <label>
                     발주처
@@ -1954,7 +1847,7 @@ function MailAutomationPageInner() {
               </div>
 
               <div className="mail-section">
-                <h3>발송 설정</h3>
+                <h3><MailIcon name="settings" size={17} />발송 설정</h3>
                 <label>
                   건당 지연 (초)
                   <input type="number" min="0" value={sendDelay} onChange={(event) => setSendDelay(Number(event.target.value) || 0)} />
@@ -1965,9 +1858,10 @@ function MailAutomationPageInner() {
 
             <section className="mail-panel mail-panel--recipients">
               <header className="mail-panel__header">
-                <h2>업체 목록</h2>
+                <h2><MailIcon name="users" />업체 목록<span className="mail-recipient-count">{recipients.length}</span></h2>
                 <div className="mail-recipient-actions">
-                  <button type="button" className="btn-soft" onClick={() => handleOpenAddressBook()}>주소록</button>
+                  <button type="button" className="btn-soft" onClick={() => handleOpenAddressBook()}><MailIcon name="addressBook" size={15} />주소록</button>
+                  <button type="button" className="btn-soft" onClick={() => setFolderDialogOpen(true)} aria-haspopup="dialog" aria-expanded={folderDialogOpen}><MailIcon name="folder" size={15} />폴더생성</button>
                   <button
                     type="button"
                     className={`btn-soft ${includeGlobalRecipients ? 'btn-soft--active' : ''}`}
@@ -1975,14 +1869,14 @@ function MailAutomationPageInner() {
                   >
                     {includeGlobalRecipients ? '팀장님 포함 중' : '받는사람에 팀장님 추가'}
                   </button>
-                  <button type="button" className="btn-soft" onClick={handleAddRecipient}>업체 추가</button>
+                  <button type="button" className="btn-soft" onClick={handleAddRecipient}><MailIcon name="plus" size={15} />업체 추가</button>
                   <button type="button" className="btn-soft" onClick={handleKeepAssignedRecipients}>작업할업체만남기기</button>
-                  <button type="button" className="btn-primary" onClick={handleSendAll} disabled={sending || !ownerId}>{sending ? '발송 중...' : '전체 발송'}</button>
+                  <button type="button" className="btn-primary" onClick={handleSendAll} disabled={sending || !ownerId}><MailIcon name="send" size={15} />{sending ? '발송 중...' : '전체 발송'}</button>
                 </div>
               </header>
 
-              <div className="mail-recipient-actions" style={{ justifyContent: 'flex-start', marginBottom: '8px' }}>
-                <button type="button" className="btn-soft" onClick={handleResetDraft}>비우기</button>
+              <div className="mail-recipient-actions mail-list-tools">
+                <button type="button" className="btn-soft" onClick={handleResetDraft}><MailIcon name="reset" size={14} />비우기</button>
               </div>
 
                 <div className="mail-recipients-table">
@@ -2009,36 +1903,27 @@ function MailAutomationPageInner() {
                       />
                     </span>
                     <span className="mail-recipient-contact">
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0, flex: 1 }}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      <div className="mail-contact-details">
+                        <div className="mail-contact-chips">
                           {recipientContacts.length ? recipientContacts.map((contact, index) => (
                             <span
                               key={`${recipient.id}-${contact.email || contact.contactName || index}`}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                padding: '4px 8px',
-                                borderRadius: '6px',
-                                background: '#e2e8f0',
-                                color: '#0f172a',
-                                fontSize: '12px',
-                              }}
+                              className="mail-contact-chip"
                             >
                               <span>{contact.contactName || '담당자'}{contact.email ? ` <${contact.email}>` : ''}</span>
                               <button
                                 type="button"
-                                className="btn-sm btn-muted"
-                                style={{ padding: '0 4px', minWidth: 'auto' }}
+                                className="mail-contact-chip__remove"
+                                aria-label={`${contact.contactName || contact.email || '담당자'} 제거`}
                                 onClick={() => handleRemoveRecipientContact(recipient.id, index)}
                               >
-                                x
+                                <MailIcon name="close" size={12} />
                               </button>
                             </span>
                           )) : <span className="mail-recipient-attachment-empty">수신자 없음</span>}
                         </div>
-                        <div style={{ fontSize: '12px', color: '#64748b' }}>{deliverableCount}명 발송 대상</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,0.8fr) minmax(0,1fr) auto', gap: '6px' }}>
+                        <div className="mail-contact-count">{deliverableCount}명 발송 대상</div>
+                        <div className="mail-contact-manual">
                           <input
                             value={recipient.manualContactName || ''}
                             onChange={(event) => handleRecipientFieldChange(recipient.id, 'manualContactName', event.target.value)}
@@ -2058,14 +1943,15 @@ function MailAutomationPageInner() {
                           </button>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', paddingTop: '2px' }}>
+                      <div className="mail-contact-picker-wrap">
                         <button
                           type="button"
                           className="mail-contact-picker"
                           onClick={() => handleOpenAddressBook(recipient.id)}
                           title="주소록에서 담당자 추가"
+                          aria-label="주소록에서 담당자 추가"
                         >
-                          🔍
+                          <MailIcon name="search" size={16} />
                         </button>
                       </div>
                     </span>
@@ -2104,7 +1990,7 @@ function MailAutomationPageInner() {
                     </span>
                   </div>
                 ); }) : (
-                  <div className="mail-recipients-empty">업체가 없습니다. 엑셀을 불러오거나 직접 추가하세요.</div>
+                  <div className="mail-recipients-empty"><span className="mail-empty-icon"><MailIcon name="inbox" size={30} /></span><strong>아직 등록된 업체가 없습니다</strong><p>엑셀을 불러오거나 ‘업체 추가’로 시작하세요.</p></div>
                 )}
               </div>
 
@@ -2112,6 +1998,7 @@ function MailAutomationPageInner() {
           </div>
         </div>
       </div>
+      {folderDialogOpen && <VendorFolderDialog folders={vendorFolders} recipients={recipients} assignment={assignedRecipients} onClose={() => setFolderDialogOpen(false)} />}
       {previewOpen && (
         <div className="mail-addressbook-overlay" role="presentation">
           <div
