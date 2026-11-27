@@ -130,7 +130,7 @@ export default function useDocumentForm({ notify, confirm }) {
   const savedExperience = record?.evaluationSnapshot;
   const qualityNeedsSave = Boolean(form.ownerId === 'LH' && form.reviewType === 'qualification' && form.rangeId === 'lh-50to100'
     && savedExperience?.scope.ownerId === form.ownerId && savedExperience.scope.rangeId === form.rangeId
-    && savedExperience.scope.industry === form.industry && savedExperience.criteria.qualityAggregation !== 'weighted-grade');
+    && savedExperience.scope.industry === form.industry && savedExperience.criteria.qualityAggregation === 'weighted-grade');
 
   return { form, record, dirty: qualityNeedsSave || documentSnapshot(form) !== savedSnapshot, update, updateCompany, changeIndustry, pickerIndex, setPickerIndex, pickCompany, reset, draftSaved, acceptLoaded, acceptDeleted, markSaved, refreshManagement, managementLoadingIndex };
 }

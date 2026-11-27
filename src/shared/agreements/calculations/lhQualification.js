@@ -1,7 +1,7 @@
 // LH qualification rules shared by the agreement board and document generation.
 // Keep the existing board order: ratio toFixed(2), multiply, cap, score round(2).
 export const LH_QUALIFICATION_RULES = {
-  version: 2,
+  version: 3,
   performanceYears: 5,
   performanceMultiplier: 13,
   ratioDigits: 2,
@@ -14,7 +14,7 @@ export const LH_QUALIFICATION_RULES = {
       qualityThresholds: [{ gte: 88, score: 3 }, { gte: 85, score: 2 }, { gte: 83, score: 1.5 }, { gte: 80, score: 1 }, { gte: 0, score: 0 }],
     },
     'lh-50to100': {
-      qualityAggregation: 'weighted-grade',
+      qualityAggregation: 'weighted-raw',
       denominatorMultipliers: { eung: 2, tongsin: 2, sobang: 3 },
       subcontractScore: 10,
       materialScore: 10,

@@ -6295,7 +6295,7 @@ export default function AgreementBoardWindow({
         .map((meta) => ({ qualityScore: toNumber(meta.qualityScore), share: toNumber(meta.shareForCalc) })),
       { ...LH_QUALIFICATION_RULES, ...LH_QUALIFICATION_RULES.ranges[LH_50_TO_100_KEY] },
     ) : null;
-    const qualityTotal = isLh100To300 ? qualityWeightedPoints : qualificationQuality?.qualityPoints ?? qualityTotalRaw;
+    const qualityTotal = isLh100To300 ? qualityWeightedPoints : qualificationQuality?.qualityTotal ?? qualityTotalRaw;
     const dutyRateValue = parseNumeric(regionDutyRate);
     const dutyShareTotal = slotMetasWithLimit.reduce((acc, meta) => {
       if (meta.empty || !meta.isDutyRegion) return acc;

@@ -7,8 +7,8 @@ export function resolveDocumentExperience(form, { previousSnapshot = null, formu
   if (scope.ownerId !== 'LH' || scope.reviewType !== 'qualification') return null;
   const previous = previousSnapshot?.version === 1 && same(previousSnapshot.scope, scope) ? previousSnapshot : null;
   const savedCriteria = previous?.criteria || resolveLhQualificationCriteria({ rangeId: scope.rangeId, fileType: scope.industry, formulasDoc });
-  const upgrade = scope.rangeId === 'lh-50to100' && savedCriteria?.qualityAggregation !== 'weighted-grade';
-  const criteria = upgrade ? { ...savedCriteria, qualityAggregation: 'weighted-grade', qualityRevisionAppliedAt: now } : savedCriteria;
+  const upgrade = scope.rangeId === 'lh-50to100' && savedCriteria?.qualityAggregation === 'weighted-grade';
+  const criteria = upgrade ? { ...savedCriteria, qualityAggregation: 'weighted-raw', qualityRevisionAppliedAt: now } : savedCriteria;
   if (!criteria) return null;
   const inputs = {
     baseAmount: parseEvaluationNumber(form.baseAmount),

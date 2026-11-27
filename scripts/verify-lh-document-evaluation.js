@@ -91,7 +91,7 @@ async function main() {
     assert.equal(revisedResult.result.qualityPoints, 5);
     assert.deepEqual(revisedResult.result.members.map((member) => [member.qualityGrade, member.qualityPoints]), [['A', 5], ['A', 5]]);
     revised.companies[1].qualityScore = '85';
-    assert.equal(resolveDocumentExperience(revised, { formulasDoc }).result.qualityPoints, 3.53);
+    assert.equal(resolveDocumentExperience(revised, { formulasDoc }).result.qualityPoints, 3);
     const { buildAgreementExportPayload } = await load('src/shared/agreements/agreementExportPayload.js');
     const candidateMap = new Map(revised.companies.slice(0, 2).map((candidate, index) => [String(index), { candidate }]));
     const exported = buildAgreementExportPayload({
@@ -104,21 +104,21 @@ async function main() {
       sanitizeCompanyName: (value) => value, getCompanyName: (company) => company.name,
       getCandidateManagerName: () => '', getRegionLabel: () => '', normalizeBizNo: (value) => value, getBizNo: () => '',
       getQualityScoreValue: (group, slot, company) => Number(company.qualityScore),
-      resolveQualityPoints: () => { throw new Error('Revised export must use the shared grade-first evaluator'); },
+      resolveQualityPoints: () => { throw new Error('Export must use the shared weighted raw-score evaluator'); },
     });
-    assert.equal(exported.groups[0].summary.qualityPoints, 3.53);
+    assert.equal(exported.groups[0].summary.qualityPoints, 3);
     const oldCriteria = structuredClone(revisedResult.criteria);
-    delete oldCriteria.qualityAggregation;
+    oldCriteria.qualityAggregation = 'weighted-grade';
     const legacyResult = rules.evaluateLhQualificationExperience({
       ...revisedResult.inputs,
       companies: revisedResult.inputs.companies.map((company, index) => ({ ...company, qualityScore: index === 0 ? 93.38 : 85 })),
       criteria: oldCriteria,
     });
-    assert.equal(legacyResult.qualityPoints, 3, 'Historical criteria must retain weighted raw-score grading');
+    assert.equal(legacyResult.qualityPoints, 3.53, 'Reproduce the incorrect grade-first saved result');
     const legacySnapshot = { ...revisedResult, criteria: oldCriteria, inputs: { ...revisedResult.inputs, companies: legacyResult.members.map(({ qualityApplied: _a, qualityDefaulted: _d, qualityGrade: _g, qualityPoints: _p, ...company }) => company) }, result: legacyResult };
-    assert.equal(resolveDocumentExperience(revised, { formulasDoc, previousSnapshot: legacySnapshot }).result.qualityPoints, 3.53, 'Opening an older document must use grade-first quality by default');
+    assert.equal(resolveDocumentExperience(revised, { formulasDoc, previousSnapshot: legacySnapshot }).result.qualityPoints, 3, 'Opening a grade-first document must restore weighted raw-score grading');
     const upgraded = resolveDocumentExperience(revised, { formulasDoc, previousSnapshot: legacySnapshot });
-    assert.equal(upgraded.result.qualityPoints, 3.53);
+    assert.equal(upgraded.result.qualityPoints, 3);
     assert.equal(upgraded.criteria.denominatorMultiplier, legacySnapshot.criteria.denominatorMultiplier);
     assert.equal(upgraded.criteria.performanceMultiplier, legacySnapshot.criteria.performanceMultiplier);
     const oldDocument = await store.saveDocument({ title: '개정 전 검증용', form: revised });
@@ -126,16 +126,31 @@ async function main() {
     oldDocument.overviewSnapshot = null;
     await fs.writeFile(path.join(root, 'document-generation', `${oldDocument.id}.json`), JSON.stringify(oldDocument));
     const revisedCopy = await store.saveDocument({ title: '품질 개정 사본', sourceId: oldDocument.id, sourceRevision: 1, form: revised });
-    assert.equal(revisedCopy.evaluationSnapshot.result.qualityPoints, 3.53);
-    assert.equal(revisedCopy.overviewSnapshot.model.experiencePage.criteria.qualityAggregation, 'weighted-grade');
-    assert.equal((await store.loadDocument(oldDocument.id)).evaluationSnapshot.result.qualityPoints, 3);
+    assert.equal(revisedCopy.evaluationSnapshot.result.qualityPoints, 3);
+    assert.equal(revisedCopy.overviewSnapshot.model.experiencePage.criteria.qualityAggregation, 'weighted-raw');
+    assert.equal((await store.loadDocument(oldDocument.id)).evaluationSnapshot.result.qualityPoints, 3.53, 'Preview and copy must not rewrite the source file');
     const revisedSave = await store.saveDocument({ title: '품질 개정 저장', id: oldDocument.id, revision: 1, form: revised });
-    assert.equal(revisedSave.evaluationSnapshot.result.qualityPoints, 3.53);
-    assert.equal((await store.loadDocument(oldDocument.id)).evaluationSnapshot.criteria.qualityAggregation, 'weighted-grade');
-    assert.equal((await store.saveDocument({ title: '개정 유지', id: oldDocument.id, revision: 2, form: revised })).evaluationSnapshot.result.qualityPoints, 3.53);
+    assert.equal(revisedSave.evaluationSnapshot.result.qualityPoints, 3);
+    assert.equal((await store.loadDocument(oldDocument.id)).evaluationSnapshot.criteria.qualityAggregation, 'weighted-raw');
+    assert.equal((await store.saveDocument({ title: '개정 유지', id: oldDocument.id, revision: 2, form: revised })).evaluationSnapshot.result.qualityPoints, 3);
     revised.companies[0].share = '50'; revised.companies[1].share = '50';
-    assert.equal(resolveDocumentExperience(revised, { formulasDoc, previousSnapshot: legacySnapshot }).result.qualityPoints, 3.5);
+    assert.equal(resolveDocumentExperience(revised, { formulasDoc, previousSnapshot: legacySnapshot }).result.qualityPoints, 3);
     assert.equal(resolveDocumentExperience({ ...revised, rangeId: 'lh-under50' }, { formulasDoc }).result.qualityPoints, 3, 'Keep LH under-50 weighted raw-score grading');
+
+    const originalRawCriteria = { ...legacySnapshot.criteria };
+    delete originalRawCriteria.qualityAggregation;
+    const originalRaw = { ...upgraded, criteria: originalRawCriteria };
+    assert.strictEqual(resolveDocumentExperience({ ...revised, companies: revised.companies.map((company, index) => ({ ...company, share: index === 0 ? '51' : '49' })) }, { formulasDoc, previousSnapshot: originalRaw }), originalRaw, 'Unchanged original raw-score snapshots remain pinned');
+
+    const rawCriteria = rules.resolveLhQualificationCriteria({ rangeId: 'lh-50to100', fileType: 'eung', formulasDoc });
+    for (const [scores, expectedTotal, expectedPoints] of [
+      [[90, 80], 85, 2], [[90, 86], 88, 3], [[95, 85], 90, 5],
+      [[86, 80], 83, 1.5], [[85, 75], 80, 1], [[79, 79], 79, 0],
+    ]) {
+      const evaluated = rules.evaluateLhQualificationQuality(scores.map((qualityScore) => ({ qualityScore, share: 50 })), rawCriteria);
+      assert.equal(evaluated.qualityTotal, expectedTotal);
+      assert.equal(evaluated.qualityPoints, expectedPoints);
+    }
 
     const original = await store.saveDocument({ title: '당시 제출', form });
     const snapshot = structuredClone(original.evaluationSnapshot);

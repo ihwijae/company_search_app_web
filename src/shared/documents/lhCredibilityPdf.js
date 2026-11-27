@@ -58,19 +58,29 @@ export function appendLhCredibilityPages(pdf, model, { font, bold, color }) {
       cell(member.share == null ? '-' : `${member.share}%`, columnX, top - nameHeight, companyWidth, shareHeight, { fill: true, textSize: shareSize });
     });
     top -= headerHeight;
-    items.forEach((item) => {
+    items.forEach((item, itemIndex) => {
       const height = rowHeight(item, size);
       let x = left;
       rowValues(item).forEach((value, index) => {
+        if (index === 0 && model.mergeCategories) {
+          if (items[itemIndex - 1]?.category !== item.category) {
+            let categoryHeight = height;
+            for (let next = itemIndex + 1; next < items.length && items[next].category === item.category; next++) categoryHeight += rowHeight(items[next], size);
+            cell(value, x, top, widths[index], categoryHeight);
+          }
+          x += widths[index];
+          return;
+        }
         cell(index === 4 && item.pointsByGrade ? '' : value, x, top, widths[index], height, { textSize: rowTextSize(item, size), align: index === 1 || index === 3 ? 'left' : 'center' });
         if (index === 4 && item.pointsByGrade) {
           const lineHeight = size * 1.2;
           const lines = wrap(item.grades, widths[3] - 8, size);
           let y = top - (height - lines.length * lineHeight) / 2 - size;
-          item.grades.split('\n\n').forEach((grade, gradeIndex) => {
+          const separator = item.gradeSeparator || '\n\n';
+          item.grades.split(separator).forEach((grade, gradeIndex) => {
             const points = item.pointsByGrade[gradeIndex];
             page.drawText(points, { x: x + (widths[index] - font.widthOfTextAtSize(points, size)) / 2, y, size, font, color });
-            y -= (wrap(grade, widths[3] - 8, size).length + 1) * lineHeight;
+            y -= (wrap(grade, widths[3] - 8, size).length + separator.length - 1) * lineHeight;
           });
         }
         x += widths[index];

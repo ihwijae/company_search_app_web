@@ -71,7 +71,7 @@ async function main() {
       assert.equal(overview.model.scores.subtotal, expectedSubtotal);
       assert.equal(overview.model.scores.total, round(expectedSubtotal + 45));
       assert.equal(overview.model.complete, true);
-      assert.ok(overview.model.credibilityPage.items.every((item) => item.scores.length === count && item.scores.every((score) => score === 0)));
+      assert.ok(overview.model.credibilityPage.items.every((item) => item.scores.length === count && item.scores.every((score) => score === (item.scoreBlank ? '' : 0))));
       assert.ok(overview.model.credibilityPage.members.every((member) => member.score === 0));
       cases++;
     }
@@ -100,6 +100,36 @@ async function main() {
     const fonts = { regularFontBytes: await fs.readFile(path.join(__dirname, '../src/assets/fonts/Pretendard-Regular.ttf')), boldFontBytes: await fs.readFile(path.join(__dirname, '../src/assets/fonts/Pretendard-Bold.ttf')) };
     const application = resolveLhApplication(form, options);
     const overview = resolve(form);
+    const { evaluateLhQualificationExperience } = await load('src/shared/agreements/calculations/lhQualification.js');
+    const rawExperience = resolveDocumentExperience(form, { formulasDoc });
+    const gradeCriteria = { ...rawExperience.criteria, qualityAggregation: 'weighted-grade' };
+    const gradeExperience = {
+      ...rawExperience, criteria: gradeCriteria,
+      result: evaluateLhQualificationExperience({ ...rawExperience.inputs, criteria: gradeCriteria }),
+    };
+    const gradeOverview = resolveLhOverview(form, { application, experience: gradeExperience });
+    assert.equal(gradeOverview.model.experiencePage.result.qualityPoints, 2.5);
+    const restoredRawExperience = resolveDocumentExperience(form, { formulasDoc, previousSnapshot: gradeExperience });
+    const restoredOverview = resolveLhOverview(form, { application, experience: restoredRawExperience, previousSnapshot: gradeOverview });
+    assert.equal(restoredOverview.model.experiencePage.result.qualityTotal, 86.5);
+    assert.equal(restoredOverview.model.experiencePage.result.qualityPoints, 2);
+    for (const key of ['construction', 'subtotal', 'total']) assert.equal(restoredOverview.model.scores[key], gradeOverview.model.scores[key] - .5);
+    assert.deepEqual(restoredOverview.criteria.managementRules, gradeOverview.criteria.managementRules);
+    assert.deepEqual(restoredOverview.criteria.bidPrice, gradeOverview.criteria.bidPrice);
+    assert.equal(overview.model.credibilityPage.templateId, 'lh-50to100-v2');
+    assert.deepEqual(overview.model.credibilityPage.items.map((item) => item.id), [
+      'integrity', 'subcontract-orders', 'habitual-subcontract', 'accident-mortality', 'accident-prevention',
+      'safety-expenses', 'accident-reports', 'safety-sanctions', 'environment', 'penalty-points',
+      'employment', 'serious-accidents', 'safety-certification', 'deleted',
+    ]);
+    const oldCredibility = structuredClone(overview);
+    delete oldCredibility.model.credibilityPage.templateId;
+    oldCredibility.model.credibilityPage.items = oldCredibility.model.credibilityPage.items.slice(0, 4);
+    const refreshedCredibility = resolve(form, oldCredibility);
+    assert.deepEqual(refreshedCredibility.model.credibilityPage, overview.model.credibilityPage);
+    assert.deepEqual(refreshedCredibility.model.scores, oldCredibility.model.scores);
+    assert.deepEqual(refreshedCredibility.criteria, oldCredibility.criteria);
+    assert.equal(oldCredibility.model.credibilityPage.items.length, 4);
     await assert.rejects(createLhOverviewPdf(resolve(incomplete).model, fonts), /미산정/);
     const appBytes = await createLhApplicationPdf(application.model, fonts);
     const bytes = await createLhSubmissionPdf(appBytes, overview.model, { ...fonts, allowIncomplete: true });
@@ -135,6 +165,10 @@ async function main() {
       assert.ok(credibilityContent.items.every((item) => item.transform[5] >= 55));
       assert.ok(!credibilityText.includes('(계속)'));
       assert.ok(!credibilityText.includes('신인도평가합계:0점'));
+      const expected = pageNumber === 7
+        ? ['사고사망만인율', '0.20배이하', '+3.0', '+2.4', '산업재해예방활동실적', '95점이상', '+2.0', '+1.6', '*<삭제>']
+        : ['중대재해를발생시킨자', '사망자3명이상', '-3.5', '안전보건경영시스템인증', 'ISO-45001', 'KOSHA-MS', '<삭제>', '배점범위:+1.5~-3'];
+      for (const fragment of expected) assert.ok(credibilityText.includes(fragment), fragment);
     }
     const profileText = (await (await pdf.getPage(3)).getTextContent()).items.map((item) => item.str).join('').replace(/\s/g, '');
     for (const value of ['다.업체현황', '검증업체1(주)', '검증업체2(주)', '69,679,476,000', '서울-00420', '2886위/21,276개', '작성자1', '110111-0699095']) assert.ok(profileText.includes(value), value);
@@ -142,7 +176,7 @@ async function main() {
     assert.equal(overview.model.scores.total, overview.model.scores.subtotal + overview.model.scores.bid);
     const experienceContent = await (await pdf.getPage(4)).getTextContent();
     const experienceText = experienceContent.items.map((item) => item.str).join('').replace(/\s/g, '');
-    for (const value of ['2.시공경험평가', '검증업체1(주)', '11,000,000,000', '(9,556,620,000원×2)', '실적계수×13', '미평가적용', 'C등급2점', 'B등급3점', '(2*50%)+(3*50%)', '=2.5']) assert.ok(experienceText.includes(value), value);
+    for (const value of ['2.시공경험평가', '검증업체1(주)', '11,000,000,000', '(9,556,620,000원×2)', '실적계수×13', '미평가적용', '85점', '88점', '(85*50%)+(88*50%)', '=86.5', 'C:85점이상(2)']) assert.ok(experienceText.includes(value), value);
     const symbolicNumerator = experienceContent.items.find((item) => item.str === '실적합계액');
     const symbolicDenominator = experienceContent.items.find((item) => item.str.replace(/\s/g, '') === '(공사예정금액×2)');
     const numericNumerator = experienceContent.items.find((item) => item.str === '11,000,000,000원');
@@ -200,7 +234,7 @@ async function main() {
       assert.ok(detailContent.items.every((item) => item.transform[5] >= 57));
       await profilePdf.destroy();
     }
-    for (const variant of ['missing', 'sobang', 'long-names', 'source-layout', 'grade-weighting']) {
+    for (const variant of ['missing', 'sobang', 'long-names', 'source-layout', 'raw-weighting']) {
       const sample = structuredClone(form);
       if (variant === 'missing') { sample.baseAmount = ''; sample.companies[0].performance5y = ''; }
       if (variant === 'sobang') sample.industry = 'sobang';
@@ -220,7 +254,7 @@ async function main() {
           sample.companies[index].performance5y = String([159139033000, 18946028000, 2270660000][index]);
         });
       }
-      if (variant === 'grade-weighting') {
+      if (variant === 'raw-weighting') {
         sample.companies[0].name = '(주)도화엔지니어링'; sample.companies[0].share = '51'; sample.companies[0].qualityScore = '93.38';
         sample.companies[1].name = '(주)개성건설'; sample.companies[1].share = '49'; sample.companies[1].qualityScore = '92.52';
       }
@@ -233,16 +267,19 @@ async function main() {
       if (variant === 'missing') { assert.ok(text.includes('작성중')); assert.ok(text.includes('—')); }
       if (variant === 'sobang') assert.ok(text.includes('(9,556,620,000원×3)'));
       if (variant === 'source-layout') {
-        assert.ok(text.includes('85점(C등급2점)'));
+        assert.ok(text.includes('85점적용'));
+        assert.ok(text.includes('(85*61%)+(85*25%)+(85*14%)=85'));
         assert.ok(text.includes('102,129,209,530원'));
         assert.ok(text.includes('(10,536,731,000원×2)'));
         await fs.writeFile('/tmp/lh-experience-source-layout.pdf', bytes);
       }
-      if (variant === 'grade-weighting') {
-        assert.ok(text.includes('93.38점(A등급5점)'));
-        assert.ok(text.includes('92.52점(A등급5점)'));
-        assert.ok(text.includes('(5*51%)+(5*49%)=5'));
-        await fs.writeFile('/tmp/lh-quality-grade-preview.pdf', bytes);
+      if (variant === 'raw-weighting') {
+        assert.ok(text.includes('93.38점'));
+        assert.ok(!text.includes('A등급5점'));
+        assert.ok(text.includes('92.52점'));
+        assert.ok(text.includes('(93.38*51%)+(92.52*49%)=92.9586'));
+        assert.ok(text.includes('A:90점이상(5'));
+        await fs.writeFile('/tmp/lh-quality-raw-preview.pdf', bytes);
       }
       if (variant === 'long-names') {
         assert.ok(text.includes('한국전기정보통신소방건설5(주)'));

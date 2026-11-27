@@ -112,7 +112,7 @@ async function main() {
     assert.equal(upgraded.model.credibilityPage.templateId, 'lh-under50-v2');
     assert.deepEqual(upgraded.model.scores, legacy.model.scores);
     assert.deepEqual(upgraded.criteria, legacy.criteria);
-    assert.equal(legacy.model.credibilityPage.items.length, 9);
+    assert.equal(legacy.model.credibilityPage.items.length, 14);
     assert.deepEqual(upgraded.model.credibilityPage.items.map((item) => item.id), ['employment', 'deleted']);
     const updated = await store.saveDocument({ id: saved.id, revision: saved.revision, title: saved.title, form });
     assert.equal(updated.overviewSnapshot.model.credibilityPage.templateId, 'lh-under50-v2');
