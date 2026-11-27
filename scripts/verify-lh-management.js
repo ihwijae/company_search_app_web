@@ -93,7 +93,8 @@ async function main() {
         assert.ok(financialText.includes('(45*15/45*14%)=2.1'));
         assert.ok(creditText.includes('신신이앤씨(주):A-(35점)'));
         assert.ok(creditText.includes('㈜대도종합건설:BB+(35점)'));
-        assert.ok(creditText.includes('(35*15/35*86%)=12.9'));
+        assert.ok(creditText.includes('(35*15/35*61%)+(35*15/35*25%)=12.9'));
+        assert.ok(!creditText.includes('(35*15/35*86%)'));
         assert.equal(overview.model.scores.management, 15);
         await fs.writeFile('/tmp/lh-management-formula-preview.pdf', bytes);
         await pdf.destroy();
